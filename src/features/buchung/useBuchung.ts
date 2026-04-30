@@ -1,0 +1,45 @@
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { MOCK_RECHNUNGEN } from '@/lib/mock-data'
+import type { Duplikat, Rechnung } from '@/types/database'
+
+const DEMO = import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co'
+
+function computeDuplikate(all: Rechnung[], id: string): Duplikat[] {
+  const current = all.find(r => r.id === id)
+  if (!current) return []
+
+  return all
+    .filter(r => r.id !== id)
+    .map(r => {
+      let score = 0
+      if (r.betrag === current.betrag) score += 0.45
+      if (r.lieferant_id && r.lieferant_id === current.lieferant_id) score += 0.35
+      const aPrefix = current.rechnungsnr.replace(/\d+$/, '')
+      const bPrefix = r.rechnungsnr.replace(/\d+$/, '')
+      if (aPrefix.length > 2 && aPrefix === bPrefix) score += 0.15
+      if (r.ust_satz === current.ust_satz) score += 0.05
+      return { id: `dup-${id}-${r.id}`, rechnung_a_id: id, rechnung_b_id: r.id, match_score: score }
+    })
+    .filter(d => d.match_score >= 0.5)
+    .sort((a, b) => b.match_score - a.match_score)
+    .slice(0, 3)
+}
+
+export function useDuplikate(rechnungId: string) {
+  return useQuery<Duplikat[]>({
+    queryKey: ['duplikate', rechnungId],
+    queryFn: async () => {
+      if (DEMO) {
+        return computeDuplikate(MOCK_RECHNUNGEN, rechnungId)
+      }
+      const { data, error } = await supabase
+        .from('duplikate')
+        .select('*')
+        .or(`rechnung_a_id.eq.${rechnungId},rechnung_b_id.eq.${rechnungId}`)
+      if (error) return []
+      return (data as Duplikat[]) ?? []
+    },
+    enabled: !!rechnungId,
+  })
+}
