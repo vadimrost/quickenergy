@@ -12,7 +12,7 @@ interface ExportButtonProps {
 }
 
 const LABELS: Record<ExportZiel, string> = {
-  lexoffice: 'Lexoffice',
+  lexoffice: 'sevDesk',
   datev: 'DATEV',
 }
 

@@ -35,7 +35,7 @@ export function useTriggerExport() {
       if (!res.ok) throw new Error(`Webhook-Fehler: ${res.status}`)
     },
     onSuccess: (_data, variables) => {
-      toast.success(`${variables.ziel === 'lexoffice' ? 'Lexoffice' : 'DATEV'}-Export gestartet`)
+      toast.success(`${variables.ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'}-Export gestartet`)
       void qc.invalidateQueries({ queryKey: ['export_log'] })
     },
     onError: (err: Error) => {

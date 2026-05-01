@@ -10,7 +10,7 @@ interface SectionCardProps {
 
 export function SectionCard({ title, actions, children, className }: SectionCardProps) {
   return (
-    <div className={cn('card-base p-6', className)}>
+    <div className={cn('card-base p-4 md:p-6', className)}>
       {(title || actions) && (
         <div className="flex items-center justify-between mb-5">
           {title && <span className="label-caps">{title}</span>}

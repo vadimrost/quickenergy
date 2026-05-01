@@ -14,7 +14,7 @@ export function StatCard({ label, value, sub, accent = false, className, icon }:
   return (
     <div
       className={cn(
-        'card-base p-7 transition-shadow hover:shadow-card-hover',
+        'card-base p-4 md:p-7 transition-shadow hover:shadow-card-hover',
         accent && 'bg-gradient-to-br from-accent-50 to-white border-accent-100',
         className
       )}

@@ -20,9 +20,9 @@ const ZIEL_STYLES: Record<ExportZiel, string> = {
 
 function ExportZielBadge({ ziel }: { ziel: ExportZiel }) {
   return (
-    <span className={cn('inline-flex items-center gap-1 text-label uppercase px-2.5 py-0.5 rounded-pill border', ZIEL_STYLES[ziel])}>
+    <span className={cn('inline-flex items-center gap-1 text-label px-2.5 py-0.5 rounded-pill border', ZIEL_STYLES[ziel])}>
       {ziel === 'lexoffice' ? <ArrowUpFromLine size={10} /> : <Database size={10} />}
-      {ziel === 'lexoffice' ? 'Lexoffice' : 'DATEV'}
+      {ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'}
     </span>
   )
 }
@@ -40,8 +40,8 @@ export function ExportsPage() {
   const { data: rechnungen = [] } = useRechnungen()
   const [selectedZiel, setSelectedZiel] = useState<ExportZiel | 'alle'>('alle')
 
-  const gebuchteIds = rechnungen.filter(r => r.status === 'gebucht').map(r => r.id)
-  const lexofficeCount = exportLog.filter(e => e.ziel === 'lexoffice').length
+  const gebuchteIds = rechnungen.filter(r => r.status === 'bezahlt').map(r => r.id)
+  const sevdeskCount = exportLog.filter(e => e.ziel === 'lexoffice').length
   const datevCount = exportLog.filter(e => e.ziel === 'datev').length
   const lastExport = exportLog.sort((a, b) => b.exported_at.localeCompare(a.exported_at))[0]
   const successRate = exportLog.length
@@ -54,12 +54,12 @@ export function ExportsPage() {
 
   return (
     <div>
-      <PageTitle title="Exports" subtitle="Lexoffice- und DATEV-Exporthistorie" />
+      <PageTitle title="Exports" subtitle="sevDesk- und DATEV-Exporthistorie" />
 
       {/* KPI Row */}
-      <div className="grid grid-cols-4 gap-5 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 mb-6">
         <StatCard label="Exports Gesamt" value={logLoading ? '…' : exportLog.length.toString()} sub="Alle Zeiträume" icon={<ArrowUpFromLine size={16} />} />
-        <StatCard label="Lexoffice" value={logLoading ? '…' : lexofficeCount.toString()} sub="Buchhalter-Exports" accent />
+        <StatCard label="sevDesk" value={logLoading ? '…' : sevdeskCount.toString()} sub="Buchhalter-Exports" accent />
         <StatCard label="DATEV" value={logLoading ? '…' : datevCount.toString()} sub="Steuerberater-Exports" />
         <StatCard
           label="Erfolgsrate"
@@ -71,8 +71,8 @@ export function ExportsPage() {
 
       {/* Export-Aktionen */}
       <SectionCard title="Neuer Export" className="mb-6">
-        <div className="flex items-start gap-6">
-          <div className="flex-1">
+        <div className="flex flex-col sm:flex-row items-start gap-6">
+          <div className="flex-1 w-full">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm font-semibold text-ink">sevDesk</span>
               <span className="text-xs text-ink-muted">— Buchhaltung & Steuer</span>
@@ -83,9 +83,10 @@ export function ExportsPage() {
             <ExportButton rechnungIds={gebuchteIds} ziel="lexoffice" />
           </div>
 
-          <div className="w-px h-16 bg-border self-center" />
+          <div className="hidden sm:block w-px h-16 bg-border self-center" />
+          <div className="sm:hidden w-full h-px bg-border" />
 
-          <div className="flex-1">
+          <div className="flex-1 w-full">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm font-semibold text-ink">DATEV</span>
               <span className="text-xs text-ink-muted">— Für Steuerberater</span>
@@ -118,7 +119,7 @@ export function ExportsPage() {
                   selectedZiel === z ? 'bg-ink text-white' : 'text-ink-muted hover:bg-bg-muted'
                 )}
               >
-                {z === 'alle' ? 'Alle' : z === 'lexoffice' ? 'Lexoffice' : 'DATEV'}
+                {z === 'alle' ? 'Alle' : z === 'lexoffice' ? 'sevDesk' : 'DATEV'}
               </button>
             ))}
           </div>
@@ -129,52 +130,90 @@ export function ExportsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState title="Noch keine Exports" description="Exportierte Buchungen erscheinen hier." icon={<ArrowUpFromLine size={24} />} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr>
-                  {['Datum', 'Ziel', 'Rechnungen', 'Status', ''].map(h => (
-                    <th key={h} className={cn('label-caps pb-3 border-b border-border/50 text-left font-normal', h === 'Rechnungen' && 'text-right')}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map(e => (
-                  <tr key={e.id} className="h-14 border-b border-border/50 last:border-0 hover:bg-bg-hover transition-colors">
-                    <td>
-                      <div className="flex items-center gap-1.5 text-sm text-ink">
-                        <Clock size={13} className="text-ink-subtle" />
-                        {formatExportDate(e.exported_at)}
-                      </div>
-                    </td>
-                    <td><ExportZielBadge ziel={e.ziel} /></td>
-                    <td className="text-right text-sm text-ink-muted">{e.rechnung_ids_json.length} Rechnungen</td>
-                    <td>
+          <>
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-2">
+              {filtered.map(e => (
+                <div key={e.id} className="p-4 rounded-card border border-border/50 bg-bg-surface">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-1.5 text-sm text-ink">
+                      <Clock size={13} className="text-ink-subtle flex-shrink-0" />
+                      {formatExportDate(e.exported_at)}
+                    </div>
+                    <ExportZielBadge ziel={e.ziel} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
                       {e.success ? (
-                        <div className="flex items-center gap-1.5 text-status-active text-sm">
-                          <CheckCircle size={14} /> Erfolgreich
+                        <div className="flex items-center gap-1 text-status-active text-xs">
+                          <CheckCircle size={12} /> Erfolgreich
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 text-status-danger text-sm">
-                          <XCircle size={14} /> Fehlgeschlagen
+                        <div className="flex items-center gap-1 text-status-danger text-xs">
+                          <XCircle size={12} /> Fehlgeschlagen
                         </div>
                       )}
-                    </td>
-                    <td className="text-right">
-                      <button
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-ink-muted hover:bg-bg-muted ml-auto transition-colors"
-                        title="Herunterladen"
-                      >
-                        <Download size={13} />
-                      </button>
-                    </td>
+                      <span className="text-xs text-ink-muted">{e.rechnung_ids_json.length} Rechnungen</span>
+                    </div>
+                    <button
+                      className="w-7 h-7 rounded-lg flex items-center justify-center text-ink-muted hover:bg-bg-muted transition-colors"
+                      title="Herunterladen"
+                    >
+                      <Download size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    {['Datum', 'Ziel', 'Rechnungen', 'Status', ''].map(h => (
+                      <th key={h} className={cn('label-caps pb-3 border-b border-border/50 text-left font-normal', h === 'Rechnungen' && 'text-right')}>
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filtered.map(e => (
+                    <tr key={e.id} className="h-14 border-b border-border/50 last:border-0 hover:bg-bg-hover transition-colors">
+                      <td>
+                        <div className="flex items-center gap-1.5 text-sm text-ink">
+                          <Clock size={13} className="text-ink-subtle" />
+                          {formatExportDate(e.exported_at)}
+                        </div>
+                      </td>
+                      <td><ExportZielBadge ziel={e.ziel} /></td>
+                      <td className="text-right text-sm text-ink-muted">{e.rechnung_ids_json.length} Rechnungen</td>
+                      <td>
+                        {e.success ? (
+                          <div className="flex items-center gap-1.5 text-status-active text-sm">
+                            <CheckCircle size={14} /> Erfolgreich
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 text-status-danger text-sm">
+                            <XCircle size={14} /> Fehlgeschlagen
+                          </div>
+                        )}
+                      </td>
+                      <td className="text-right">
+                        <button
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-ink-muted hover:bg-bg-muted ml-auto transition-colors"
+                          title="Herunterladen"
+                        >
+                          <Download size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </SectionCard>
     </div>

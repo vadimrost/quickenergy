@@ -156,7 +156,7 @@ export function DashboardPage() {
               {letzteExports.map(e => (
                 <div key={e.id} className="flex items-center gap-4 py-3 border-b border-border/50 last:border-0">
                   <span className={`text-label uppercase px-2.5 py-0.5 rounded-pill border ${e.ziel === 'lexoffice' ? 'bg-accent-50 text-accent-600 border-accent-200' : 'bg-bg-muted text-ink-muted border-border'}`}>
-                    {e.ziel}
+                    {e.ziel === 'lexoffice' ? 'sevDesk' : e.ziel}
                   </span>
                   <span className="text-sm text-ink-muted flex-1">{formatDate(e.exported_at)} — {e.rechnung_ids_json.length} Rechnungen</span>
                   <span className={`text-xs font-medium ${e.success ? 'text-status-active' : 'text-status-danger'}`}>

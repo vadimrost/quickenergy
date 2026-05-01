@@ -75,21 +75,21 @@ function PdfUploadDialog({ open, onClose, onImported }: {
 
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg bg-white border border-border shadow-xl">
         <DialogHeader>
           <DialogTitle className="text-base font-semibold text-ink">Rechnung hochladen</DialogTitle>
         </DialogHeader>
 
         <div className="pt-2">
           {uploadState === 'processing' ? (
-            <div className="flex flex-col items-center justify-center h-44 gap-3">
-              <Loader2 size={28} className="text-accent-500 animate-spin" />
-              <p className="text-sm text-ink-muted">OCR wird verarbeitet…</p>
-              <p className="text-xs text-ink-subtle font-mono truncate max-w-xs">{fileName}</p>
+            <div className="flex flex-col items-center justify-center h-52 gap-3 rounded-card bg-bg-muted border border-border">
+              <Loader2 size={32} className="text-accent-500 animate-spin" />
+              <p className="text-sm font-medium text-ink">OCR wird verarbeitet…</p>
+              <p className="text-xs text-ink-muted font-mono truncate max-w-xs">{fileName}</p>
             </div>
           ) : uploadState === 'done' ? (
-            <div className="flex flex-col items-center justify-center h-44 gap-3">
-              <CheckCircle size={28} className="text-status-active" />
+            <div className="flex flex-col items-center justify-center h-52 gap-3 rounded-card bg-green-50 border border-green-200">
+              <CheckCircle size={32} className="text-status-active" />
               <p className="text-sm text-ink font-medium">Import erfolgreich</p>
             </div>
           ) : (
@@ -99,10 +99,10 @@ function PdfUploadDialog({ open, onClose, onImported }: {
               onDrop={handleDrop}
               onClick={() => inputRef.current?.click()}
               className={cn(
-                'relative flex flex-col items-center justify-center h-44 rounded-card border-2 border-dashed cursor-pointer transition-colors',
+                'relative flex flex-col items-center justify-center h-52 rounded-card border-2 border-dashed cursor-pointer transition-all',
                 uploadState === 'dragover'
                   ? 'border-accent-400 bg-accent-50'
-                  : 'border-border hover:border-accent-300 hover:bg-bg-muted'
+                  : 'border-slate-300 bg-slate-50 hover:border-accent-400 hover:bg-accent-50'
               )}
             >
               <input
@@ -112,23 +112,28 @@ function PdfUploadDialog({ open, onClose, onImported }: {
                 className="hidden"
                 onChange={handleFileChange}
               />
-              <Upload size={24} className={cn('mb-3 transition-colors', uploadState === 'dragover' ? 'text-accent-500' : 'text-ink-subtle')} />
-              <p className="text-sm text-ink-muted">
-                PDF hier ablegen oder{' '}
-                <span className="text-accent-500 font-medium">durchsuchen</span>
+              <div className={cn(
+                'w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-colors',
+                uploadState === 'dragover' ? 'bg-accent-100' : 'bg-white border border-slate-200'
+              )}>
+                <Upload size={22} className={cn('transition-colors', uploadState === 'dragover' ? 'text-accent-500' : 'text-ink-muted')} />
+              </div>
+              <p className="text-sm font-medium text-ink mb-1">PDF hier ablegen</p>
+              <p className="text-xs text-ink-muted">
+                oder{' '}
+                <span className="text-accent-500 font-semibold underline underline-offset-2">Datei auswählen</span>
               </p>
-              <p className="text-xs text-ink-subtle mt-1">Nur .pdf Dateien</p>
             </div>
           )}
 
-          <div className="flex justify-between items-center mt-4">
-            <div className="flex items-center gap-1.5 text-xs text-ink-subtle">
+          <div className="flex justify-between items-center mt-4 pt-3 border-t border-border">
+            <div className="flex items-center gap-1.5 text-xs text-ink-muted">
               <FileText size={12} />
-              <span>PDF, max. 25 MB</span>
+              <span>Nur .pdf · max. 25 MB</span>
             </div>
             <button
               onClick={handleClose}
-              className="px-4 py-2 rounded-card-sm text-sm text-ink-muted hover:bg-bg-muted transition-colors"
+              className="px-4 py-1.5 rounded-card-sm text-sm font-medium text-ink-muted border border-border hover:bg-bg-muted transition-colors"
             >
               Abbrechen
             </button>
@@ -210,7 +215,7 @@ export function InboxPage() {
       <PageTitle title="Rechnungen" subtitle="OCR-verarbeitete Rechnungen zur Prüfung und Buchung" />
 
       {/* KPI Row */}
-      <div className="grid grid-cols-4 gap-5 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 mb-6">
         <StatCard label="Neu Eingegangen" value={isLoading ? '…' : kpiEingegangen.toString()} sub="Warten auf Zahlung" icon={<Inbox size={16} />} />
         <StatCard label="Bezahlt" value={isLoading ? '…' : kpiBezahlt.toString()} sub="Erfolgreich abgeschlossen" accent icon={<CheckCircle size={16} />} />
         <StatCard label="Heute Fällig" value={isLoading ? '…' : kpiHeuteFaellig.toString()} sub={kpiHeuteFaellig > 0 ? 'Sofortiger Handlungsbedarf' : 'Keine offenen Posten'} icon={<Clock size={16} />} />
@@ -233,7 +238,7 @@ export function InboxPage() {
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm bg-accent-500 hover:bg-accent-600 text-white text-xs font-medium transition-colors"
             >
               <Upload size={13} />
-              PDF Import
+              <span className="hidden sm:inline">PDF Import</span>
             </button>
             <div className="relative">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
@@ -241,7 +246,7 @@ export function InboxPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Suchen…"
-                className="pl-8 pr-4 h-8 text-sm border border-border rounded-card-sm bg-bg-surface text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-accent-400 w-48"
+                className="pl-8 pr-4 h-8 text-sm border border-border rounded-card-sm bg-bg-surface text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-accent-400 w-36 sm:w-48"
               />
             </div>
           </div>
@@ -296,59 +301,108 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr>
-            {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', ''].map(h => (
-              <th key={h} className={cn('label-caps pb-3 border-b border-border/50 text-left font-normal', h === 'Betrag' && 'text-right')}>
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(r => (
-            <tr
-              key={r.id}
-              onClick={() => onRowClick(r.id)}
-              className="h-14 border-b border-border/50 last:border-0 hover:bg-bg-hover cursor-pointer transition-colors"
-            >
-              <td>
-                <div className="flex items-center gap-2.5">
-                  <ProjectColorDot id={r.id} />
-                  <span className="text-sm font-medium text-ink truncate max-w-[160px]">
-                    {r.lieferant?.name ?? '—'}
-                  </span>
+    <>
+      {/* Mobile card list */}
+      <div className="md:hidden space-y-2">
+        {rows.map(r => (
+          <div
+            key={r.id}
+            onClick={() => onRowClick(r.id)}
+            className="p-4 rounded-card border border-border/50 bg-bg-surface hover:bg-bg-hover cursor-pointer transition-colors"
+          >
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <ProjectColorDot id={r.id} />
+                <span className="text-sm font-medium text-ink truncate">
+                  {r.lieferant?.name ?? '—'}
+                </span>
+              </div>
+              <StatusBadge variant={STATUS_VARIANT[r.status]} label={STATUS_LABEL[r.status]} />
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-mono text-ink-muted mb-1">{r.rechnungsnr}</div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-ink">{formatEuro(r.betrag)}</span>
+                  <span className="text-xs text-ink-muted">{r.ust_satz}% USt.</span>
+                  {r.faelligkeit && (
+                    <span className="text-xs"><FaelligkeitCell date={r.faelligkeit} /></span>
+                  )}
                 </div>
-              </td>
-              <td className="text-sm font-mono text-ink-muted">{r.rechnungsnr}</td>
-              <td className="text-right">
-                <span className="text-sm font-semibold text-ink">{formatEuro(r.betrag)}</span>
-              </td>
-              <td className="text-sm text-ink-muted">{r.ust_satz}%</td>
-              <td className="text-sm"><FaelligkeitCell date={r.faelligkeit} /></td>
-              <td>
-                <StatusBadge
-                  variant={STATUS_VARIANT[r.status]}
-                  label={STATUS_LABEL[r.status]}
-                />
-              </td>
-              <td className="text-right">
-                {r.status === 'eingegangen' && (
-                  <button
-                    onClick={(e) => handleBezahlt(e, r.id)}
-                    className="inline-flex items-center gap-1.5 px-3 h-7 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors"
-                  >
-                    <CheckCircle size={12} />
-                    Bezahlt
-                  </button>
-                )}
-              </td>
+              </div>
+              {r.status === 'eingegangen' && (
+                <button
+                  onClick={(e) => handleBezahlt(e, r.id)}
+                  className="inline-flex items-center gap-1 px-3 h-7 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors flex-shrink-0"
+                >
+                  <CheckCircle size={12} />
+                  Bezahlt
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr>
+              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', ''].map(h => (
+                <th key={h} className={cn(
+                  'label-caps pb-3 border-b border-border/50 text-left font-normal',
+                  h === 'Betrag' && 'text-right',
+                  h === 'USt.' && 'pl-6'
+                )}>
+                  {h}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr
+                key={r.id}
+                onClick={() => onRowClick(r.id)}
+                className="h-14 border-b border-border/50 last:border-0 hover:bg-bg-hover cursor-pointer transition-colors"
+              >
+                <td>
+                  <div className="flex items-center gap-2.5">
+                    <ProjectColorDot id={r.id} />
+                    <span className="text-sm font-medium text-ink truncate max-w-[160px]">
+                      {r.lieferant?.name ?? '—'}
+                    </span>
+                  </div>
+                </td>
+                <td className="text-sm font-mono text-ink-muted">{r.rechnungsnr}</td>
+                <td className="text-right">
+                  <span className="text-sm font-semibold text-ink">{formatEuro(r.betrag)}</span>
+                </td>
+                <td className="text-sm text-ink-muted pl-6">{r.ust_satz}%</td>
+                <td className="text-sm"><FaelligkeitCell date={r.faelligkeit} /></td>
+                <td>
+                  <StatusBadge
+                    variant={STATUS_VARIANT[r.status]}
+                    label={STATUS_LABEL[r.status]}
+                  />
+                </td>
+                <td className="text-right">
+                  {r.status === 'eingegangen' && (
+                    <button
+                      onClick={(e) => handleBezahlt(e, r.id)}
+                      className="inline-flex items-center gap-1.5 px-3 h-7 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors"
+                    >
+                      <CheckCircle size={12} />
+                      Bezahlt
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   )
 }
