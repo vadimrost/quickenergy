@@ -223,7 +223,7 @@ export function InboxPage() {
 
   return (
     <div>
-      <PageTitle title="Posteingang" subtitle="OCR-verarbeitete Rechnungen zur Prüfung und Buchung" />
+      <PageTitle title="Rechnungen" subtitle="OCR-verarbeitete Rechnungen zur Prüfung und Buchung" />
 
       {/* KPI Row */}
       <div className="grid grid-cols-4 gap-5 mb-6">

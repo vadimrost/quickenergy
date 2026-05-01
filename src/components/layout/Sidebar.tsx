@@ -1,16 +1,13 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Home, Building2, ArrowUpFromLine, Settings, LogOut, ReceiptText } from 'lucide-react'
+import { ArrowUpFromLine, LogOut, ReceiptText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useRechnungen } from '@/features/inbox/useRechnungen'
 import { toast } from 'sonner'
 
 const NAV_ITEMS = [
-  { icon: Home, path: '/', label: 'Dashboard', end: true },
-  { icon: ReceiptText, path: '/inbox', label: 'Posteingang', end: false, badge: true },
-  { icon: Building2, path: '/lieferanten', label: 'Lieferanten', end: false },
+  { icon: ReceiptText, path: '/', label: 'Rechnungen', end: true, badge: true },
   { icon: ArrowUpFromLine, path: '/exports', label: 'Exports', end: false },
-  { icon: Settings, path: '/einstellungen', label: 'Einstellungen', end: false },
 ]
 
 function getInitials(email: string): string {

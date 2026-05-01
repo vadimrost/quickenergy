@@ -3,10 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
-import { DashboardPage } from '@/pages/DashboardPage'
-import { SettingsPage } from '@/pages/SettingsPage'
 import { InboxPage } from '@/features/inbox/InboxPage'
-import { LieferantenPage } from '@/features/lieferanten/LieferantenPage'
 import { BuchungPage } from '@/features/buchung/BuchungPage'
 import { ExportsPage } from '@/features/exports/ExportsPage'
 import { useAuth } from '@/hooks/useAuth'
@@ -46,12 +43,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-      <Route path="/inbox" element={<ProtectedRoute><InboxPage /></ProtectedRoute>} />
+      <Route path="/" element={<ProtectedRoute><InboxPage /></ProtectedRoute>} />
       <Route path="/buchung/:id" element={<ProtectedRoute><BuchungPage /></ProtectedRoute>} />
-      <Route path="/lieferanten" element={<ProtectedRoute><LieferantenPage /></ProtectedRoute>} />
       <Route path="/exports" element={<ProtectedRoute><ExportsPage /></ProtectedRoute>} />
-      <Route path="/einstellungen" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
