@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle cx="100" cy="100" r="94" fill="#0a0a0a" stroke="#4ade80" stroke-width="6"/>
+  <text x="100" y="108"
+        text-anchor="middle"
+        fill="white"
+        font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-size="21"
+        font-weight="300"
+        letter-spacing="-0.5">Quick≡nergy</text>
+</svg>

@@ -29,14 +29,9 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 h-screen w-16 bg-bg-surface border-r border-border flex flex-col items-center py-0 z-50">
       {/* Logo */}
-      <div className="h-16 flex items-center justify-center w-full">
-        <div className="w-9 h-9 rounded-xl bg-ink flex items-center justify-center">
-          <span className="font-black text-[13px] tracking-tighter leading-none select-none">
-            <span style={{ color: '#9B30FF' }}>A</span>
-            <span className="text-white">I</span>
-          </span>
-        </div>
-      </div>
+      <NavLink to="/" className="h-16 flex items-center justify-center w-full">
+        <img src="/logo.svg" alt="QuickEnergy" className="w-10 h-10" />
+      </NavLink>
 
       <div className="h-8" />
 

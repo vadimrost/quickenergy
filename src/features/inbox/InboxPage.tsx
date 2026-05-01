@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO } from 'date-fns'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, X, FileText, Loader2 } from 'lucide-react'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageTitle } from '@/components/shared/PageTitle'
 import { StatCard } from '@/components/shared/StatCard'
@@ -11,7 +11,7 @@ import { ProjectColorDot } from '@/components/shared/ProjectColorDot'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { useRechnungen } from './useRechnungen'
+import { useRechnungen, useUpdateRechnung } from './useRechnungen'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
 import type { Rechnung, RechnungStatus } from '@/types/database'
 
@@ -144,8 +144,6 @@ type FilterTab = 'alle' | RechnungStatus
 const TABS: { key: FilterTab; label: string }[] = [
   { key: 'alle', label: 'Alle' },
   { key: 'eingegangen', label: 'Neu' },
-  { key: 'geprüft', label: 'In Prüfung' },
-  { key: 'gebucht', label: 'Gebucht' },
   { key: 'bezahlt', label: 'Bezahlt' },
 ]
 
@@ -301,12 +299,22 @@ export function InboxPage() {
 }
 
 function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (id: string) => void }) {
+  const { mutate: updateRechnung } = useUpdateRechnung()
+
+  const handleBezahlt = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation()
+    updateRechnung(
+      { id, updates: { status: 'bezahlt' } },
+      { onSuccess: () => toast.success('Rechnung als bezahlt markiert') }
+    )
+  }
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
           <tr>
-            {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Skonto bis', 'Status'].map(h => (
+            {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', ''].map(h => (
               <th key={h} className={cn('label-caps pb-3 border-b border-border/50 text-left font-normal', h === 'Betrag' && 'text-right')}>
                 {h}
               </th>
@@ -334,12 +342,22 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
               </td>
               <td className="text-sm text-ink-muted">{r.ust_satz}%</td>
               <td className="text-sm"><FaelligkeitCell date={r.faelligkeit} /></td>
-              <td className="text-sm"><SkontoBadge date={r.skonto_datum} prozent={r.skonto_prozent} /></td>
               <td>
                 <StatusBadge
                   variant={STATUS_VARIANT[r.status]}
                   label={STATUS_LABEL[r.status]}
                 />
+              </td>
+              <td className="text-right">
+                {r.status === 'eingegangen' && (
+                  <button
+                    onClick={(e) => handleBezahlt(e, r.id)}
+                    className="inline-flex items-center gap-1.5 px-3 h-7 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors"
+                  >
+                    <CheckCircle size={12} />
+                    Bezahlt
+                  </button>
+                )}
               </td>
             </tr>
           ))}

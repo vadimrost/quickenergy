@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Check, BookOpen, CreditCard, X } from 'lucide-react'
+import { CreditCard, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -14,13 +14,13 @@ interface ExtrahierteFelder_Props {
 }
 
 const STATUS_LABELS: Record<RechnungStatus, string> = {
-  eingegangen: 'Eingegangen',
-  geprüft: 'Geprüft',
-  gebucht: 'Gebucht',
+  eingegangen: 'Neu',
+  geprüft: 'Neu',
+  gebucht: 'Neu',
   bezahlt: 'Bezahlt',
 }
 
-const STATUS_FLOW: RechnungStatus[] = ['eingegangen', 'geprüft', 'gebucht', 'bezahlt']
+const STATUS_FLOW: RechnungStatus[] = ['eingegangen', 'bezahlt']
 
 export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const { data: lieferanten = [] } = useLieferanten()
@@ -244,9 +244,8 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {STATUS_FLOW.map(s => (
-                  <SelectItem key={s} value={s}>{STATUS_LABELS[s]}</SelectItem>
-                ))}
+                <SelectItem value="eingegangen">Neu</SelectItem>
+                <SelectItem value="bezahlt">Bezahlt</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -261,15 +260,13 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
 
       {/* Action buttons */}
       <div className="flex flex-col gap-2 pb-8">
-        {nextStatus && (
+        {form.status !== 'bezahlt' && (
           <button
             onClick={handleStatusAdvance}
             disabled={isPending}
             className="flex items-center justify-center gap-2 w-full py-2.5 rounded-card-sm bg-accent-500 hover:bg-accent-600 text-white text-sm font-medium transition-colors disabled:opacity-40"
           >
-            {nextStatus === 'geprüft' && <><Check size={15} /> Als geprüft markieren</>}
-            {nextStatus === 'gebucht' && <><BookOpen size={15} /> Buchen</>}
-            {nextStatus === 'bezahlt' && <><CreditCard size={15} /> Als bezahlt markieren</>}
+            <CreditCard size={15} /> Als bezahlt markieren
           </button>
         )}
         <button

@@ -42,20 +42,12 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-base flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#8BC34A' }}>
       <div className="card-base p-10 w-full max-w-sm">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-11 h-11 rounded-xl bg-ink flex items-center justify-center mb-5">
-            <span className="font-black text-[15px] tracking-tighter leading-none select-none">
-              <span style={{ color: '#9B30FF' }}>A</span>
-              <span className="text-white">I</span>
-            </span>
-          </div>
-          <h1 className="text-xl font-semibold text-ink tracking-tight">
-            <span style={{ color: '#9B30FF' }}>AI</span>WERK
-          </h1>
-          <p className="text-sm text-ink-muted mt-1">Anmelden um fortzufahren</p>
+          <img src="/logo.svg" alt="QuickEnergy" className="w-24 h-24 mb-4" />
+          <p className="text-sm text-ink-muted">Anmelden um fortzufahren</p>
         </div>
 
         {DEMO_MODE && (

@@ -1,8 +1,5 @@
-import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ExternalLink } from 'lucide-react'
-import { differenceInDays, parseISO } from 'date-fns'
-import { toast } from 'sonner'
 import { useRechnung } from '@/features/inbox/useRechnungen'
 import { useDuplikate } from './useBuchung'
 import { PdfViewer } from './PdfViewer'
@@ -34,23 +31,6 @@ export function BuchungPage() {
   const { data: rechnung, isLoading } = useRechnung(id)
   const { data: duplikate = [] } = useDuplikate(id)
 
-  useEffect(() => {
-    if (duplikate.length > 0) {
-      toast.warning(`${duplikate.length} mögliche${duplikate.length > 1 ? 's' : ''} Duplikat erkannt`, { duration: 5000 })
-    }
-  }, [duplikate.length])
-
-  useEffect(() => {
-    if (!rechnung?.skonto_datum || !rechnung?.skonto_prozent) return
-    const days = differenceInDays(parseISO(rechnung.skonto_datum), new Date())
-    if (days < 0) return
-    const skontoWert = (rechnung.betrag * rechnung.skonto_prozent / 100).toFixed(2)
-    if (days <= 2) {
-      toast.warning(`Skonto-Frist läuft ab! Noch ${days === 0 ? 'heute' : days === 1 ? 'morgen' : `${days} Tage`} — Ersparnis € ${skontoWert}`, { duration: 6000 })
-    } else if (days <= 7) {
-      toast.info(`Skonto verfügbar: ${rechnung.skonto_prozent}% bis in ${days} Tagen — Ersparnis € ${skontoWert}`)
-    }
-  }, [rechnung?.id])
 
   return (
     // Break out of AppLayout padding using negative margins
@@ -61,7 +41,7 @@ export function BuchungPage() {
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border flex-shrink-0">
           <button
-            onClick={() => navigate('/inbox')}
+            onClick={() => navigate('/')}
             className="w-8 h-8 rounded-xl flex items-center justify-center text-ink-muted hover:bg-bg-muted transition-colors"
           >
             <ArrowLeft size={16} />

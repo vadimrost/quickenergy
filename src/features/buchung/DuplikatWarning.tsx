@@ -1,5 +1,6 @@
 import { AlertOctagon, ArrowRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useRechnungen } from '@/features/inbox/useRechnungen'
 import type { Duplikat } from '@/types/database'
 
 interface DuplikatWarningProps {
@@ -9,6 +10,7 @@ interface DuplikatWarningProps {
 
 export function DuplikatWarning({ duplikate, currentId }: DuplikatWarningProps) {
   const navigate = useNavigate()
+  const { data: rechnungen = [] } = useRechnungen()
 
   if (!duplikate.length) return null
 
@@ -25,14 +27,16 @@ export function DuplikatWarning({ duplikate, currentId }: DuplikatWarningProps) 
           <div className="mt-1 space-y-1">
             {duplikate.map(d => {
               const otherId = d.rechnung_a_id === currentId ? d.rechnung_b_id : d.rechnung_a_id
+              const other = rechnungen.find(r => r.id === otherId)
+              const label = other?.rechnungsnr ?? otherId
               return (
                 <div key={d.id} className="flex items-center gap-2 text-sm text-ink-muted">
                   <span>Übereinstimmung {Math.round(d.match_score * 100)}% mit Rechnung</span>
                   <button
                     onClick={() => navigate(`/buchung/${otherId}`)}
-                    className="inline-flex items-center gap-0.5 text-accent-600 hover:text-accent-700 font-medium"
+                    className="inline-flex items-center gap-0.5 text-accent-600 hover:text-accent-700 font-medium font-mono"
                   >
-                    {otherId} <ArrowRight size={12} />
+                    {label} <ArrowRight size={12} />
                   </button>
                 </div>
               )
