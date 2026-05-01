@@ -85,8 +85,6 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     }
   }
 
-  const nextStatus = STATUS_FLOW[STATUS_FLOW.indexOf(form.status as RechnungStatus) + 1]
-
   const confidenceColor = (field: keyof NonNullable<Rechnung['ocr_json']>) => {
     const conf = rechnung.ocr_json?.[field]?.confidence
     if (!conf) return ''

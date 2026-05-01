@@ -172,20 +172,6 @@ function FaelligkeitCell({ date }: { date: string | null }) {
   return <span className="text-ink">{formatDate(date)}</span>
 }
 
-function SkontoBadge({ date, prozent }: { date: string | null; prozent: number | null }) {
-  if (!date || !prozent) return <span className="text-ink-muted">—</span>
-  const days = differenceInDays(parseISO(date), new Date())
-  if (days < 0) return <span className="text-ink-subtle line-through text-xs">{formatDate(date)}</span>
-  if (days <= 2) {
-    return (
-      <div className="flex items-center gap-1">
-        <AlertTriangle size={11} className="text-status-danger" />
-        <span className="text-status-danger text-xs font-medium">{formatDate(date)} ({prozent}%)</span>
-      </div>
-    )
-  }
-  return <span className="text-ink-muted text-xs">{formatDate(date)} ({prozent}%)</span>
-}
 
 export function InboxPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>('alle')
