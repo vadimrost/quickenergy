@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { CreditCard, X } from 'lucide-react'
+import { CreditCard, X, AlertTriangle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useUpdateRechnung } from '@/features/inbox/useRechnungen'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
 import { useLieferanten } from '@/features/lieferanten/useLieferanten'
 import type { Rechnung, RechnungStatus } from '@/types/database'
 import { formatDate } from '@/lib/utils'
@@ -23,8 +25,11 @@ const STATUS_LABELS: Record<RechnungStatus, string> = {
 const STATUS_FLOW: RechnungStatus[] = ['eingegangen', 'bezahlt']
 
 export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
+  const navigate = useNavigate()
   const { data: lieferanten = [] } = useLieferanten()
   const { mutate: updateRechnung, isPending } = useUpdateRechnung()
+  const { mutate: deleteRechnung, isPending: isDeleting } = useDeleteRechnung()
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const [form, setForm] = useState({
     rechnungsnr: rechnung.rechnungsnr,
@@ -277,11 +282,49 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
           Änderungen speichern
         </button>
         <button
-          disabled={isPending}
-          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-card-sm text-sm text-status-danger hover:bg-status-danger/5 transition-colors"
+          disabled={isPending || isDeleting}
+          onClick={() => setConfirmOpen(true)}
+          className="flex items-center justify-center gap-2 w-full py-2.5 rounded-card-sm text-sm text-status-danger hover:bg-status-danger/5 transition-colors disabled:opacity-40"
         >
           <X size={14} /> Ablehnen
         </button>
+
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <DialogContent className="max-w-sm p-7 bg-white border border-border shadow-xl">
+            <div className="flex flex-col items-center text-center gap-5">
+              <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+                <AlertTriangle size={26} className="text-red-500" />
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-gray-900">Rechnung ablehnen?</p>
+                <p className="text-sm text-gray-500 mt-1.5">
+                  Die Rechnung wird unwiderruflich gelöscht.
+                </p>
+              </div>
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setConfirmOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Abbrechen
+                </button>
+                <button
+                  disabled={isDeleting}
+                  onClick={() => deleteRechnung(rechnung.id, {
+                    onSuccess: () => {
+                      toast.success('Rechnung abgelehnt und gelöscht')
+                      navigate('/')
+                    },
+                    onError: () => toast.error('Löschen fehlgeschlagen'),
+                  })}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-40"
+                >
+                  {isDeleting ? 'Wird gelöscht…' : 'Ja, löschen'}
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

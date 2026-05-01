@@ -199,7 +199,7 @@ export function InboxPage() {
   const today = isoToday()
 
   const kpiEingegangen = allRechnungen.filter(r => r.status === 'eingegangen').length
-  const kpiInPruefung = allRechnungen.filter(r => r.status === 'geprüft').length
+  const kpiBezahlt = allRechnungen.filter(r => r.status === 'bezahlt').length
   const kpiHeuteFaellig = allRechnungen.filter(r => r.faelligkeit && r.faelligkeit <= today && r.status !== 'bezahlt').length
   const kpiSkontoAlarm = allRechnungen.filter(r => {
     if (!r.skonto_datum) return false
@@ -225,8 +225,8 @@ export function InboxPage() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-4 gap-5 mb-6">
-        <StatCard label="Neu Eingegangen" value={isLoading ? '…' : kpiEingegangen.toString()} sub="Warten auf Prüfung" icon={<Inbox size={16} />} />
-        <StatCard label="In Prüfung" value={isLoading ? '…' : kpiInPruefung.toString()} sub="Zur Freigabe ausstehend" accent icon={<CheckCircle size={16} />} />
+        <StatCard label="Neu Eingegangen" value={isLoading ? '…' : kpiEingegangen.toString()} sub="Warten auf Zahlung" icon={<Inbox size={16} />} />
+        <StatCard label="Bezahlt" value={isLoading ? '…' : kpiBezahlt.toString()} sub="Erfolgreich abgeschlossen" accent icon={<CheckCircle size={16} />} />
         <StatCard label="Heute Fällig" value={isLoading ? '…' : kpiHeuteFaellig.toString()} sub={kpiHeuteFaellig > 0 ? 'Sofortiger Handlungsbedarf' : 'Keine offenen Posten'} icon={<Clock size={16} />} />
         <StatCard label="Skonto-Alarm" value={isLoading ? '…' : kpiSkontoAlarm.toString()} sub="Frist innerhalb 3 Tagen" icon={<AlertTriangle size={16} />} />
       </div>

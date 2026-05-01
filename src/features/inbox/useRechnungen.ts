@@ -49,3 +49,16 @@ export function useUpdateRechnung() {
     },
   })
 }
+
+export function useDeleteRechnung() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('rechnungen').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['rechnungen'] })
+    },
+  })
+}
