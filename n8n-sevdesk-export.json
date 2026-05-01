@@ -1,0 +1,174 @@
+{
+  "name": "QuickEnergy → sevDesk Export",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sevdesk-export",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "quickenergy-sevdesk-export"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst ids = body.rechnung_ids ?? [];\n\nif (!Array.isArray(ids) || ids.length === 0) {\n  throw new Error('Keine Rechnungs-IDs übergeben');\n}\n\nreturn ids.map(id => ({ json: { id } }));"
+      },
+      "id": "extract-ids",
+      "name": "IDs extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rechnungen?id=eq.{{ $json.id }}&select=*,lieferant:lieferanten(*)",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "headers": {
+            "values": [
+              { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+              { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
+            ]
+          }
+        }
+      },
+      "id": "fetch-rechnung",
+      "name": "Rechnung laden (Supabase)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.first().json;\nconst r = Array.isArray(rows) ? rows[0] : rows;\n\nif (!r) throw new Error('Rechnung nicht gefunden');\n\nconst today = new Date().toISOString().split('T')[0];\nconst voucherDate = r.created_at ? r.created_at.split('T')[0] : today;\nconst paymentDeadline = r.faelligkeit ?? null;\n\nconst payload = {\n  voucher: {\n    objectName: 'Voucher',\n    mapAll: true,\n    voucherDate: voucherDate + 'T00:00:00+00:00',\n    supplierName: r.lieferant?.name ?? 'Unbekannter Lieferant',\n    description: r.rechnungsnr,\n    status: 50,\n    taxRate: r.ust_satz ?? 19,\n    taxText: `Umsatzsteuer ${r.ust_satz ?? 19}%`,\n    taxType: 'default',\n    creditDebit: 'D',\n    voucherType: 'VOU',\n    currency: 'EUR',\n    paymentDeadline: paymentDeadline ? paymentDeadline + 'T00:00:00+00:00' : null\n  },\n  voucherPosSave: [\n    {\n      objectName: 'VoucherPos',\n      mapAll: true,\n      accountingType: { id: '84', objectName: 'AccountingType' },\n      taxRate: r.ust_satz ?? 19,\n      net: true,\n      sumNet: r.betrag ?? 0,\n      comment: r.rechnungsnr\n    }\n  ],\n  filename: null\n};\n\nreturn [{ json: { payload, rechnung_id: r.id, rechnungsnr: r.rechnungsnr } }];"
+      },
+      "id": "transform-sevdesk",
+      "name": "Zu sevDesk-Format umwandeln",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://my.sevdesk.de/api/v1/Voucher",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "headers": {
+            "values": [
+              { "name": "Authorization", "value": "={{ $env.SEVDESK_API_TOKEN }}" },
+              { "name": "Content-Type", "value": "application/json" }
+            ]
+          }
+        }
+      },
+      "id": "create-voucher",
+      "name": "Voucher in sevDesk erstellen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const sevdeskResponse = $input.first().json;\nconst voucherId = sevdeskResponse?.objects?.id ?? null;\nconst success = !!voucherId;\n\nreturn [{\n  json: {\n    rechnung_id: $('Zu sevDesk-Format umwandeln').first().json.rechnung_id,\n    rechnungsnr: $('Zu sevDesk-Format umwandeln').first().json.rechnungsnr,\n    sevdesk_voucher_id: voucherId,\n    success\n  }\n}];"
+      },
+      "id": "check-result",
+      "name": "Ergebnis prüfen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/export_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"rechnung_ids_json\": [\"{{ $json.rechnung_id }}\"],\n  \"ziel\": \"lexoffice\",\n  \"exported_at\": \"{{ new Date().toISOString() }}\",\n  \"success\": {{ $json.success }}\n}",
+        "options": {
+          "headers": {
+            "values": [
+              { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+              { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+              { "name": "Prefer", "value": "return=minimal" }
+            ]
+          }
+        }
+      },
+      "id": "log-export",
+      "name": "Export loggen (Supabase)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.success).length;\nconst failed = results.filter(r => !r.success).length;\n\nreturn [{\n  json: {\n    status: 'ok',\n    exported: successful,\n    failed,\n    results\n  }\n}];"
+      },
+      "id": "summarize",
+      "name": "Zusammenfassen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Antwort senden",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "IDs extrahieren", "type": "main", "index": 0 }]]
+    },
+    "IDs extrahieren": {
+      "main": [[{ "node": "Rechnung laden (Supabase)", "type": "main", "index": 0 }]]
+    },
+    "Rechnung laden (Supabase)": {
+      "main": [[{ "node": "Zu sevDesk-Format umwandeln", "type": "main", "index": 0 }]]
+    },
+    "Zu sevDesk-Format umwandeln": {
+      "main": [[{ "node": "Voucher in sevDesk erstellen", "type": "main", "index": 0 }]]
+    },
+    "Voucher in sevDesk erstellen": {
+      "main": [[{ "node": "Ergebnis prüfen", "type": "main", "index": 0 }]]
+    },
+    "Ergebnis prüfen": {
+      "main": [[{ "node": "Export loggen (Supabase)", "type": "main", "index": 0 }]]
+    },
+    "Export loggen (Supabase)": {
+      "main": [[{ "node": "Zusammenfassen", "type": "main", "index": 0 }]]
+    },
+    "Zusammenfassen": {
+      "main": [[{ "node": "Antwort senden", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "quickenergy"
+  }
+}

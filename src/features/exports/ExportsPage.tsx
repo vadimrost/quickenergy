@@ -74,11 +74,11 @@ export function ExportsPage() {
         <div className="flex items-start gap-6">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-semibold text-ink">Lexoffice</span>
-              <span className="text-xs text-ink-muted">— Für Buchhaltung & Steuer</span>
+              <span className="text-sm font-semibold text-ink">sevDesk</span>
+              <span className="text-xs text-ink-muted">— Buchhaltung & Steuer</span>
             </div>
             <p className="text-xs text-ink-muted mb-3">
-              Exportiert alle gebuchten Rechnungen ({gebuchteIds.length} ausstehend) als strukturiertes JSON an Lexoffice via n8n-Webhook.
+              Exportiert alle bezahlten Rechnungen ({gebuchteIds.length} ausstehend) als Belege nach sevDesk via n8n-Webhook.
             </p>
             <ExportButton rechnungIds={gebuchteIds} ziel="lexoffice" />
           </div>
@@ -99,7 +99,7 @@ export function ExportsPage() {
 
         {gebuchteIds.length === 0 && (
           <div className="mt-4 p-3 rounded-card-sm bg-bg-muted text-sm text-ink-muted text-center">
-            Keine gebuchten Rechnungen für Export vorhanden — erst Rechnungen als „Gebucht" markieren.
+            Keine bezahlten Rechnungen für Export vorhanden.
           </div>
         )}
       </SectionCard>
