@@ -18,8 +18,7 @@
           "id": "YOUR_OUTLOOK_CREDENTIAL_ID",
           "name": "Microsoft Outlook"
         }
-      },
-      "notes": "Outlook-Ordner: Posteingang. Credentials in n8n hinterlegen."
+      }
     },
     {
       "parameters": {
@@ -33,7 +32,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Filter: Only emails with PDF attachments\nconst results = [];\n\nfor (const item of $input.all()) {\n  if (!item.json.hasAttachment) {\n    console.log(`❌ Kein Anhang: ${item.json.subject}`);\n    continue;\n  }\n\n  const hasPDF = Object.values(item.binary || {}).some(a =>\n    a.mimeType === 'application/pdf' || a.fileName?.toLowerCase().endsWith('.pdf')\n  );\n\n  if (hasPDF) {\n    console.log(`✅ PDF gefunden: ${item.json.subject}`);\n    results.push(item);\n  } else {\n    console.log(`❌ Kein PDF: ${item.json.subject}`);\n  }\n}\n\nconsole.log(`📊 ${results.length} von ${$input.all().length} Emails haben PDFs`);\nreturn results;"
+        "jsCode": "// Filter: Only emails with PDF attachments\nconst results = [];\n\nfor (const item of $input.all()) {\n  if (!item.json.hasAttachment) continue;\n\n  const hasPDF = Object.values(item.binary || {}).some(a =>\n    a.mimeType === 'application/pdf' || a.fileName?.toLowerCase().endsWith('.pdf')\n  );\n\n  if (hasPDF) results.push(item);\n}\n\nreturn results;"
       },
       "id": "filter-pdf",
       "name": "Filter PDF Attachments",
@@ -51,7 +50,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Split each PDF attachment into its own item\nconst results = [];\n\nfor (const item of $input.all()) {\n  for (const key of Object.keys(item.binary || {})) {\n    const bin = item.binary[key];\n    if (bin.mimeType === 'application/pdf' || (bin.fileName || '').toLowerCase().endsWith('.pdf')) {\n      results.push({\n        json: {\n          fileName: bin.fileName || 'document.pdf',\n          emailSubject: item.json.subject || '',\n          emailFrom: item.json.from || '',\n          emailDate: item.json.date || ''\n        },\n        binary: { data: bin }\n      });\n    }\n  }\n}\n\nconsole.log(`📎 ${results.length} PDF(s) aufgeteilt`);\nreturn results;"
+        "jsCode": "// Split each PDF attachment into its own item\nconst results = [];\n\nfor (const item of $input.all()) {\n  for (const key of Object.keys(item.binary || {})) {\n    const bin = item.binary[key];\n    if (bin.mimeType === 'application/pdf' || (bin.fileName || '').toLowerCase().endsWith('.pdf')) {\n      results.push({\n        json: {\n          fileName: bin.fileName || 'document.pdf',\n          emailSubject: item.json.subject || '',\n          emailFrom: item.json.from || '',\n          emailDate: item.json.date || ''\n        },\n        binary: { data: bin }\n      });\n    }\n  }\n}\n\nreturn results;"
       },
       "id": "split-pdf",
       "name": "Split PDF Attachments",
@@ -78,7 +77,7 @@
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{\n{\n  \"contents\": [{\n    \"parts\": [\n      { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $json.data } },\n      { \"text\": \"Klassifiziere dieses Dokument in GENAU EINE der folgenden Kategorien:\\n\\n1. INVOICE (Eingangsrechnung): Hat Rechnungsnummer, Zahlungsdetails (IBAN, Fälligkeitsdatum), finale Beträge\\n2. RECEIPT (Bewirtungsbeleg / Kassenbon): Kassenbon, Quittung, Bon, Bewirtungsbeleg, Restaurantrechnung, keine IBAN\\n3. OTHER: Angebot, AGB, Lieferschein, Sonstiges\\n\\nAntworte NUR mit JSON.\" }\n    ]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"document_type\", \"confidence\"],\n      \"properties\": {\n        \"document_type\": { \"type\": \"STRING\", \"enum\": [\"invoice\", \"receipt\", \"other\"] },\n        \"confidence\": { \"type\": \"NUMBER\" },\n        \"reason\": { \"type\": \"STRING\" }\n      }\n    }\n  }\n}\n}}",
+        "jsonBody": "={{\n{\n  \"contents\": [{\n    \"parts\": [\n      { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $json.data } },\n      { \"text\": \"Klassifiziere dieses Dokument in GENAU EINE der folgenden Kategorien:\\n\\n1. INVOICE: Hat Rechnungsnummer, Zahlungsdetails (IBAN, Fälligkeitsdatum), finale Beträge zur Zahlung\\n2. RECEIPT: Kassenbon, Quittung, Bon, Bewirtungsbeleg, Restaurantrechnung — keine IBAN\\n3. OTHER: Angebot, AGB, Lieferschein, Sonstiges\\n\\nAntworte NUR mit JSON.\" }\n    ]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"document_type\", \"confidence\"],\n      \"properties\": {\n        \"document_type\": { \"type\": \"STRING\", \"enum\": [\"invoice\", \"receipt\", \"other\"] },\n        \"confidence\": { \"type\": \"NUMBER\" },\n        \"reason\": { \"type\": \"STRING\" }\n      }\n    }\n  }\n}\n}}",
         "options": {}
       },
       "id": "classifier",
@@ -147,7 +146,7 @@
       "parameters": {},
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [-144, 240],
+      "position": [-144, 352],
       "id": "wait4",
       "name": "Wait4",
       "webhookId": "d9228de4-0bb5-43d6-a2ae-8183ea9d5204"
@@ -160,7 +159,7 @@
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{\n{\n  \"contents\": [{\n    \"parts\": [\n      { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $('Extract Binary to Base64').item.json.data } },\n      { \"text\": \"Du bist ein Buchhaltungsassistent. Extrahiere alle Felder aus dieser Eingangsrechnung.\\n\\nWichtige Hinweise:\\n- Österreich: MwSt-Sätze sind 10%, 13% oder 20%\\n- is_storno = true wenn Stornorechnung oder Gutschrift\\n- invoice_due_date im Format YYYY-MM-DD\\n- skonto_due_date im Format YYYY-MM-DD\\n\\nAntworte NUR mit dem JSON-Objekt.\" }\n    ]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"invoice_number\", \"supplier_name\", \"invoice_amount\"],\n      \"properties\": {\n        \"invoice_number\":     { \"type\": \"STRING\" },\n        \"invoice_date\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_due_date\":   { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_amount\":     { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_tax_rate\":   { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_tax_amount\": { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_net_amount\": { \"type\": \"NUMBER\", \"nullable\": true },\n        \"is_storno\":          { \"type\": \"BOOLEAN\", \"nullable\": true },\n        \"skonto_percent\":     { \"type\": \"NUMBER\", \"nullable\": true },\n        \"skonto_due_date\":    { \"type\": \"STRING\", \"nullable\": true },\n        \"payment_terms\":      { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_name\":      { \"type\": \"STRING\" },\n        \"supplier_uid\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_street\":    { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_zip\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_city\":      { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_iban\":      { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_vat_id\":    { \"type\": \"STRING\", \"nullable\": true }\n      }\n    }\n  }\n}\n}}",
+        "jsonBody": "={{\n{\n  \"contents\": [{\n    \"parts\": [\n      { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $('Extract Binary to Base64').item.json.data } },\n      { \"text\": \"Du bist ein Buchhaltungsassistent. Extrahiere alle Felder aus dieser Eingangsrechnung.\\n\\nÖsterreich: MwSt-Sätze sind 10%, 13% oder 20%.\\nis_storno = true wenn Stornorechnung oder Gutschrift.\\nDaten im Format YYYY-MM-DD.\\n\\nAntworte NUR mit dem JSON-Objekt.\" }\n    ]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"invoice_number\", \"supplier_name\", \"invoice_amount\"],\n      \"properties\": {\n        \"invoice_number\":     { \"type\": \"STRING\" },\n        \"invoice_date\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_due_date\":   { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_amount\":     { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_tax_rate\":   { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_tax_amount\": { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_net_amount\": { \"type\": \"NUMBER\", \"nullable\": true },\n        \"is_storno\":          { \"type\": \"BOOLEAN\", \"nullable\": true },\n        \"skonto_percent\":     { \"type\": \"NUMBER\", \"nullable\": true },\n        \"skonto_due_date\":    { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_name\":      { \"type\": \"STRING\" },\n        \"supplier_uid\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_iban\":      { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_vat_id\":    { \"type\": \"STRING\", \"nullable\": true }\n      }\n    }\n  }\n}\n}}",
         "options": {}
       },
       "id": "invoice-ocr",
@@ -183,13 +182,13 @@
         "nodeCredentialType": "googlePalmApi",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{\n{\n  \"contents\": [{\n    \"parts\": [\n      { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $('Extract Binary to Base64').item.json.data } },\n      { \"text\": \"Du bist ein Buchhaltungsassistent. Extrahiere alle Felder aus diesem Bewirtungsbeleg / Kassenbon.\\n\\nÖsterreich: Gastronomie hat oft MEHRERE MwSt-Sätze: 10% (Speisen), 20% (Getränke/Alkohol).\\nTrinkgeld ist NICHT umsatzsteuerpflichtig → tip_amount separat.\\ndate im Format YYYY-MM-DD\\n\\nAntworte NUR mit dem JSON-Objekt.\" }\n    ]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"total_amount\", \"establishment_name\"],\n      \"properties\": {\n        \"receipt_date\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"receipt_number\":     { \"type\": \"STRING\", \"nullable\": true },\n        \"establishment_name\": { \"type\": \"STRING\" },\n        \"establishment_uid\":  { \"type\": \"STRING\", \"nullable\": true },\n        \"tax_20_net\":         { \"type\": \"NUMBER\", \"nullable\": true },\n        \"tax_20_amount\":      { \"type\": \"NUMBER\", \"nullable\": true },\n        \"tax_10_net\":         { \"type\": \"NUMBER\", \"nullable\": true },\n        \"tax_10_amount\":      { \"type\": \"NUMBER\", \"nullable\": true },\n        \"total_without_tip\":  { \"type\": \"NUMBER\", \"nullable\": true },\n        \"total_amount\":       { \"type\": \"NUMBER\" },\n        \"tip_amount\":         { \"type\": \"NUMBER\", \"nullable\": true }\n      }\n    }\n  }\n}\n}}",
+        "jsonBody": "={{\n{\n  \"contents\": [{\n    \"parts\": [\n      { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $('Extract Binary to Base64').item.json.data } },\n      { \"text\": \"Du bist ein Buchhaltungsassistent. Extrahiere alle Felder aus diesem Bewirtungsbeleg / Kassenbon.\\n\\nÖsterreich: Gastronomie hat oft MEHRERE MwSt-Sätze: 10% (Speisen), 20% (Getränke/Alkohol).\\nTrinkgeld ist NICHT umsatzsteuerpflichtig → tip_amount separat.\\nDatum im Format YYYY-MM-DD.\\n\\nAntworte NUR mit dem JSON-Objekt.\" }\n    ]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"total_amount\", \"establishment_name\"],\n      \"properties\": {\n        \"receipt_date\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"receipt_number\":     { \"type\": \"STRING\", \"nullable\": true },\n        \"establishment_name\": { \"type\": \"STRING\" },\n        \"establishment_uid\":  { \"type\": \"STRING\", \"nullable\": true },\n        \"tax_20_net\":         { \"type\": \"NUMBER\", \"nullable\": true },\n        \"tax_20_amount\":      { \"type\": \"NUMBER\", \"nullable\": true },\n        \"tax_10_net\":         { \"type\": \"NUMBER\", \"nullable\": true },\n        \"tax_10_amount\":      { \"type\": \"NUMBER\", \"nullable\": true },\n        \"total_without_tip\":  { \"type\": \"NUMBER\", \"nullable\": true },\n        \"total_amount\":       { \"type\": \"NUMBER\" },\n        \"tip_amount\":         { \"type\": \"NUMBER\", \"nullable\": true }\n      }\n    }\n  }\n}\n}}",
         "options": {}
       },
       "id": "receipt-ocr",
       "name": "Receipt OCR (Gemini)",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [80, 352],
+      "position": [80, 480],
       "typeVersion": 4.2,
       "credentials": {
         "googlePalmApi": {
@@ -200,12 +199,22 @@
     },
     {
       "parameters": {
-        "jsCode": "// Parse Gemini Invoice OCR → QuickEnergy rechnungen schema\nlet invoice;\ntry {\n  const raw = $input.first().json.candidates[0].content.parts[0].text;\n  invoice = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch(e) {\n  throw new Error('Gemini OCR parse error: ' + e.message);\n}\n\n// Storno\nif (invoice.is_storno) {\n  if (invoice.invoice_amount > 0) invoice.invoice_amount = -Math.abs(invoice.invoice_amount);\n  if (invoice.invoice_net_amount > 0) invoice.invoice_net_amount = -Math.abs(invoice.invoice_net_amount);\n}\n\nfunction normalizeDate(raw) {\n  if (!raw) return null;\n  const s = String(raw).trim();\n  if (s.includes('.')) {\n    const [d, m, y] = s.split('.');\n    if (y && m && d) return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`;\n  }\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;\n  const p = new Date(s);\n  return isNaN(p.getTime()) ? null : p.toISOString().split('T')[0];\n}\n\n// Pass PDF binary through so Upload node can use it\nconst pdfBinary = $('Split PDF Attachments').first().binary || {};\n\nreturn [{\n  json: {\n    rechnungsnr:    invoice.invoice_number || `EMAIL-${Date.now().toString(36).toUpperCase()}`,\n    betrag:         invoice.invoice_net_amount || invoice.invoice_amount || 0,\n    ust_satz:       Number(invoice.invoice_tax_rate || 20),\n    faelligkeit:    normalizeDate(invoice.invoice_due_date),\n    skonto_datum:   normalizeDate(invoice.skonto_due_date),\n    skonto_prozent: invoice.skonto_percent || null,\n    status:         'eingegangen',\n    ocr_json:       invoice\n  },\n  binary: pdfBinary\n}];"
+        "jsCode": "// Parse Gemini Invoice OCR → QuickEnergy rechnungen schema\nlet invoice;\ntry {\n  const raw = $input.first().json.candidates[0].content.parts[0].text;\n  invoice = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch(e) {\n  throw new Error('Gemini OCR parse error: ' + e.message);\n}\n\nif (invoice.is_storno) {\n  if (invoice.invoice_amount > 0) invoice.invoice_amount = -Math.abs(invoice.invoice_amount);\n  if (invoice.invoice_net_amount > 0) invoice.invoice_net_amount = -Math.abs(invoice.invoice_net_amount);\n}\n\nfunction normalizeDate(raw) {\n  if (!raw) return null;\n  const s = String(raw).trim();\n  if (s.includes('.')) {\n    const [d, m, y] = s.split('.');\n    if (y && m && d) return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`;\n  }\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;\n  const p = new Date(s);\n  return isNaN(p.getTime()) ? null : p.toISOString().split('T')[0];\n}\n\nconst pdfBinary = $('Split PDF Attachments').first().binary || {};\n\nreturn [{\n  json: {\n    rechnungsnr:    invoice.invoice_number || `EMAIL-${Date.now().toString(36).toUpperCase()}`,\n    betrag:         invoice.invoice_net_amount || invoice.invoice_amount || 0,\n    ust_satz:       Number(invoice.invoice_tax_rate || 20),\n    faelligkeit:    normalizeDate(invoice.invoice_due_date),\n    skonto_datum:   normalizeDate(invoice.skonto_due_date),\n    skonto_prozent: invoice.skonto_percent || null,\n    status:         'eingegangen',\n    ocr_json:       invoice\n  },\n  binary: pdfBinary\n}];"
       },
       "id": "parse-invoice-qe",
       "name": "Parse Invoice for QuickEnergy",
       "type": "n8n-nodes-base.code",
       "position": [288, 0],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Gemini Receipt OCR → QuickEnergy rechnungen schema\nlet receipt;\ntry {\n  const raw = $input.first().json.candidates[0].content.parts[0].text;\n  receipt = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch(e) {\n  throw new Error('Gemini OCR parse error: ' + e.message);\n}\n\nfunction normalizeDate(raw) {\n  if (!raw) return null;\n  const s = String(raw).trim();\n  if (s.includes('.')) {\n    const [d, m, y] = s.split('.');\n    if (y && m && d) return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`;\n  }\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;\n  const p = new Date(s);\n  return isNaN(p.getTime()) ? null : p.toISOString().split('T')[0];\n}\n\n// Determine dominant tax rate\nconst net20 = Number(receipt.tax_20_net || 0);\nconst net10 = Number(receipt.tax_10_net || 0);\nconst dominantRate = net20 >= net10 ? 20 : 10;\n\n// Netto = sum of tax-exclusive amounts, or derive from total\nconst nettoTotal = (net20 + net10) || Number(receipt.total_without_tip || receipt.total_amount || 0);\n\nconst pdfBinary = $('Split PDF Attachments').first().binary || {};\n\nreturn [{\n  json: {\n    rechnungsnr:    receipt.receipt_number || `BELEG-${Date.now().toString(36).toUpperCase()}`,\n    betrag:         nettoTotal,\n    ust_satz:       dominantRate,\n    faelligkeit:    normalizeDate(receipt.receipt_date),\n    skonto_datum:   null,\n    skonto_prozent: null,\n    status:         'eingegangen',\n    ocr_json:       receipt\n  },\n  binary: pdfBinary\n}];"
+      },
+      "id": "parse-receipt-qe",
+      "name": "Parse Receipt for QuickEnergy",
+      "type": "n8n-nodes-base.code",
+      "position": [288, 480],
       "typeVersion": 2
     },
     {
@@ -226,8 +235,8 @@
         "inputDataFieldName": "data",
         "options": {}
       },
-      "id": "upload-pdf-supabase",
-      "name": "Upload PDF to Supabase Storage",
+      "id": "upload-pdf-supabase-invoice",
+      "name": "Upload PDF to Supabase (Invoice)",
       "type": "n8n-nodes-base.httpRequest",
       "position": [560, 0],
       "typeVersion": 4.2,
@@ -235,12 +244,47 @@
     },
     {
       "parameters": {
-        "jsCode": "// Combine parsed invoice fields + pdf_url from Supabase upload\nconst parsed = $('Parse Invoice for QuickEnergy').first().json;\nconst uploadResult = $input.first().json;\n\nconst storageKey = uploadResult.Key || uploadResult.path || null;\nconst pdfUrl = storageKey\n  ? `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/${storageKey}`\n  : null;\n\nreturn [{ json: { ...parsed, pdf_url: pdfUrl } }];"
+        "method": "POST",
+        "url": "=https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/rechnungen/{{ $now.toMillis() }}.pdf",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "YOUR_SUPABASE_SERVICE_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SERVICE_KEY" },
+            { "name": "Content-Type",  "value": "application/pdf" },
+            { "name": "x-upsert",      "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
       },
-      "id": "build-rechnung-payload",
-      "name": "Build rechnungen Payload",
+      "id": "upload-pdf-supabase-receipt",
+      "name": "Upload PDF to Supabase (Receipt)",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [560, 480],
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $('Parse Invoice for QuickEnergy').first().json;\nconst uploadResult = $input.first().json;\nconst storageKey = uploadResult.Key || uploadResult.path || null;\nconst pdfUrl = storageKey\n  ? `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/${storageKey}`\n  : null;\nreturn [{ json: { ...parsed, pdf_url: pdfUrl } }];"
+      },
+      "id": "build-invoice-payload",
+      "name": "Build Invoice Payload",
       "type": "n8n-nodes-base.code",
       "position": [832, 0],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = $('Parse Receipt for QuickEnergy').first().json;\nconst uploadResult = $input.first().json;\nconst storageKey = uploadResult.Key || uploadResult.path || null;\nconst pdfUrl = storageKey\n  ? `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/${storageKey}`\n  : null;\nreturn [{ json: { ...parsed, pdf_url: pdfUrl } }];"
+      },
+      "id": "build-receipt-payload",
+      "name": "Build Receipt Payload",
+      "type": "n8n-nodes-base.code",
+      "position": [832, 480],
       "typeVersion": 2
     },
     {
@@ -261,7 +305,7 @@
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
-      "id": "save-rechnung-qe",
+      "id": "save-invoice-qe",
       "name": "Rechnung in QuickEnergy speichern",
       "type": "n8n-nodes-base.httpRequest",
       "position": [1056, 0],
@@ -270,41 +314,28 @@
     },
     {
       "parameters": {
-        "jsCode": "// Get original PDF binary for sevDesk upload\nconst pdfItem = $('Split PDF Attachments').first();\nreturn [{\n  json: { fileName: pdfItem.json.fileName || 'document.pdf' },\n  binary: pdfItem.binary || {}\n}];"
-      },
-      "id": "get-pdf-for-sevdesk",
-      "name": "Code in JavaScript3",
-      "type": "n8n-nodes-base.code",
-      "position": [1280, 192],
-      "typeVersion": 2
-    },
-    {
-      "parameters": {
         "method": "POST",
-        "url": "https://my.sevdesk.de/api/v1/Voucher/Factory/uploadTempFile",
+        "url": "https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/rechnungen",
         "sendHeaders": true,
         "headerParameters": {
-          "parameters": [{
-            "name": "Authorization",
-            "value": "YOUR_SEVDESK_API_KEY"
-          }]
+          "parameters": [
+            { "name": "apikey",        "value": "YOUR_SUPABASE_SERVICE_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SERVICE_KEY" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=representation" }
+          ]
         },
         "sendBody": true,
-        "contentType": "multipart-form-data",
-        "bodyParameters": {
-          "parameters": [{
-            "parameterType": "formBinaryData",
-            "name": "file",
-            "inputDataFieldName": "data"
-          }]
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {}
       },
-      "id": "upload-sevdesk",
-      "name": "Upload PDF to sevDesk",
+      "id": "save-receipt-qe",
+      "name": "Beleg in QuickEnergy speichern",
       "type": "n8n-nodes-base.httpRequest",
-      "position": [1504, 192],
-      "typeVersion": 4.2
+      "position": [1056, 480],
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -315,7 +346,7 @@
       "id": "ignore",
       "name": "Ignore (not invoice/receipt)",
       "type": "n8n-nodes-base.set",
-      "position": [0, 544],
+      "position": [0, 640],
       "typeVersion": 3.4
     }
   ],
@@ -349,7 +380,7 @@
     },
     "Is Receipt?": {
       "main": [
-        [{ "node": "Wait4",                      "type": "main", "index": 0 }],
+        [{ "node": "Wait4",                       "type": "main", "index": 0 }],
         [{ "node": "Ignore (not invoice/receipt)", "type": "main", "index": 0 }]
       ]
     },
@@ -362,26 +393,26 @@
     "Invoice OCR (Gemini)": {
       "main": [[{ "node": "Parse Invoice for QuickEnergy", "type": "main", "index": 0 }]]
     },
+    "Receipt OCR (Gemini)": {
+      "main": [[{ "node": "Parse Receipt for QuickEnergy", "type": "main", "index": 0 }]]
+    },
     "Parse Invoice for QuickEnergy": {
-      "main": [[{ "node": "Upload PDF to Supabase Storage", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Upload PDF to Supabase (Invoice)", "type": "main", "index": 0 }]]
     },
-    "Upload PDF to Supabase Storage": {
-      "main": [[{ "node": "Build rechnungen Payload", "type": "main", "index": 0 }]]
+    "Parse Receipt for QuickEnergy": {
+      "main": [[{ "node": "Upload PDF to Supabase (Receipt)", "type": "main", "index": 0 }]]
     },
-    "Build rechnungen Payload": {
+    "Upload PDF to Supabase (Invoice)": {
+      "main": [[{ "node": "Build Invoice Payload", "type": "main", "index": 0 }]]
+    },
+    "Upload PDF to Supabase (Receipt)": {
+      "main": [[{ "node": "Build Receipt Payload", "type": "main", "index": 0 }]]
+    },
+    "Build Invoice Payload": {
       "main": [[{ "node": "Rechnung in QuickEnergy speichern", "type": "main", "index": 0 }]]
     },
-    "Rechnung in QuickEnergy speichern": {
-      "main": [
-        [{ "node": "Code in JavaScript3", "type": "main", "index": 0 }],
-        [{ "node": "Code in JavaScript3", "type": "main", "index": 0 }]
-      ]
-    },
-    "Receipt OCR (Gemini)": {
-      "main": [[{ "node": "Code in JavaScript3", "type": "main", "index": 0 }]]
-    },
-    "Code in JavaScript3": {
-      "main": [[{ "node": "Upload PDF to sevDesk", "type": "main", "index": 0 }]]
+    "Build Receipt Payload": {
+      "main": [[{ "node": "Beleg in QuickEnergy speichern", "type": "main", "index": 0 }]]
     }
   },
   "active": false,
