@@ -6,6 +6,7 @@ import { PageTitle } from '@/components/shared/PageTitle'
 import { StatCard } from '@/components/shared/StatCard'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ExportButton } from './LexofficeExportButton'
 import { useExportLog } from './useExports'
@@ -36,17 +37,24 @@ function formatExportDate(iso: string) {
 }
 
 export function ExportsPage() {
-  const { data: exportLog = [], isLoading: logLoading } = useExportLog()
+  const { data: exportLog = [], isLoading: logLoading, isError: logError, refetch: logRefetch } = useExportLog()
   const { data: rechnungen = [] } = useRechnungen()
   const [selectedZiel, setSelectedZiel] = useState<ExportZiel | 'alle'>('alle')
 
-  const gebuchteIds = rechnungen.filter(r => r.status === 'bezahlt').map(r => r.id)
+  const bezahltIds = rechnungen.filter(r => r.status === 'bezahlt').map(r => r.id)
+  const exportedToSevdesk = new Set(
+    exportLog.filter(e => e.success && e.ziel === 'lexoffice').flatMap(e => e.rechnung_ids_json)
+  )
+  const exportedToDatev = new Set(
+    exportLog.filter(e => e.success && e.ziel === 'datev').flatMap(e => e.rechnung_ids_json)
+  )
+  const ausstehendCount = bezahltIds.filter(
+    id => !exportedToSevdesk.has(id) || !exportedToDatev.has(id)
+  ).length
+  const gebuchteIds = bezahltIds
+
   const sevdeskCount = exportLog.filter(e => e.ziel === 'lexoffice').length
   const datevCount = exportLog.filter(e => e.ziel === 'datev').length
-  const lastExport = exportLog.sort((a, b) => b.exported_at.localeCompare(a.exported_at))[0]
-  const successRate = exportLog.length
-    ? Math.round((exportLog.filter(e => e.success).length / exportLog.length) * 100)
-    : 100
 
   const filtered: ExportLog[] = exportLog.filter(e =>
     selectedZiel === 'alle' || e.ziel === selectedZiel
@@ -62,10 +70,10 @@ export function ExportsPage() {
         <StatCard label="sevDesk" value={logLoading ? '…' : sevdeskCount.toString()} sub="Buchhalter-Exports" accent />
         <StatCard label="DATEV" value={logLoading ? '…' : datevCount.toString()} sub="Steuerberater-Exports" />
         <StatCard
-          label="Erfolgsrate"
-          value={logLoading ? '…' : `${successRate}%`}
-          sub={lastExport ? `Zuletzt ${formatDate(lastExport.exported_at)}` : 'Noch kein Export'}
-          icon={<CheckCircle size={16} />}
+          label="Ausstehend"
+          value={logLoading ? '…' : ausstehendCount.toString()}
+          sub={ausstehendCount > 0 ? 'Bereit zum Export' : 'Alles exportiert'}
+          icon={<Clock size={16} />}
         />
       </div>
 
@@ -127,6 +135,8 @@ export function ExportsPage() {
       >
         {logLoading ? (
           <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14" />)}</div>
+        ) : logError ? (
+          <ErrorState onRetry={() => void logRefetch()} />
         ) : filtered.length === 0 ? (
           <EmptyState title="Noch keine Exports" description="Exportierte Buchungen erscheinen hier." icon={<ArrowUpFromLine size={24} />} />
         ) : (

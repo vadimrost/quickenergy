@@ -52,7 +52,7 @@ export function BuchungPage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-ink truncate">
-                {rechnung.lieferant?.name ?? 'Unbekannter Lieferant'}
+                {rechnung.lieferant?.name ?? (rechnung.ocr_json as any)?.supplier_name ?? 'Unbekannter Lieferant'}
               </span>
               <StatusBadge
                 variant={STATUS_VARIANT[rechnung.status]}
@@ -104,8 +104,8 @@ export function BuchungPage() {
 
   return (
     <>
-      {/* Mobile layout */}
-      <div className="md:hidden -mx-4 -mt-6 flex flex-col h-[calc(100vh-4rem)]">
+      {/* Mobile layout — fixed overlay so it's fully independent of AppLayout padding */}
+      <div className="md:hidden fixed inset-0 bottom-16 flex flex-col bg-bg-base z-40">
         {header}
 
         {/* Mobile tab bar */}

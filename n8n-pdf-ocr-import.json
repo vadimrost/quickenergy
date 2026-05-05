@@ -1,0 +1,231 @@
+{
+  "name": "QuickEnergy → PDF Upload & OCR",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Webhook + PDF Upload\nPOST multipart/form-data · Feld: file\n→ PDF direkt nach Supabase Storage (Bucket: rechnungen)",
+        "height": 180,
+        "width": 380,
+        "color": 5
+      },
+      "id": "note-1",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [0, 0],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## 2. Gemini OCR\nPDF → strukturierte Rechnungsdaten\nStorno-Erkennung + Steuerberechnung",
+        "height": 180,
+        "width": 560,
+        "color": 5
+      },
+      "id": "note-2",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [680, 0],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "## 3. Lieferant upsert + Rechnung speichern\nLieferant suchen oder anlegen → Rechnung in rechnungen-Tabelle einfügen",
+        "height": 180,
+        "width": 680,
+        "color": 4
+      },
+      "id": "note-3",
+      "name": "Sticky Note3",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [1680, 0],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quickenergy-pdf-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "position": [80, 272],
+      "typeVersion": 2,
+      "webhookId": "quickenergy-pdf-upload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/rechnungen/{{ $now.toMillis() }}.pdf",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",         "value": "YOUR_SUPABASE_SERVICE_KEY" },
+            { "name": "Authorization",  "value": "Bearer YOUR_SUPABASE_SERVICE_KEY" },
+            { "name": "Content-Type",   "value": "application/pdf" },
+            { "name": "x-upsert",       "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "file",
+        "options": {}
+      },
+      "id": "upload-pdf",
+      "name": "Upload PDF to Supabase Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [360, 272],
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "binaryPropertyName": "file",
+        "options": {}
+      },
+      "id": "extract-file",
+      "name": "Extract from File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "position": [640, 272],
+      "typeVersion": 1
+    },
+    {
+      "parameters": { "amount": 1 },
+      "id": "wait-1",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "position": [900, 272],
+      "webhookId": "qe-wait-1",
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"inline_data\": {\n            \"mime_type\": \"application/pdf\",\n            \"data\": $json.data\n          }\n        },\n        {\n          \"text\": \"You are an accounts payable agent extracting information from an invoice.\\n\\nIMPORTANT INSTRUCTIONS:\\n1. Check if this is a STORNO/GUTSCHRIFT (Stornorechnung/Gutschrift/Credit Note)\\n2. If amounts are negative OR document says Storno/Gutschrift, set invoice_amount as NEGATIVE number\\n3. Extract the VAT/MwSt rate (typically 7, 19, or 20 percent)\\n4. Calculate total tax amounts accurately\\n5. Extract Skonto (early payment discount): percentage (skonto_prozent), deadline date (skonto_datum) if mentioned\\n6. Extract supplier VAT ID (USt-IdNr., UID-Nr.) as supplier_vat_id\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"invoice_number\", \"invoice_amount\", \"supplier_name\"],\n      \"properties\": {\n        \"invoice_number\":     { \"type\": \"STRING\" },\n        \"invoice_date\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_amount\":     { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_due_date\":   { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_tax_rate\":   { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_tax_amount\": { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_net_amount\": { \"type\": \"NUMBER\", \"nullable\": true },\n        \"skonto_prozent\":     { \"type\": \"NUMBER\", \"nullable\": true },\n        \"skonto_datum\":       { \"type\": \"STRING\", \"nullable\": true },\n        \"is_storno\":          { \"type\": \"BOOLEAN\", \"nullable\": true },\n        \"supplier_name\":      { \"type\": \"STRING\" },\n        \"supplier_address\":   { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_vat_id\":    { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_iban\":      { \"type\": \"STRING\", \"nullable\": true },\n        \"payment_terms\":      { \"type\": \"STRING\", \"nullable\": true },\n        \"line_items\": {\n          \"type\": \"ARRAY\",\n          \"items\": {\n            \"type\": \"OBJECT\",\n            \"properties\": {\n              \"description\": { \"type\": \"STRING\" },\n              \"quantity\":    { \"type\": \"NUMBER\", \"nullable\": true },\n              \"unit\":        { \"type\": \"STRING\", \"nullable\": true },\n              \"unit_price\":  { \"type\": \"NUMBER\", \"nullable\": true },\n              \"tax_rate\":    { \"type\": \"NUMBER\", \"nullable\": true },\n              \"total\":       { \"type\": \"NUMBER\" }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n}}",
+        "options": {}
+      },
+      "id": "gemini-ocr",
+      "name": "Gemini OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1160, 272],
+      "typeVersion": 4.2,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DEIN_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini API"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": { "amount": 1 },
+      "id": "wait-2",
+      "name": "Wait2",
+      "type": "n8n-nodes-base.wait",
+      "position": [1420, 272],
+      "webhookId": "qe-wait-2",
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Gemini OCR output + map to QuickEnergy rechnungen schema\nconst item = $input.first();\n\nlet invoice;\ntry {\n  const raw = item.json.candidates[0].content.parts[0].text;\n  invoice = typeof raw === 'string' ? JSON.parse(raw) : raw;\n} catch(e) {\n  throw new Error('Gemini konnte keine Rechnungsdaten extrahieren: ' + e.message);\n}\n\n// Storno detection\nconst isStorno = invoice.is_storno || false;\nif (isStorno && invoice.invoice_amount > 0) {\n  invoice.invoice_amount = -Math.abs(invoice.invoice_amount);\n  if (invoice.invoice_net_amount) invoice.invoice_net_amount = -Math.abs(invoice.invoice_net_amount);\n  if (invoice.invoice_tax_amount) invoice.invoice_tax_amount = -Math.abs(invoice.invoice_tax_amount);\n}\n\n// Primary tax rate\nlet primaryTaxRate = invoice.invoice_tax_rate || 19;\nif (Array.isArray(invoice.line_items) && invoice.line_items.length > 0) {\n  const rates = [...new Set(invoice.line_items.map(li => li.tax_rate).filter(r => r != null))];\n  if (rates.length > 0) primaryTaxRate = rates[0];\n}\n\n// Normalize date helper\nfunction normalizeDate(raw) {\n  if (!raw) return null;\n  const s = String(raw).trim();\n  if (s.includes('.')) {\n    const [d, m, y] = s.split('.');\n    if (y && m && d) return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`;\n  }\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;\n  const parsed = new Date(s);\n  return isNaN(parsed.getTime()) ? null : parsed.toISOString().split('T')[0];\n}\n\n// Build storage URL from upload result\nconst uploadResult = $('Upload PDF to Supabase Storage').first().json;\nconst storageKey = uploadResult.Key || uploadResult.path || null;\nconst pdfUrl = storageKey\n  ? `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/${storageKey}`\n  : null;\n\nreturn [{\n  json: {\n    rechnungsnr:    invoice.invoice_number || `IMPORT-${Date.now().toString(36).toUpperCase()}`,\n    betrag:         invoice.invoice_amount || 0,\n    ust_satz:       primaryTaxRate,\n    faelligkeit:    normalizeDate(invoice.invoice_due_date),\n    skonto_datum:   normalizeDate(invoice.skonto_datum),\n    skonto_prozent: invoice.skonto_prozent || null,\n    status:         'eingegangen',\n    pdf_url:        pdfUrl,\n    ocr_json:       invoice\n  }\n}];"
+      },
+      "id": "parse-invoice",
+      "name": "Parse & Map Invoice Data",
+      "type": "n8n-nodes-base.code",
+      "position": [1680, 272],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/rechnungen",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "YOUR_SUPABASE_SERVICE_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SERVICE_KEY" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "save-rechnung",
+      "name": "Rechnung speichern",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2240, 272],
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'ok', message: 'Rechnung importiert', rechnungsnr: $('Parse & Map Invoice Data').first().json.rechnungsnr, betrag: $('Parse & Map Invoice Data').first().json.betrag }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-ok",
+      "name": "Antwort — Erfolg",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [2520, 272],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'error', message: $json.error?.message || $json.error || 'Fehler beim Verarbeiten der Rechnung' }) }}",
+        "options": { "responseCode": 500 }
+      },
+      "id": "respond-err",
+      "name": "Antwort — Fehler",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [1420, 496],
+      "typeVersion": 1.1
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[
+        { "node": "Upload PDF to Supabase Storage", "type": "main", "index": 0 },
+        { "node": "Extract from File",              "type": "main", "index": 0 }
+      ]]
+    },
+    "Extract from File": {
+      "main": [[{ "node": "Wait", "type": "main", "index": 0 }]]
+    },
+    "Wait": {
+      "main": [[{ "node": "Gemini OCR", "type": "main", "index": 0 }]]
+    },
+    "Gemini OCR": {
+      "main": [
+        [{ "node": "Wait2",           "type": "main", "index": 0 }],
+        [{ "node": "Antwort — Fehler","type": "main", "index": 0 }]
+      ]
+    },
+    "Wait2": {
+      "main": [[{ "node": "Parse & Map Invoice Data", "type": "main", "index": 0 }]]
+    },
+    "Parse & Map Invoice Data": {
+      "main": [[{ "node": "Rechnung speichern", "type": "main", "index": 0 }]]
+    },
+    "Rechnung speichern": {
+      "main": [
+        [{ "node": "Antwort — Erfolg", "type": "main", "index": 0 }],
+        [{ "node": "Antwort — Fehler", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "quickenergy" }
+}

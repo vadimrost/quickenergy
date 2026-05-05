@@ -9,6 +9,7 @@ import { SectionCard } from '@/components/shared/SectionCard'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ProjectColorDot } from '@/components/shared/ProjectColorDot'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
@@ -17,10 +18,9 @@ import type { Rechnung, RechnungStatus } from '@/types/database'
 
 type UploadState = 'idle' | 'dragover' | 'processing' | 'done'
 
-function PdfUploadDialog({ open, onClose, onImported }: {
+function PdfUploadDialog({ open, onClose }: {
   open: boolean
   onClose: () => void
-  onImported: (r: Rechnung) => void
 }) {
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const [fileName, setFileName] = useState<string | null>(null)
@@ -30,36 +30,37 @@ function PdfUploadDialog({ open, onClose, onImported }: {
 
   const handleClose = () => { reset(); onClose() }
 
-  const processFile = useCallback((file: File) => {
+  const processFile = useCallback(async (file: File) => {
     if (!file.name.endsWith('.pdf')) { toast.error('Nur PDF-Dateien erlaubt.'); return }
     setFileName(file.name)
     setUploadState('processing')
-    setTimeout(() => {
-      const id = `upload-${Date.now()}`
-      const today = new Date()
-      const fälligkeit = new Date(today); fälligkeit.setDate(today.getDate() + 14)
-      const fmt = (d: Date) => d.toISOString().split('T')[0]
-      const newR: Rechnung = {
-        id,
-        rechnungsnr: `IMPORT-${id.slice(-4).toUpperCase()}`,
-        betrag: 0,
-        ust_satz: 19,
-        faelligkeit: fmt(fälligkeit),
-        skonto_datum: null,
-        skonto_prozent: null,
-        status: 'eingegangen',
-        created_at: today.toISOString(),
-        lieferant_id: null,
-        pdf_url: URL.createObjectURL(new File([], file.name)),
-        ocr_json: null,
-        lieferant: null,
-      }
+
+    const webhookUrl = import.meta.env.VITE_N8N_OCR_WEBHOOK_URL as string | undefined
+    if (!webhookUrl) {
+      // No webhook configured — show done after short delay
+      setTimeout(() => {
+        setUploadState('done')
+        toast.success(`${file.name} wird verarbeitet (kein OCR-Webhook konfiguriert)`)
+        setTimeout(() => { reset(); onClose() }, 800)
+      }, 1000)
+      return
+    }
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch(webhookUrl, { method: 'POST', body: formData })
+      if (!res.ok) throw new Error(`Webhook Fehler: ${res.status}`)
+
       setUploadState('done')
-      toast.success(`${file.name} wurde importiert`)
-      onImported(newR)
+      toast.success(`${file.name} wurde importiert und verarbeitet`)
       setTimeout(() => { reset(); onClose() }, 800)
-    }, 1800)
-  }, [onClose, onImported])
+    } catch (err) {
+      setUploadState('idle')
+      toast.error(`Upload fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
+    }
+  }, [onClose])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -182,9 +183,7 @@ export function InboxPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>('alle')
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [localRechnungen, setLocalRechnungen] = useState<Rechnung[]>([])
-  const { data: fetched = [], isLoading } = useRechnungen()
-  const allRechnungen = [...localRechnungen, ...fetched]
+  const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
   const navigate = useNavigate()
 
   const today = isoToday()
@@ -204,7 +203,7 @@ export function InboxPage() {
       const q = search.toLowerCase()
       return (
         r.rechnungsnr.toLowerCase().includes(q) ||
-        r.lieferant?.name.toLowerCase().includes(q)
+        (r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '').toLowerCase().includes(q)
       )
     }
     return true
@@ -225,7 +224,6 @@ export function InboxPage() {
       <PdfUploadDialog
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onImported={r => setLocalRechnungen(prev => [r, ...prev])}
       />
 
       {/* Table section */}
@@ -279,6 +277,8 @@ export function InboxPage() {
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-14 w-full" />)}
           </div>
+        ) : isError ? (
+          <ErrorState onRetry={() => void refetch()} />
         ) : filtered.length === 0 ? (
           <EmptyState title="Keine Rechnungen" description="Keine Einträge für den gewählten Filter." />
         ) : (
@@ -314,7 +314,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
               <div className="flex items-center gap-2 min-w-0">
                 <ProjectColorDot id={r.id} />
                 <span className="text-sm font-medium text-ink truncate">
-                  {r.lieferant?.name ?? '—'}
+                  {r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '—'}
                 </span>
               </div>
               <StatusBadge variant={STATUS_VARIANT[r.status]} label={STATUS_LABEL[r.status]} />
@@ -371,7 +371,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                   <div className="flex items-center gap-2.5">
                     <ProjectColorDot id={r.id} />
                     <span className="text-sm font-medium text-ink truncate max-w-[160px]">
-                      {r.lieferant?.name ?? '—'}
+                      {r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '—'}
                     </span>
                   </div>
                 </td>
