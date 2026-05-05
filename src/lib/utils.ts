@@ -4,12 +4,8 @@ import { twMerge } from 'tailwind-merge'
 export const cn = (...inputs: ClassValue[]) => twMerge(clsx(inputs))
 
 export const formatEuro = (value: number): string => {
-  if (value === 0) return '€ 0K'
-  const abs = Math.abs(value)
   const sign = value < 0 ? '-' : ''
-  if (abs >= 1_000_000) return `${sign}€ ${(abs / 1_000_000).toFixed(2)}M`
-  if (abs >= 1_000) return `${sign}€ ${Math.round(abs / 1_000)}K`
-  return `${sign}€ ${abs.toFixed(0)}`
+  return `${sign}€ ${Math.abs(value).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 export const formatPercent = (value: number): string => `${Math.round(value)}%`
