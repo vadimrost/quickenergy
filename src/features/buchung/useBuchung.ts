@@ -20,9 +20,8 @@ function computeDuplikate(all: Rechnung[], id: string): Duplikat[] {
         const bPrefix = r.rechnungsnr.replace(/\d+$/, '')
         if (aPrefix.length > 2 && aPrefix === bPrefix) score += 0.10
       }
-      if (r.betrag === current.betrag) score += 0.25
-      if (r.lieferant_id && r.lieferant_id === current.lieferant_id) score += 0.10
-      if (r.ust_satz === current.ust_satz) score += 0.05
+      if (r.betrag === current.betrag) score += 0.30
+      if (r.ust_satz === current.ust_satz) score += 0.10
       return { id: `dup-${id}-${r.id}`, rechnung_a_id: id, rechnung_b_id: r.id, match_score: score }
     })
     .filter(d => d.match_score >= 0.5)
