@@ -323,7 +323,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
               <div>
                 <div className="text-xs font-mono text-ink-muted mb-1">{r.rechnungsnr}</div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-ink">{formatEuro(r.betrag)}</span>
+                  <span className="text-sm font-semibold text-ink">{formatEuro(r.betrag * (1 + r.ust_satz / 100))}</span>
                   <span className="text-xs text-ink-muted">{r.ust_satz}% USt.</span>
                   {r.faelligkeit && (
                     <span className="text-xs"><FaelligkeitCell date={r.faelligkeit} /></span>
@@ -377,7 +377,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                 </td>
                 <td className="text-sm font-mono text-ink-muted">{r.rechnungsnr}</td>
                 <td className="text-right">
-                  <span className="text-sm font-semibold text-ink">{formatEuro(r.betrag)}</span>
+                  <span className="text-sm font-semibold text-ink">{formatEuro(r.betrag * (1 + r.ust_satz / 100))}</span>
                 </td>
                 <td className="text-sm text-ink-muted pl-6">{r.ust_satz}%</td>
                 <td className="text-sm"><FaelligkeitCell date={r.faelligkeit} /></td>
