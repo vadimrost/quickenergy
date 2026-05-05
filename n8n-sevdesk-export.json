@@ -28,7 +28,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rechnungen?id=eq.{{ $json.id }}&select=*,lieferant:lieferanten(*)",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rechnungen?id=eq.{{ $json.id }}&select=*",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -48,7 +48,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const rows = $input.first().json;\nconst r = Array.isArray(rows) ? rows[0] : rows;\n\nif (!r) throw new Error('Rechnung nicht gefunden');\n\nconst today = new Date().toISOString().split('T')[0];\nconst voucherDate = r.created_at ? r.created_at.split('T')[0] : today;\nconst paymentDeadline = r.faelligkeit ?? null;\n\nconst payload = {\n  voucher: {\n    objectName: 'Voucher',\n    mapAll: true,\n    voucherDate: voucherDate + 'T00:00:00+00:00',\n    supplierName: r.lieferant?.name ?? 'Unbekannter Lieferant',\n    description: r.rechnungsnr,\n    status: 50,\n    taxRate: r.ust_satz ?? 19,\n    taxText: `Umsatzsteuer ${r.ust_satz ?? 19}%`,\n    taxType: 'default',\n    creditDebit: 'D',\n    voucherType: 'VOU',\n    currency: 'EUR',\n    paymentDeadline: paymentDeadline ? paymentDeadline + 'T00:00:00+00:00' : null\n  },\n  voucherPosSave: [\n    {\n      objectName: 'VoucherPos',\n      mapAll: true,\n      accountingType: { id: '84', objectName: 'AccountingType' },\n      taxRate: r.ust_satz ?? 19,\n      net: true,\n      sumNet: r.betrag ?? 0,\n      comment: r.rechnungsnr\n    }\n  ],\n  filename: null\n};\n\nreturn [{ json: { payload, rechnung_id: r.id, rechnungsnr: r.rechnungsnr } }];"
+        "jsCode": "const rows = $input.first().json;\nconst r = Array.isArray(rows) ? rows[0] : rows;\n\nif (!r) throw new Error('Rechnung nicht gefunden');\n\nconst today = new Date().toISOString().split('T')[0];\nconst voucherDate = r.created_at ? r.created_at.split('T')[0] : today;\nconst paymentDeadline = r.faelligkeit ?? null;\n\nconst payload = {\n  voucher: {\n    objectName: 'Voucher',\n    mapAll: true,\n    voucherDate: voucherDate + 'T00:00:00+00:00',\n    supplierName: r.lieferant?.name ?? r.ocr_json?.supplier_name ?? 'Unbekannter Lieferant',\n    description: r.rechnungsnr,\n    status: 50,\n    taxRate: r.ust_satz ?? 19,\n    taxText: `Umsatzsteuer ${r.ust_satz ?? 19}%`,\n    taxType: 'default',\n    creditDebit: 'D',\n    voucherType: 'VOU',\n    currency: 'EUR',\n    paymentDeadline: paymentDeadline ? paymentDeadline + 'T00:00:00+00:00' : null\n  },\n  voucherPosSave: [\n    {\n      objectName: 'VoucherPos',\n      mapAll: true,\n      accountingType: { id: '84', objectName: 'AccountingType' },\n      taxRate: r.ust_satz ?? 19,\n      net: true,\n      sumNet: r.betrag ?? 0,\n      comment: r.rechnungsnr\n    }\n  ],\n  filename: null\n};\n\nreturn [{ json: { payload, rechnung_id: r.id, rechnungsnr: r.rechnungsnr } }];"
       },
       "id": "transform-sevdesk",
       "name": "Zu sevDesk-Format umwandeln",
@@ -98,7 +98,7 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"rechnung_ids_json\": [\"{{ $json.rechnung_id }}\"],\n  \"ziel\": \"lexoffice\",\n  \"exported_at\": \"{{ new Date().toISOString() }}\",\n  \"success\": {{ $json.success }}\n}",
+        "jsonBody": "={\n  \"rechnung_ids_json\": [\"{{ $json.rechnung_id }}\"],\n  \"ziel\": \"sevdesk\",\n  \"exported_at\": \"{{ new Date().toISOString() }}\",\n  \"success\": {{ $json.success }}\n}",
         "options": {
           "headers": {
             "values": [
