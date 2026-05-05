@@ -13,7 +13,6 @@ function computeDuplikate(all: Rechnung[], id: string): Duplikat[] {
     .filter(r => r.id !== id)
     .map(r => {
       let score = 0
-      // Exakte Rechnungsnummer = stärkstes Signal
       if (r.rechnungsnr === current.rechnungsnr) {
         score += 0.60
       } else {
@@ -39,11 +38,10 @@ export function useDuplikate(rechnungId: string) {
         return computeDuplikate(MOCK_RECHNUNGEN, rechnungId)
       }
       const { data, error } = await supabase
-        .from('duplikate')
-        .select('*')
-        .or(`rechnung_a_id.eq.${rechnungId},rechnung_b_id.eq.${rechnungId}`)
-      if (error) return []
-      return (data as Duplikat[]) ?? []
+        .from('rechnungen')
+        .select('id, rechnungsnr, betrag, ust_satz, lieferant_id')
+      if (error || !data) return []
+      return computeDuplikate(data as Rechnung[], rechnungId)
     },
     enabled: !!rechnungId,
   })
