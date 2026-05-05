@@ -7,7 +7,6 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
-import { useLieferanten } from '@/features/lieferanten/useLieferanten'
 import type { Rechnung, RechnungStatus } from '@/types/database'
 import { formatDate } from '@/lib/utils'
 
@@ -26,31 +25,32 @@ const STATUS_FLOW: RechnungStatus[] = ['eingegangen', 'bezahlt']
 
 export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const navigate = useNavigate()
-  const { data: lieferanten = [] } = useLieferanten()
   const { mutate: updateRechnung, isPending } = useUpdateRechnung()
   const { mutate: deleteRechnung, isPending: isDeleting } = useDeleteRechnung()
   const [confirmOpen, setConfirmOpen] = useState(false)
 
+  const ocrNetto = (rechnung.ocr_json as any)?.invoice_net_amount
+  const nettoWert = ocrNetto ?? rechnung.betrag
+
   const [form, setForm] = useState({
     rechnungsnr: rechnung.rechnungsnr,
-    betrag: rechnung.betrag.toString(),
+    betrag: nettoWert.toString(),
     ust_satz: rechnung.ust_satz.toString(),
     faelligkeit: rechnung.faelligkeit ?? '',
     skonto_datum: rechnung.skonto_datum ?? '',
     skonto_prozent: rechnung.skonto_prozent?.toString() ?? '',
-    lieferant_id: rechnung.lieferant_id ?? '',
     status: rechnung.status,
   })
 
   useEffect(() => {
+    const ocrNettoVal = (rechnung.ocr_json as any)?.invoice_net_amount
     setForm({
       rechnungsnr: rechnung.rechnungsnr,
-      betrag: rechnung.betrag.toString(),
+      betrag: (ocrNettoVal ?? rechnung.betrag).toString(),
       ust_satz: rechnung.ust_satz.toString(),
       faelligkeit: rechnung.faelligkeit ?? '',
       skonto_datum: rechnung.skonto_datum ?? '',
       skonto_prozent: rechnung.skonto_prozent?.toString() ?? '',
-      lieferant_id: rechnung.lieferant_id ?? '',
       status: rechnung.status,
     })
   }, [rechnung])
@@ -68,7 +68,6 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
         faelligkeit: form.faelligkeit || null,
         skonto_datum: form.skonto_datum || null,
         skonto_prozent: form.skonto_prozent ? parseFloat(form.skonto_prozent) : null,
-        lieferant_id: form.lieferant_id || null,
         status: form.status as RechnungStatus,
       },
     })
@@ -95,41 +94,6 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
 
   return (
     <div className="space-y-6">
-      {/* Lieferant */}
-      <div className="card-base p-5">
-        <p className="label-caps mb-4">Lieferant</p>
-        <div className="space-y-3">
-          <div>
-            <Label className="label-caps text-ink-subtle mb-1.5 block">Lieferant</Label>
-            <Select
-              value={form.lieferant_id}
-              onValueChange={v => setForm(f => ({ ...f, lieferant_id: v }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Lieferant wählen…" />
-              </SelectTrigger>
-              <SelectContent>
-                {lieferanten.map(l => (
-                  <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {rechnung.lieferant && (
-            <div className="grid grid-cols-2 gap-3 text-xs text-ink-muted">
-              <div>
-                <span className="label-caps block mb-0.5">USt-IdNr.</span>
-                <span className="text-ink font-mono">{rechnung.lieferant.ustid ?? '—'}</span>
-              </div>
-              <div>
-                <span className="label-caps block mb-0.5">Kostengruppe</span>
-                <span className="text-ink font-mono">{rechnung.lieferant.auto_kostengruppe ?? '—'}</span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Rechnungsdaten */}
       <div className="card-base p-5">
         <p className="label-caps mb-4">Rechnungsdaten</p>
