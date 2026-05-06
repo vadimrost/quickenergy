@@ -20,6 +20,14 @@ export interface OcrJson {
   iban?: OcrField
 }
 
+export interface Mitarbeiter {
+  id: string
+  name: string
+  email: string | null
+  aktiv: boolean
+  created_at: string
+}
+
 export interface Lieferant {
   id: string
   name: string
@@ -68,6 +76,7 @@ export interface Database {
     Tables: {
       rechnungen: { Row: Rechnung; Insert: Omit<Rechnung, 'id' | 'created_at'>; Update: Partial<Rechnung> }
       lieferanten: { Row: Lieferant; Insert: Omit<Lieferant, 'id'>; Update: Partial<Lieferant> }
+      mitarbeiter: { Row: Mitarbeiter; Insert: Omit<Mitarbeiter, 'id' | 'created_at'>; Update: Partial<Mitarbeiter> }
       duplikate: { Row: Duplikat; Insert: Omit<Duplikat, 'id'>; Update: Partial<Duplikat> }
       export_log: { Row: ExportLog; Insert: Omit<ExportLog, 'id'>; Update: Partial<ExportLog> }
     }

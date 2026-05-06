@@ -13,13 +13,15 @@ import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
+import { useMitarbeiter } from './useMitarbeiter'
 import { useTriggerExport } from '@/features/exports/useExports'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
 import type { Rechnung, RechnungStatus, ExportZiel } from '@/types/database'
 
-type UploadState = 'idle' | 'dragover' | 'converting' | 'processing' | 'done'
-
 const ACCEPTED_TYPES = '.pdf,.heic,.heif,.jpg,.jpeg,.png,.webp'
+
+type FileStatus = 'pending' | 'converting' | 'uploading' | 'done' | 'error'
+interface FileEntry { id: string; name: string; status: FileStatus; error?: string }
 
 function isImageFile(file: File): boolean {
   return file.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(file.name)
@@ -32,51 +34,43 @@ function isHeic(file: File): boolean {
 
 async function convertImageToPdf(file: File): Promise<File> {
   let imageBlob: Blob = file
-
   if (isHeic(file)) {
     const heic2any = (await import('heic2any')).default
     const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
     imageBlob = Array.isArray(result) ? result[0] : result
   }
-
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result as string)
     reader.onerror = reject
     reader.readAsDataURL(imageBlob)
   })
-
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image()
     el.onload = () => resolve(el)
     el.onerror = reject
     el.src = dataUrl
   })
-
   const { jsPDF } = await import('jspdf')
   const A4_W = 210, A4_H = 297
   const pxToMm = (px: number) => px * 25.4 / 96
-  let imgW = pxToMm(img.naturalWidth)
-  let imgH = pxToMm(img.naturalHeight)
-
+  let imgW = pxToMm(img.naturalWidth), imgH = pxToMm(img.naturalHeight)
   const orientation = imgW > imgH ? 'l' : 'p'
   const pageW = orientation === 'p' ? A4_W : A4_H
   const pageH = orientation === 'p' ? A4_H : A4_W
-
   if (imgW > pageW || imgH > pageH) {
     const scale = Math.min(pageW / imgW, pageH / imgH)
-    imgW *= scale
-    imgH *= scale
+    imgW *= scale; imgH *= scale
   }
-
-  const x = (pageW - imgW) / 2
-  const y = (pageH - imgH) / 2
-
   const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
-  doc.addImage(dataUrl, 'JPEG', x, y, imgW, imgH)
+  doc.addImage(dataUrl, 'JPEG', (pageW - imgW) / 2, (pageH - imgH) / 2, imgW, imgH)
+  return new File([doc.output('blob')], file.name.replace(/\.[^.]+$/, '') + '.pdf', { type: 'application/pdf' })
+}
 
-  const baseName = file.name.replace(/\.[^.]+$/, '')
-  return new File([doc.output('blob')], `${baseName}.pdf`, { type: 'application/pdf' })
+function FileStatusIcon({ status }: { status: FileStatus }) {
+  if (status === 'done') return <CheckCircle size={14} className="text-status-active flex-shrink-0" />
+  if (status === 'error') return <span className="text-status-danger text-xs flex-shrink-0">✕</span>
+  return <Loader2 size={14} className="text-accent-500 animate-spin flex-shrink-0" />
 }
 
 function PdfUploadDialog({ open, onClose, onRefresh }: {
@@ -84,149 +78,166 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
   onClose: () => void
   onRefresh: () => void
 }) {
-  const [uploadState, setUploadState] = useState<UploadState>('idle')
-  const [fileName, setFileName] = useState<string | null>(null)
+  const [entries, setEntries] = useState<FileEntry[]>([])
+  const [dragover, setDragover] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const reset = () => { setUploadState('idle'); setFileName(null) }
-  const handleClose = () => { reset(); onClose() }
+  const isDone = entries.length > 0 && entries.every(e => e.status === 'done' || e.status === 'error')
+  const isBusy = entries.length > 0 && !isDone
 
-  const processFile = useCallback(async (file: File) => {
-    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-    const isImage = isImageFile(file)
+  const reset = () => setEntries([])
+  const handleClose = () => { if (!isBusy) { reset(); onClose() } }
 
-    if (!isPdf && !isImage) {
-      toast.error('Nur PDF oder Bildateien erlaubt (PDF, HEIC, JPG, PNG, WEBP).')
-      return
-    }
+  const updateEntry = useCallback((id: string, patch: Partial<FileEntry>) => {
+    setEntries(prev => prev.map(e => e.id === id ? { ...e, ...patch } : e))
+  }, [])
 
-    setFileName(file.name)
+  const processFiles = useCallback(async (files: File[]) => {
+    const webhookUrl = import.meta.env.VITE_N8N_OCR_WEBHOOK_URL as string | undefined
+    const valid = files.filter(f =>
+      f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || isImageFile(f)
+    )
+    if (!valid.length) { toast.error('Keine gültigen Dateien (PDF, HEIC, JPG, PNG, WEBP).'); return }
 
-    let uploadFile = file
+    const newEntries: FileEntry[] = valid.map(f => ({
+      id: crypto.randomUUID(), name: f.name, status: 'pending',
+    }))
+    setEntries(newEntries)
 
-    if (isImage) {
-      setUploadState('converting')
-      try {
-        uploadFile = await convertImageToPdf(file)
-      } catch (err) {
-        setUploadState('idle')
-        toast.error(`Konvertierung fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
+    // Alle Dateien parallel verarbeiten
+    await Promise.allSettled(valid.map(async (file, i) => {
+      const { id } = newEntries[i]
+      let uploadFile = file
+
+      if (isImageFile(file)) {
+        updateEntry(id, { status: 'converting' })
+        try {
+          uploadFile = await convertImageToPdf(file)
+        } catch (err) {
+          updateEntry(id, { status: 'error', error: err instanceof Error ? err.message : 'Konvertierung fehlgeschlagen' })
+          return
+        }
+      }
+
+      updateEntry(id, { status: 'uploading' })
+
+      if (!webhookUrl) {
+        await new Promise(r => setTimeout(r, 800 + Math.random() * 400))
+        updateEntry(id, { status: 'done' })
         return
       }
-    }
 
-    setUploadState('processing')
+      try {
+        const formData = new FormData()
+        formData.append('file', uploadFile)
+        const res = await fetch(webhookUrl, { method: 'POST', body: formData })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        updateEntry(id, { status: 'done' })
+      } catch (err) {
+        updateEntry(id, { status: 'error', error: err instanceof Error ? err.message : 'Upload fehlgeschlagen' })
+      }
+    }))
 
-    const webhookUrl = import.meta.env.VITE_N8N_OCR_WEBHOOK_URL as string | undefined
-    if (!webhookUrl) {
-      setTimeout(() => {
-        setUploadState('done')
-        toast.success(`${uploadFile.name} wird verarbeitet (kein OCR-Webhook konfiguriert)`)
-        setTimeout(() => { reset(); onClose(); onRefresh() }, 800)
-      }, 1000)
-      return
-    }
+    onRefresh()
+  }, [updateEntry, onRefresh])
 
-    try {
-      const formData = new FormData()
-      formData.append('file', uploadFile)
-
-      const res = await fetch(webhookUrl, { method: 'POST', body: formData })
-      if (!res.ok) throw new Error(`Webhook Fehler: ${res.status}`)
-
-      setUploadState('done')
-      toast.success(`${uploadFile.name} wurde importiert und verarbeitet`)
-      setTimeout(() => { reset(); onClose(); onRefresh() }, 800)
-    } catch (err) {
-      setUploadState('idle')
-      toast.error(`Upload fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
-    }
-  }, [onClose, onRefresh])
+  // Auto-close nach 1.5s wenn alles fertig
+  useEffect(() => {
+    if (!isDone) return
+    const t = setTimeout(() => { reset(); onClose(); }, 1500)
+    return () => clearTimeout(t)
+  }, [isDone, onClose])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setUploadState('idle')
-    const file = e.dataTransfer.files[0]
-    if (file) processFile(file)
-  }, [processFile])
+    e.preventDefault(); setDragover(false)
+    processFiles(Array.from(e.dataTransfer.files))
+  }, [processFiles])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) processFile(file)
+    const files = Array.from(e.target.files ?? [])
+    if (files.length) processFiles(files)
+    e.target.value = ''
   }
-
-  const isBusy = uploadState === 'converting' || uploadState === 'processing'
 
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
       <DialogContent className="max-w-lg bg-white border border-border shadow-xl">
         <DialogHeader>
-          <DialogTitle className="text-base font-semibold text-ink">Rechnung hochladen</DialogTitle>
+          <DialogTitle className="text-base font-semibold text-ink">Rechnungen hochladen</DialogTitle>
         </DialogHeader>
 
         <div className="pt-2">
-          {uploadState === 'converting' ? (
-            <div className="flex flex-col items-center justify-center h-52 gap-3 rounded-card bg-bg-muted border border-border">
-              <Loader2 size={32} className="text-accent-500 animate-spin" />
-              <p className="text-sm font-medium text-ink">Wird zu PDF konvertiert…</p>
-              <p className="text-xs text-ink-muted font-mono truncate max-w-xs">{fileName}</p>
-            </div>
-          ) : uploadState === 'processing' ? (
-            <div className="flex flex-col items-center justify-center h-52 gap-3 rounded-card bg-bg-muted border border-border">
-              <Loader2 size={32} className="text-accent-500 animate-spin" />
-              <p className="text-sm font-medium text-ink">OCR wird verarbeitet…</p>
-              <p className="text-xs text-ink-muted font-mono truncate max-w-xs">{fileName}</p>
-            </div>
-          ) : uploadState === 'done' ? (
-            <div className="flex flex-col items-center justify-center h-52 gap-3 rounded-card bg-green-50 border border-green-200">
-              <CheckCircle size={32} className="text-status-active" />
-              <p className="text-sm text-ink font-medium">Import erfolgreich</p>
-            </div>
-          ) : (
-            <div
-              onDragOver={e => { e.preventDefault(); setUploadState('dragover') }}
-              onDragLeave={() => setUploadState('idle')}
-              onDrop={handleDrop}
-              onClick={() => inputRef.current?.click()}
-              className={cn(
-                'relative flex flex-col items-center justify-center h-52 rounded-card border-2 border-dashed cursor-pointer transition-all',
-                uploadState === 'dragover'
-                  ? 'border-accent-400 bg-accent-50'
-                  : 'border-slate-300 bg-slate-50 hover:border-accent-400 hover:bg-accent-50'
-              )}
-            >
-              <input
-                ref={inputRef}
-                type="file"
-                accept={ACCEPTED_TYPES}
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <div className={cn(
-                'w-12 h-12 rounded-xl flex items-center justify-center mb-3 transition-colors',
-                uploadState === 'dragover' ? 'bg-accent-100' : 'bg-white border border-slate-200'
-              )}>
-                <Upload size={22} className={cn('transition-colors', uploadState === 'dragover' ? 'text-accent-500' : 'text-ink-muted')} />
+          <input ref={inputRef} type="file" accept={ACCEPTED_TYPES} multiple className="hidden" onChange={handleFileChange} />
+
+          {/* Dateiliste */}
+          {entries.length > 0 && (
+            <div className="rounded-card border border-border overflow-hidden mb-3">
+              <div className="max-h-48 overflow-y-auto divide-y divide-border/50">
+                {entries.map(entry => (
+                  <div key={entry.id} className="flex items-center gap-3 px-3.5 py-2.5">
+                    <FileStatusIcon status={entry.status} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-ink truncate">{entry.name}</p>
+                      {entry.error
+                        ? <p className="text-xs text-status-danger truncate">{entry.error}</p>
+                        : <p className="text-xs text-ink-muted">
+                            {entry.status === 'pending' && 'Wartend…'}
+                            {entry.status === 'converting' && 'Konvertierung…'}
+                            {entry.status === 'uploading' && 'Wird gesendet…'}
+                            {entry.status === 'done' && 'Fertig'}
+                          </p>
+                      }
+                    </div>
+                  </div>
+                ))}
               </div>
-              <p className="text-sm font-medium text-ink mb-1">Datei hier ablegen</p>
-              <p className="text-xs text-ink-muted">
-                oder{' '}
-                <span className="text-accent-500 font-semibold underline underline-offset-2">Datei auswählen</span>
-              </p>
+              {isDone && (
+                <div className="px-3.5 py-2 bg-green-50 border-t border-green-200 flex items-center gap-2">
+                  <CheckCircle size={13} className="text-status-active" />
+                  <span className="text-xs font-medium text-status-active">
+                    {entries.filter(e => e.status === 'done').length} von {entries.length} erfolgreich
+                  </span>
+                </div>
+              )}
             </div>
           )}
+
+          {/* Drop-Zone — immer sichtbar */}
+          <div
+            onDragOver={e => { e.preventDefault(); setDragover(true) }}
+            onDragLeave={() => setDragover(false)}
+            onDrop={handleDrop}
+            onClick={() => inputRef.current?.click()}
+            className={cn(
+              'flex items-center justify-center gap-3 rounded-card border-2 border-dashed cursor-pointer transition-all',
+              entries.length > 0 ? 'h-14' : 'h-52 flex-col',
+              dragover ? 'border-accent-400 bg-accent-50' : 'border-slate-300 bg-slate-50 hover:border-accent-400 hover:bg-accent-50'
+            )}
+          >
+            <Upload size={entries.length > 0 ? 16 : 22} className={cn('transition-colors flex-shrink-0', dragover ? 'text-accent-500' : 'text-ink-muted')} />
+            {entries.length === 0 ? (
+              <div className="text-center">
+                <p className="text-sm font-medium text-ink mb-1">Dateien hier ablegen</p>
+                <p className="text-xs text-ink-muted">oder <span className="text-accent-500 font-semibold underline underline-offset-2">Dateien auswählen</span></p>
+              </div>
+            ) : (
+              <p className="text-xs text-ink-muted">
+                <span className="text-accent-500 font-semibold">Weitere Dateien hinzufügen</span>
+              </p>
+            )}
+          </div>
 
           <div className="flex justify-between items-center mt-4 pt-3 border-t border-border">
             <div className="flex items-center gap-1.5 text-xs text-ink-muted">
               <FileText size={12} />
-              <span>PDF, HEIC, JPG, PNG, WEBP · max. 25 MB</span>
+              <span>PDF, HEIC, JPG, PNG, WEBP</span>
             </div>
             <button
               onClick={handleClose}
               disabled={isBusy}
               className="px-4 py-1.5 rounded-card-sm text-sm font-medium text-ink-muted border border-border hover:bg-bg-muted transition-colors disabled:opacity-40"
             >
-              Abbrechen
+              {isDone ? 'Schließen' : 'Abbrechen'}
             </button>
           </div>
         </div>
@@ -444,12 +455,11 @@ function ActionMenu({
   )
 }
 
-const MITARBEITER = ['Granit Spahijaj', 'Ismail Ilter', 'Luan Posch'] as const
-
 function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (id: string) => void }) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const { mutate: updateRechnung } = useUpdateRechnung()
   const { mutate: triggerExport } = useTriggerExport()
+  const { data: mitarbeiter = [] } = useMitarbeiter()
 
   const handleBezahlt = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -519,8 +529,8 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                 className="w-full h-8 pl-3 pr-7 text-xs rounded-card-sm border border-border/60 bg-white text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none"
               >
                 <option value="">— Mitarbeiter zuweisen</option>
-                {MITARBEITER.map(m => (
-                  <option key={m} value={m}>{m}</option>
+                {mitarbeiter.map(m => (
+                  <option key={m.id} value={m.name}>{m.name}</option>
                 ))}
               </select>
 
@@ -605,8 +615,8 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                     className="h-7 pl-2.5 pr-7 text-xs rounded-card-sm border border-border/60 bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none cursor-pointer min-w-[130px]"
                   >
                     <option value="">— Zuweisen</option>
-                    {MITARBEITER.map(m => (
-                      <option key={m} value={m}>{m}</option>
+                    {mitarbeiter.map(m => (
+                      <option key={m.id} value={m.name}>{m.name}</option>
                     ))}
                   </select>
                 </td>
