@@ -355,6 +355,8 @@ function ActionMenu({
   )
 }
 
+const MITARBEITER = ['Granit Spahijaj', 'Ismail Ilter', 'Luan Posch'] as const
+
 function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (id: string) => void }) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const { mutate: updateRechnung } = useUpdateRechnung()
@@ -373,6 +375,14 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
     e.stopPropagation()
     setOpenMenu(null)
     triggerExport({ rechnungIds: [id], ziel })
+  }
+
+  const handleMitarbeiter = (e: React.ChangeEvent<HTMLSelectElement>, id: string) => {
+    const value = e.target.value || null
+    updateRechnung(
+      { id, updates: { mitarbeiter: value } },
+      { onError: (err: Error) => toast.error(`Zuweisung fehlgeschlagen: ${err.message}`) }
+    )
   }
 
   return (
@@ -424,7 +434,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
         <table className="w-full">
           <thead>
             <tr>
-              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', 'Aktionen'].map(h => (
+              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', 'Mitarbeiter', 'Aktionen'].map(h => (
                 <th key={h} className={cn(
                   'label-caps pb-3 border-b border-border/50 text-left font-normal',
                   h === 'Betrag' && 'text-right',
@@ -461,6 +471,18 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                     variant={STATUS_VARIANT[r.status]}
                     label={STATUS_LABEL[r.status]}
                   />
+                </td>
+                <td onClick={e => e.stopPropagation()} className="pr-4">
+                  <select
+                    value={r.mitarbeiter ?? ''}
+                    onChange={e => handleMitarbeiter(e, r.id)}
+                    className="h-7 pl-2.5 pr-7 text-xs rounded-card-sm border border-border/60 bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none cursor-pointer min-w-[130px]"
+                  >
+                    <option value="">— Zuweisen</option>
+                    {MITARBEITER.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
                 </td>
                 <td onClick={e => e.stopPropagation()}>
                   <div className="relative inline-block">

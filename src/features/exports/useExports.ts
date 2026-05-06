@@ -3,11 +3,30 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import type { ExportLog, ExportZiel } from '@/types/database'
 
-const SEVDESK_WEBHOOK_URL = import.meta.env.VITE_N8N_SEVDESK_WEBHOOK_URL as string | undefined
 const DATEV_WEBHOOK_URL = import.meta.env.VITE_N8N_DATEV_WEBHOOK_URL as string | undefined
 
-function getWebhookUrl(ziel: ExportZiel): string | undefined {
-  return ziel === 'lexoffice' ? SEVDESK_WEBHOOK_URL : DATEV_WEBHOOK_URL
+async function triggerSevdesk(rechnungIds: string[]): Promise<void> {
+  const { data, error } = await supabase.functions.invoke('sevdesk-export', {
+    body: { rechnung_ids: rechnungIds },
+  })
+  if (error) throw new Error(error.message)
+  const failed = (data?.results ?? []).filter((r: any) => r.error)
+  if (failed.length > 0) {
+    throw new Error(failed.map((r: any) => `${r.id}: ${r.error}`).join(', '))
+  }
+}
+
+async function triggerDatev(rechnungIds: string[]): Promise<void> {
+  if (!DATEV_WEBHOOK_URL) {
+    toast.info('Kein DATEV-Webhook konfiguriert.')
+    return
+  }
+  const res = await fetch(DATEV_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rechnung_ids: rechnungIds, ziel: 'datev' }),
+  })
+  if (!res.ok) throw new Error(`Webhook-Fehler: ${res.status}`)
 }
 
 export function useExportLog() {
@@ -28,20 +47,15 @@ export function useTriggerExport() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ rechnungIds, ziel }: { rechnungIds: string[]; ziel: ExportZiel }) => {
-      const url = getWebhookUrl(ziel)
-      if (!url) {
-        toast.info(`Kein ${ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'}-Webhook konfiguriert.`)
-        return
+      if (ziel === 'lexoffice') {
+        await triggerSevdesk(rechnungIds)
+      } else {
+        await triggerDatev(rechnungIds)
       }
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rechnung_ids: rechnungIds, ziel }),
-      })
-      if (!res.ok) throw new Error(`Webhook-Fehler: ${res.status}`)
     },
     onSuccess: (_data, variables) => {
-      toast.success(`${variables.ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'}-Export gestartet`)
+      const label = variables.ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'
+      toast.success(`${label}-Export erfolgreich`)
       void qc.invalidateQueries({ queryKey: ['export_log'] })
       void qc.invalidateQueries({ queryKey: ['rechnungen'] })
     },

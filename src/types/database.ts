@@ -42,6 +42,7 @@ export interface Rechnung {
   skonto_datum: string | null
   skonto_prozent: number | null
   status: RechnungStatus
+  mitarbeiter: string | null
   created_at: string
   lieferant?: Lieferant | null
 }
