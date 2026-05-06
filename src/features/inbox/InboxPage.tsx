@@ -1,7 +1,7 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO } from 'date-fns'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2 } from 'lucide-react'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, Send, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageTitle } from '@/components/shared/PageTitle'
 import { StatCard } from '@/components/shared/StatCard'
@@ -13,14 +13,16 @@ import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
+import { useTriggerExport } from '@/features/exports/useExports'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
-import type { Rechnung, RechnungStatus } from '@/types/database'
+import type { Rechnung, RechnungStatus, ExportZiel } from '@/types/database'
 
 type UploadState = 'idle' | 'dragover' | 'processing' | 'done'
 
-function PdfUploadDialog({ open, onClose }: {
+function PdfUploadDialog({ open, onClose, onRefresh }: {
   open: boolean
   onClose: () => void
+  onRefresh: () => void
 }) {
   const [uploadState, setUploadState] = useState<UploadState>('idle')
   const [fileName, setFileName] = useState<string | null>(null)
@@ -37,11 +39,10 @@ function PdfUploadDialog({ open, onClose }: {
 
     const webhookUrl = import.meta.env.VITE_N8N_OCR_WEBHOOK_URL as string | undefined
     if (!webhookUrl) {
-      // No webhook configured — show done after short delay
       setTimeout(() => {
         setUploadState('done')
         toast.success(`${file.name} wird verarbeitet (kein OCR-Webhook konfiguriert)`)
-        setTimeout(() => { reset(); onClose() }, 800)
+        setTimeout(() => { reset(); onClose(); onRefresh() }, 800)
       }, 1000)
       return
     }
@@ -55,12 +56,12 @@ function PdfUploadDialog({ open, onClose }: {
 
       setUploadState('done')
       toast.success(`${file.name} wurde importiert und verarbeitet`)
-      setTimeout(() => { reset(); onClose() }, 800)
+      setTimeout(() => { reset(); onClose(); onRefresh() }, 800)
     } catch (err) {
       setUploadState('idle')
       toast.error(`Upload fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
     }
-  }, [onClose])
+  }, [onClose, onRefresh])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -224,6 +225,7 @@ export function InboxPage() {
       <PdfUploadDialog
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
+        onRefresh={() => void refetch()}
       />
 
       {/* Table section */}
@@ -294,15 +296,83 @@ function getBrutto(r: Rechnung): number {
   return netto * (1 + r.ust_satz / 100)
 }
 
+function ActionMenu({
+  rechnungId,
+  status,
+  onClose,
+  onBezahlt,
+  onExport,
+}: {
+  rechnungId: string
+  status: RechnungStatus
+  onClose: () => void
+  onBezahlt: (e: React.MouseEvent, id: string) => void
+  onExport: (e: React.MouseEvent, id: string, ziel: ExportZiel) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      ref={ref}
+      className="absolute right-0 top-full mt-1 z-50 w-52 rounded-card border border-border bg-white shadow-lg py-1"
+      onClick={e => e.stopPropagation()}
+    >
+      <button
+        onClick={e => onExport(e, rechnungId, 'datev')}
+        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-ink hover:bg-bg-muted transition-colors text-left"
+      >
+        <Send size={13} className="text-ink-muted flex-shrink-0" />
+        Zu DATEV schicken
+      </button>
+      <button
+        onClick={e => onExport(e, rechnungId, 'lexoffice')}
+        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-ink hover:bg-bg-muted transition-colors text-left"
+      >
+        <Building2 size={13} className="text-ink-muted flex-shrink-0" />
+        Zu sevDesk schicken
+      </button>
+      {status !== 'bezahlt' && (
+        <>
+          <div className="my-1 border-t border-border/50" />
+          <button
+            onClick={e => onBezahlt(e, rechnungId)}
+            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-status-active hover:bg-bg-muted transition-colors text-left"
+          >
+            <CheckCircle size={13} className="flex-shrink-0" />
+            Als bezahlt markieren
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (id: string) => void }) {
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
   const { mutate: updateRechnung } = useUpdateRechnung()
+  const { mutate: triggerExport } = useTriggerExport()
 
   const handleBezahlt = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
+    setOpenMenu(null)
     updateRechnung(
       { id, updates: { status: 'bezahlt' } },
       { onSuccess: () => toast.success('Rechnung als bezahlt markiert') }
     )
+  }
+
+  const handleExport = (e: React.MouseEvent, id: string, ziel: ExportZiel) => {
+    e.stopPropagation()
+    setOpenMenu(null)
+    triggerExport({ rechnungIds: [id], ziel })
   }
 
   return (
@@ -335,7 +405,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                   )}
                 </div>
               </div>
-              {r.status === 'eingegangen' && (
+              {r.status !== 'bezahlt' && (
                 <button
                   onClick={(e) => handleBezahlt(e, r.id)}
                   className="inline-flex items-center gap-1 px-3 h-7 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors flex-shrink-0"
@@ -354,7 +424,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
         <table className="w-full">
           <thead>
             <tr>
-              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', ''].map(h => (
+              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', 'Aktionen'].map(h => (
                 <th key={h} className={cn(
                   'label-caps pb-3 border-b border-border/50 text-left font-normal',
                   h === 'Betrag' && 'text-right',
@@ -392,16 +462,25 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                     label={STATUS_LABEL[r.status]}
                   />
                 </td>
-                <td className="text-right">
-                  {r.status === 'eingegangen' && (
+                <td onClick={e => e.stopPropagation()}>
+                  <div className="relative inline-block">
                     <button
-                      onClick={(e) => handleBezahlt(e, r.id)}
-                      className="inline-flex items-center gap-1.5 px-3 h-7 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors"
+                      onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === r.id ? null : r.id) }}
+                      className="inline-flex items-center gap-1.5 px-3 h-7 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
                     >
-                      <CheckCircle size={12} />
-                      Bezahlt
+                      Aktionen
+                      <ChevronDown size={12} className={cn('transition-transform', openMenu === r.id && 'rotate-180')} />
                     </button>
-                  )}
+                    {openMenu === r.id && (
+                      <ActionMenu
+                        rechnungId={r.id}
+                        status={r.status}
+                        onClose={() => setOpenMenu(null)}
+                        onBezahlt={handleBezahlt}
+                        onExport={handleExport}
+                      />
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
