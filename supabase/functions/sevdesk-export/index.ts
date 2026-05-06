@@ -31,6 +31,21 @@ async function sevPost(path: string, body: unknown) {
   return res.json()
 }
 
+// sevDesk Factory-Endpunkte (saveVoucher) erwarten URL-encoded Form-Daten
+async function sevPostForm(path: string, fields: Record<string, string>) {
+  const body = new URLSearchParams(fields).toString()
+  const res = await fetch(`${SEVDESK_BASE}${path}`, {
+    method: 'POST',
+    headers: { Authorization: SEVDESK_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`sevDesk POST ${path} → ${res.status}: ${text}`)
+  }
+  return res.json()
+}
+
 async function findOrCreateContact(name: string): Promise<string> {
   const found = await sevGet(`/Contact?name=${encodeURIComponent(name)}&limit=1`)
   if (found.objects?.length > 0) return found.objects[0].id
@@ -109,34 +124,35 @@ Deno.serve(async (req) => {
         const voucherDate = r.created_at.slice(0, 10) + 'T00:00:00+01:00'
         const paymentDeadline = r.faelligkeit ? r.faelligkeit + 'T00:00:00+01:00' : null
 
-        const saved = await sevPost('/Voucher/Factory/saveVoucher', {
-          voucher: {
-            objectName: 'Voucher',
-            voucherDate,
-            supplier: supplierId ? { id: supplierId, objectName: 'Contact' } : null,
-            supplierName: supplierId ? null : supplierName,
-            description: r.rechnungsnr,
-            status: '100',
-            currency: 'EUR',
-            taxType: 'default',
-            creditDebit: 'C',
-            voucherType: 'VOU',
-            paymentDeadline,
-            sevClient: { id: SEV_CLIENT_ID, objectName: 'SevClient' },
-          },
-          voucherPosSave: [
-            {
-              objectName: 'VoucherPos',
-              accountingType: { id: '2', objectName: 'AccountingType' },
-              taxRate: String(taxRate),
-              sum: String(netAmount),
-              net: '1',
-              isAsset: '0',
-              sevClient: { id: SEV_CLIENT_ID, objectName: 'SevClient' },
-            },
-          ],
-          voucherPosDelete: null,
-          filename: null,
+        const voucher: Record<string, unknown> = {
+          objectName: 'Voucher',
+          voucherDate,
+          description: r.rechnungsnr,
+          status: '100',
+          currency: 'EUR',
+          taxType: 'default',
+          creditDebit: 'C',
+          voucherType: 'VOU',
+          sevClient: { id: SEV_CLIENT_ID, objectName: 'SevClient' },
+        }
+        if (supplierId) voucher.supplier = { id: supplierId, objectName: 'Contact' }
+        else voucher.supplierName = supplierName
+        if (paymentDeadline) voucher.paymentDeadline = paymentDeadline
+
+        const voucherPos = {
+          objectName: 'VoucherPos',
+          accountingType: { id: '2', objectName: 'AccountingType' },
+          taxRate: String(taxRate),
+          sum: String(netAmount),
+          net: '1',
+          isAsset: '0',
+          sevClient: { id: SEV_CLIENT_ID, objectName: 'SevClient' },
+        }
+
+        const saved = await sevPostForm('/Voucher/Factory/saveVoucher', {
+          voucher: JSON.stringify(voucher),
+          voucherPosSave: JSON.stringify([voucherPos]),
+          voucherPosDelete: 'null',
         })
 
         const sevdeskId = saved.objects?.voucher?.id
