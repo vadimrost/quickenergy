@@ -32,7 +32,7 @@ export const MOCK_RECHNUNGEN: Rechnung[] = [
     status: 'eingegangen', created_at: past(2), lieferant_id: 'l1',
     pdf_url: 'demo',
     ocr_json: ocr('RE-2026-0142', 4250, 19, d(27)),
-    lieferant: MOCK_LIEFERANTEN[0],
+    mitarbeiter: null, lieferant: MOCK_LIEFERANTEN[0],
   },
   {
     id: 'r2', rechnungsnr: 'RE-8821', betrag: 12800.00, ust_satz: 19,
@@ -40,7 +40,7 @@ export const MOCK_RECHNUNGEN: Rechnung[] = [
     status: 'eingegangen', created_at: past(1), lieferant_id: 'l2',
     pdf_url: 'demo',
     ocr_json: ocr('RE-8821', 12800, 19, d(17)),
-    lieferant: MOCK_LIEFERANTEN[1],
+    mitarbeiter: null, lieferant: MOCK_LIEFERANTEN[1],
   },
   {
     id: 'r3', rechnungsnr: 'INV-2026-033', betrag: 1890.00, ust_satz: 19,
@@ -48,7 +48,7 @@ export const MOCK_RECHNUNGEN: Rechnung[] = [
     status: 'gepr\u00FCft', created_at: past(3), lieferant_id: 'l3',
     pdf_url: 'demo',
     ocr_json: ocr('INV-2026-033', 1890, 19, d(12)),
-    lieferant: MOCK_LIEFERANTEN[2],
+    mitarbeiter: null, lieferant: MOCK_LIEFERANTEN[2],
   },
   {
     id: 'r4', rechnungsnr: 'RG-2026-44', betrag: 580.00, ust_satz: 7,
@@ -56,7 +56,7 @@ export const MOCK_RECHNUNGEN: Rechnung[] = [
     status: 'gepr\u00FCft', created_at: past(4), lieferant_id: 'l4',
     pdf_url: 'demo',
     ocr_json: ocr('RG-2026-44', 580, 7, d(7)),
-    lieferant: MOCK_LIEFERANTEN[3],
+    mitarbeiter: null, lieferant: MOCK_LIEFERANTEN[3],
   },
   {
     id: 'r5', rechnungsnr: 'RE-2026-0138', betrag: 3100.00, ust_satz: 19,
@@ -64,7 +64,7 @@ export const MOCK_RECHNUNGEN: Rechnung[] = [
     status: 'gebucht', created_at: past(10), lieferant_id: 'l1',
     pdf_url: 'demo',
     ocr_json: ocr('RE-2026-0138', 3100, 19, past(3)),
-    lieferant: MOCK_LIEFERANTEN[0],
+    mitarbeiter: null, lieferant: MOCK_LIEFERANTEN[0],
   },
   {
     id: 'r6', rechnungsnr: 'EN-2026-1234', betrag: 2340.00, ust_satz: 19,
@@ -72,7 +72,7 @@ export const MOCK_RECHNUNGEN: Rechnung[] = [
     status: 'gebucht', created_at: past(20), lieferant_id: 'l5',
     pdf_url: 'demo',
     ocr_json: ocr('EN-2026-1234', 2340, 19, past(18)),
-    lieferant: MOCK_LIEFERANTEN[4],
+    mitarbeiter: null, lieferant: MOCK_LIEFERANTEN[4],
   },
   {
     id: 'r7', rechnungsnr: 'RE-8799', betrag: 15600.00, ust_satz: 19,
@@ -80,7 +80,7 @@ export const MOCK_RECHNUNGEN: Rechnung[] = [
     status: 'bezahlt', created_at: past(25), lieferant_id: 'l2',
     pdf_url: 'demo',
     ocr_json: ocr('RE-8799', 15600, 19, past(3)),
-    lieferant: MOCK_LIEFERANTEN[1],
+    mitarbeiter: null, lieferant: MOCK_LIEFERANTEN[1],
   },
   {
     id: 'r8', rechnungsnr: 'INV-2026-029', betrag: 2450.00, ust_satz: 19,
@@ -88,7 +88,7 @@ export const MOCK_RECHNUNGEN: Rechnung[] = [
     status: 'bezahlt', created_at: past(30), lieferant_id: 'l3',
     pdf_url: 'demo',
     ocr_json: ocr('INV-2026-029', 2450, 19, past(17)),
-    lieferant: MOCK_LIEFERANTEN[2],
+    mitarbeiter: null, lieferant: MOCK_LIEFERANTEN[2],
   },
 ]
 
