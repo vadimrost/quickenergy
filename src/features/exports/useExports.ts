@@ -3,7 +3,12 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import type { ExportLog, ExportZiel } from '@/types/database'
 
-const WEBHOOK_URL = import.meta.env.VITE_N8N_WEBHOOK_URL as string | undefined
+const SEVDESK_WEBHOOK_URL = import.meta.env.VITE_N8N_SEVDESK_WEBHOOK_URL as string | undefined
+const DATEV_WEBHOOK_URL = import.meta.env.VITE_N8N_DATEV_WEBHOOK_URL as string | undefined
+
+function getWebhookUrl(ziel: ExportZiel): string | undefined {
+  return ziel === 'lexoffice' ? SEVDESK_WEBHOOK_URL : DATEV_WEBHOOK_URL
+}
 
 export function useExportLog() {
   return useQuery<ExportLog[]>({
@@ -23,11 +28,12 @@ export function useTriggerExport() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ rechnungIds, ziel }: { rechnungIds: string[]; ziel: ExportZiel }) => {
-      if (!WEBHOOK_URL) {
-        toast.info('Kein Webhook konfiguriert.')
+      const url = getWebhookUrl(ziel)
+      if (!url) {
+        toast.info(`Kein ${ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'}-Webhook konfiguriert.`)
         return
       }
-      const res = await fetch(WEBHOOK_URL, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rechnung_ids: rechnungIds, ziel }),
@@ -37,6 +43,7 @@ export function useTriggerExport() {
     onSuccess: (_data, variables) => {
       toast.success(`${variables.ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'}-Export gestartet`)
       void qc.invalidateQueries({ queryKey: ['export_log'] })
+      void qc.invalidateQueries({ queryKey: ['rechnungen'] })
     },
     onError: (err: Error) => {
       toast.error(`Export fehlgeschlagen: ${err.message}`)

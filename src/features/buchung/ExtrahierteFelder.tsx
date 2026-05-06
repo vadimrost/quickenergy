@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { CreditCard, X, AlertTriangle } from 'lucide-react'
+import { CreditCard, X, AlertTriangle, ArrowUpFromLine } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
-import type { Rechnung, RechnungStatus } from '@/types/database'
-import { formatDate } from '@/lib/utils'
+import { useTriggerExport } from '@/features/exports/useExports'
+import type { Rechnung, RechnungStatus, ExportZiel } from '@/types/database'
+import { formatDate, cn } from '@/lib/utils'
 
 interface ExtrahierteFelder_Props {
   rechnung: Rechnung
@@ -27,7 +28,9 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const navigate = useNavigate()
   const { mutate: updateRechnung, isPending } = useUpdateRechnung()
   const { mutate: deleteRechnung, isPending: isDeleting } = useDeleteRechnung()
+  const { mutate: triggerExport, isPending: isExporting } = useTriggerExport()
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmingZiel, setConfirmingZiel] = useState<ExportZiel | null>(null)
 
   const ocrNetto = (rechnung.ocr_json as any)?.invoice_net_amount
   const nettoWert = ocrNetto ?? rechnung.betrag
@@ -72,6 +75,23 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
       },
     })
     toast.success('Rechnung gespeichert')
+  }
+
+  const handleExport = (ziel: ExportZiel) => {
+    if (confirmingZiel !== ziel) {
+      setConfirmingZiel(ziel)
+      setTimeout(() => setConfirmingZiel(null), 3000)
+      return
+    }
+    setConfirmingZiel(null)
+    triggerExport(
+      { rechnungIds: [rechnung.id], ziel },
+      {
+        onSuccess: () => {
+          updateRechnung({ id: rechnung.id, updates: { status: 'gebucht' } })
+        },
+      }
+    )
   }
 
   const handleStatusAdvance = () => {
@@ -222,6 +242,35 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
               {formatDate(rechnung.created_at)}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Export */}
+      <div className="card-base p-5">
+        <p className="label-caps mb-3">Export</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(['lexoffice', 'datev'] as ExportZiel[]).map(ziel => {
+            const label = ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'
+            const isConfirming = confirmingZiel === ziel
+            return (
+              <button
+                key={ziel}
+                onClick={() => handleExport(ziel)}
+                disabled={isExporting}
+                className={cn(
+                  'flex items-center justify-center gap-1.5 py-2.5 rounded-card-sm text-sm font-medium transition-all disabled:opacity-40',
+                  isConfirming
+                    ? 'bg-status-warning text-white'
+                    : ziel === 'lexoffice'
+                    ? 'bg-accent-500 hover:bg-accent-600 text-white'
+                    : 'bg-ink hover:bg-ink/80 text-white'
+                )}
+              >
+                <ArrowUpFromLine size={13} />
+                {isConfirming ? 'Bestätigen?' : `→ ${label}`}
+              </button>
+            )
+          })}
         </div>
       </div>
 

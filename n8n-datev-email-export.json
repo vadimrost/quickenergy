@@ -1,0 +1,196 @@
+{
+  "name": "QuickEnergy → DATEV E-Mail Export",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "datev-email-export",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "quickenergy-datev-email-export"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nconst ids = body.rechnung_ids ?? [];\n\nif (!Array.isArray(ids) || ids.length === 0) {\n  throw new Error('Keine Rechnungs-IDs übergeben');\n}\n\nreturn ids.map(id => ({ json: { id } }));"
+      },
+      "id": "extract-ids",
+      "name": "IDs extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rechnungen?id=eq.{{ $json.id }}&select=*,lieferant:lieferanten(name)",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "headers": {
+            "values": [
+              { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+              { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
+            ]
+          }
+        }
+      },
+      "id": "fetch-rechnung",
+      "name": "Rechnung laden (Supabase)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.first().json;\nconst r = Array.isArray(rows) ? rows[0] : rows;\n\nif (!r) throw new Error('Rechnung nicht gefunden');\nif (!r.pdf_url) throw new Error(`Keine PDF-URL für Rechnung ${r.rechnungsnr} – bitte PDF manuell hochladen`);\n\nconst lieferantName = r.lieferant?.name ?? r.ocr_json?.supplier_name ?? 'Unbekannter Lieferant';\n\nconst betragFormatted = new Intl.NumberFormat('de-DE', {\n  style: 'currency',\n  currency: 'EUR'\n}).format(r.betrag ?? 0);\n\n// Dateiname: Sonderzeichen entfernen damit er als E-Mail-Anhang gültig ist\nconst safeNr = (r.rechnungsnr ?? 'Rechnung').replace(/[\\/\\\\:*?\"<>|]/g, '_');\nconst pdfFilename = `${safeNr}_${lieferantName.replace(/[^a-zA-Z0-9äöüÄÖÜß _-]/g, '').trim()}.pdf`;\n\nreturn [{\n  json: {\n    rechnung_id: r.id,\n    rechnungsnr: r.rechnungsnr,\n    lieferant_name: lieferantName,\n    betrag_formatted: betragFormatted,\n    ust_satz: r.ust_satz ?? 19,\n    faelligkeit: r.faelligkeit ?? null,\n    pdf_url: r.pdf_url,\n    pdf_filename: pdfFilename\n  }\n}];"
+      },
+      "id": "prepare-data",
+      "name": "E-Mail-Daten vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.pdf_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "download-pdf",
+      "name": "PDF herunterladen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "toRecipients": "={{ $env.DATEV_BELEGBOX_EMAIL }}",
+        "subject": "=Eingangsrechnung {{ $('E-Mail-Daten vorbereiten').first().json.rechnungsnr }} – {{ $('E-Mail-Daten vorbereiten').first().json.lieferant_name }}",
+        "bodyContent": "=<p>Sehr geehrte Damen und Herren,</p><p>im Anhang erhalten Sie die Eingangsrechnung für die DATEV-Belegbox:</p><table style=\"border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px\">\n  <tr><td style=\"padding:4px 12px 4px 0;color:#666\">Rechnungsnr.</td><td style=\"padding:4px 0\"><strong>{{ $('E-Mail-Daten vorbereiten').first().json.rechnungsnr }}</strong></td></tr>\n  <tr><td style=\"padding:4px 12px 4px 0;color:#666\">Lieferant</td><td style=\"padding:4px 0\">{{ $('E-Mail-Daten vorbereiten').first().json.lieferant_name }}</td></tr>\n  <tr><td style=\"padding:4px 12px 4px 0;color:#666\">Betrag (Netto)</td><td style=\"padding:4px 0\">{{ $('E-Mail-Daten vorbereiten').first().json.betrag_formatted }}</td></tr>\n  <tr><td style=\"padding:4px 12px 4px 0;color:#666\">MwSt-Satz</td><td style=\"padding:4px 0\">{{ $('E-Mail-Daten vorbereiten').first().json.ust_satz }} %</td></tr>\n  {{ $('E-Mail-Daten vorbereiten').first().json.faelligkeit ? '<tr><td style=\"padding:4px 12px 4px 0;color:#666\">Fällig am</td><td style=\"padding:4px 0\">' + $('E-Mail-Daten vorbereiten').first().json.faelligkeit + '</td></tr>' : '' }}\n</table><p style=\"margin-top:24px;color:#666;font-size:12px\">Diese E-Mail wurde automatisch von QuickEnergy erstellt.</p>",
+        "bodyContentType": "html",
+        "attachmentsUi": {
+          "attachmentsBinary": [
+            {
+              "property": "data"
+            }
+          ]
+        }
+      },
+      "id": "send-email",
+      "name": "E-Mail an DATEV-Belegbox senden",
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "YOUR_OUTLOOK_CREDENTIAL_ID",
+          "name": "Microsoft Outlook"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const meta = $('E-Mail-Daten vorbereiten').first().json;\n\n// Outlook-Send gibt bei Erfolg keinen Body zurück (HTTP 202)\n// Wenn wir hier ankommen, hat der Versand geklappt\nreturn [{\n  json: {\n    rechnung_id: meta.rechnung_id,\n    rechnungsnr: meta.rechnungsnr,\n    success: true\n  }\n}];"
+      },
+      "id": "check-result",
+      "name": "Ergebnis prüfen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/export_log",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"rechnung_ids_json\": [\"{{ $json.rechnung_id }}\"],\n  \"ziel\": \"datev\",\n  \"exported_at\": \"{{ new Date().toISOString() }}\",\n  \"success\": {{ $json.success }}\n}",
+        "options": {
+          "headers": {
+            "values": [
+              { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+              { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+              { "name": "Prefer", "value": "return=minimal" }
+            ]
+          }
+        }
+      },
+      "id": "log-export",
+      "name": "Export loggen (Supabase)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map(i => i.json);\nconst successful = results.filter(r => r.success).length;\nconst failed = results.filter(r => !r.success).length;\n\nreturn [{\n  json: {\n    status: 'ok',\n    exported: successful,\n    failed,\n    results\n  }\n}];"
+      },
+      "id": "summarize",
+      "name": "Zusammenfassen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Antwort senden",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "IDs extrahieren", "type": "main", "index": 0 }]]
+    },
+    "IDs extrahieren": {
+      "main": [[{ "node": "Rechnung laden (Supabase)", "type": "main", "index": 0 }]]
+    },
+    "Rechnung laden (Supabase)": {
+      "main": [[{ "node": "E-Mail-Daten vorbereiten", "type": "main", "index": 0 }]]
+    },
+    "E-Mail-Daten vorbereiten": {
+      "main": [[{ "node": "PDF herunterladen", "type": "main", "index": 0 }]]
+    },
+    "PDF herunterladen": {
+      "main": [[{ "node": "E-Mail an DATEV-Belegbox senden", "type": "main", "index": 0 }]]
+    },
+    "E-Mail an DATEV-Belegbox senden": {
+      "main": [[{ "node": "Ergebnis prüfen", "type": "main", "index": 0 }]]
+    },
+    "Ergebnis prüfen": {
+      "main": [[{ "node": "Export loggen (Supabase)", "type": "main", "index": 0 }]]
+    },
+    "Export loggen (Supabase)": {
+      "main": [[{ "node": "Zusammenfassen", "type": "main", "index": 0 }]]
+    },
+    "Zusammenfassen": {
+      "main": [[{ "node": "Antwort senden", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "quickenergy" }
+}

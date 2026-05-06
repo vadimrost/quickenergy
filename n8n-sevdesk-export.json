@@ -12,7 +12,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "webhookId": "quickenergy-sevdesk-export"
     },
     {
@@ -23,7 +26,10 @@
       "name": "IDs extrahieren",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [460, 300]
+      "position": [
+        460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -34,8 +40,14 @@
         "options": {
           "headers": {
             "values": [
-              { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
-              { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              }
             ]
           }
         }
@@ -44,7 +56,10 @@
       "name": "Rechnung laden (Supabase)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [680, 300]
+      "position": [
+        680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -54,7 +69,10 @@
       "name": "Zu sevDesk-Format umwandeln",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 300]
+      "position": [
+        900,
+        300
+      ]
     },
     {
       "parameters": {
@@ -68,8 +86,14 @@
         "options": {
           "headers": {
             "values": [
-              { "name": "Authorization", "value": "={{ $env.SEVDESK_API_TOKEN }}" },
-              { "name": "Content-Type", "value": "application/json" }
+              {
+                "name": "Authorization",
+                "value": "={{ $env.SEVDESK_API_TOKEN }}"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
             ]
           }
         }
@@ -78,7 +102,10 @@
       "name": "Voucher in sevDesk erstellen",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1120, 300]
+      "position": [
+        1120,
+        300
+      ]
     },
     {
       "parameters": {
@@ -88,7 +115,10 @@
       "name": "Ergebnis prüfen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1340, 300]
+      "position": [
+        1340,
+        300
+      ]
     },
     {
       "parameters": {
@@ -102,9 +132,18 @@
         "options": {
           "headers": {
             "values": [
-              { "name": "apikey", "value": "={{ $env.SUPABASE_ANON_KEY }}" },
-              { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
-              { "name": "Prefer", "value": "return=minimal" }
+              {
+                "name": "apikey",
+                "value": "={{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Authorization",
+                "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
+              },
+              {
+                "name": "Prefer",
+                "value": "return=minimal"
+              }
             ]
           }
         }
@@ -113,7 +152,10 @@
       "name": "Export loggen (Supabase)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1560, 300]
+      "position": [
+        1560,
+        300
+      ]
     },
     {
       "parameters": {
@@ -123,7 +165,10 @@
       "name": "Zusammenfassen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1780, 300]
+      "position": [
+        1780,
+        300
+      ]
     },
     {
       "parameters": {
@@ -135,33 +180,100 @@
       "name": "Antwort senden",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [2000, 300]
+      "position": [
+        2000,
+        300
+      ]
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [[{ "node": "IDs extrahieren", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "IDs extrahieren",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "IDs extrahieren": {
-      "main": [[{ "node": "Rechnung laden (Supabase)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Rechnung laden (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Rechnung laden (Supabase)": {
-      "main": [[{ "node": "Zu sevDesk-Format umwandeln", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Zu sevDesk-Format umwandeln",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Zu sevDesk-Format umwandeln": {
-      "main": [[{ "node": "Voucher in sevDesk erstellen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Voucher in sevDesk erstellen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Voucher in sevDesk erstellen": {
-      "main": [[{ "node": "Ergebnis prüfen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Ergebnis prüfen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Ergebnis prüfen": {
-      "main": [[{ "node": "Export loggen (Supabase)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Export loggen (Supabase)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Export loggen (Supabase)": {
-      "main": [[{ "node": "Zusammenfassen", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Zusammenfassen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Zusammenfassen": {
-      "main": [[{ "node": "Antwort senden", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Antwort senden",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
