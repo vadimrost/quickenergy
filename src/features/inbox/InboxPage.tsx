@@ -481,38 +481,75 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
         {rows.map(r => (
           <div
             key={r.id}
-            onClick={() => onRowClick(r.id)}
-            className="p-4 rounded-card border border-border/50 bg-bg-surface hover:bg-bg-hover cursor-pointer transition-colors"
+            className="rounded-card border border-border/50 bg-bg-surface overflow-hidden"
           >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div className="flex items-center gap-2 min-w-0">
-                <ProjectColorDot id={r.id} />
-                <span className="text-sm font-medium text-ink truncate">
-                  {r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '—'}
-                </span>
-              </div>
-              <StatusBadge variant={STATUS_VARIANT[r.status]} label={STATUS_LABEL[r.status]} />
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs font-mono text-ink-muted mb-1">{r.rechnungsnr}</div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-ink">{formatEuro(getBrutto(r))}</span>
-                  <span className="text-xs text-ink-muted">{r.ust_satz}% USt.</span>
-                  {r.faelligkeit && (
-                    <span className="text-xs"><FaelligkeitCell date={r.faelligkeit} /></span>
-                  )}
+            {/* Clickable main info */}
+            <div
+              onClick={() => onRowClick(r.id)}
+              className="p-4 cursor-pointer hover:bg-bg-hover transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <ProjectColorDot id={r.id} />
+                  <span className="text-sm font-medium text-ink truncate">
+                    {r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '—'}
+                  </span>
                 </div>
+                <StatusBadge variant={STATUS_VARIANT[r.status]} label={STATUS_LABEL[r.status]} />
               </div>
-              {r.status !== 'bezahlt' && (
+              <div className="text-xs font-mono text-ink-muted mb-1">{r.rechnungsnr}</div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-ink">{formatEuro(getBrutto(r))}</span>
+                <span className="text-xs text-ink-muted">{r.ust_satz}% USt.</span>
+                {r.faelligkeit && (
+                  <span className="text-xs"><FaelligkeitCell date={r.faelligkeit} /></span>
+                )}
+              </div>
+            </div>
+
+            {/* Action bar — nicht navigierbar */}
+            <div
+              onClick={e => e.stopPropagation()}
+              className="px-3 py-2.5 border-t border-border/50 bg-bg-muted/40 space-y-2"
+            >
+              {/* Zeile 1: Mitarbeiter */}
+              <select
+                value={r.mitarbeiter ?? ''}
+                onChange={e => handleMitarbeiter(e, r.id)}
+                className="w-full h-8 pl-3 pr-7 text-xs rounded-card-sm border border-border/60 bg-white text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none"
+              >
+                <option value="">— Mitarbeiter zuweisen</option>
+                {MITARBEITER.map(m => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+
+              {/* Zeile 2: Aktionen gleichmäßig verteilt */}
+              <div className={cn('grid gap-1.5', r.status !== 'bezahlt' ? 'grid-cols-3' : 'grid-cols-2')}>
                 <button
-                  onClick={(e) => handleBezahlt(e, r.id)}
-                  className="inline-flex items-center gap-1 px-3 h-7 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors flex-shrink-0"
+                  onClick={e => handleExport(e, r.id, 'lexoffice')}
+                  className="inline-flex items-center justify-center gap-1 h-8 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
                 >
-                  <CheckCircle size={12} />
-                  Bezahlt
+                  <Building2 size={11} />
+                  sevDesk
                 </button>
-              )}
+                <button
+                  onClick={e => handleExport(e, r.id, 'datev')}
+                  className="inline-flex items-center justify-center gap-1 h-8 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
+                >
+                  <Send size={11} />
+                  DATEV
+                </button>
+                {r.status !== 'bezahlt' && (
+                  <button
+                    onClick={e => handleBezahlt(e, r.id)}
+                    className="inline-flex items-center justify-center gap-1 h-8 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors"
+                  >
+                    <CheckCircle size={11} />
+                    Bezahlt
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ))}
