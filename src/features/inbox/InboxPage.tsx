@@ -17,7 +17,67 @@ import { useTriggerExport } from '@/features/exports/useExports'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
 import type { Rechnung, RechnungStatus, ExportZiel } from '@/types/database'
 
-type UploadState = 'idle' | 'dragover' | 'processing' | 'done'
+type UploadState = 'idle' | 'dragover' | 'converting' | 'processing' | 'done'
+
+const ACCEPTED_TYPES = '.pdf,.heic,.heif,.jpg,.jpeg,.png,.webp'
+
+function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(file.name)
+}
+
+function isHeic(file: File): boolean {
+  return file.type === 'image/heic' || file.type === 'image/heif' ||
+    /\.(heic|heif)$/i.test(file.name)
+}
+
+async function convertImageToPdf(file: File): Promise<File> {
+  let imageBlob: Blob = file
+
+  if (isHeic(file)) {
+    const heic2any = (await import('heic2any')).default
+    const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    imageBlob = Array.isArray(result) ? result[0] : result
+  }
+
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(imageBlob)
+  })
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const el = new Image()
+    el.onload = () => resolve(el)
+    el.onerror = reject
+    el.src = dataUrl
+  })
+
+  const { jsPDF } = await import('jspdf')
+  const A4_W = 210, A4_H = 297
+  const pxToMm = (px: number) => px * 25.4 / 96
+  let imgW = pxToMm(img.naturalWidth)
+  let imgH = pxToMm(img.naturalHeight)
+
+  const orientation = imgW > imgH ? 'l' : 'p'
+  const pageW = orientation === 'p' ? A4_W : A4_H
+  const pageH = orientation === 'p' ? A4_H : A4_W
+
+  if (imgW > pageW || imgH > pageH) {
+    const scale = Math.min(pageW / imgW, pageH / imgH)
+    imgW *= scale
+    imgH *= scale
+  }
+
+  const x = (pageW - imgW) / 2
+  const y = (pageH - imgH) / 2
+
+  const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
+  doc.addImage(dataUrl, 'JPEG', x, y, imgW, imgH)
+
+  const baseName = file.name.replace(/\.[^.]+$/, '')
+  return new File([doc.output('blob')], `${baseName}.pdf`, { type: 'application/pdf' })
+}
 
 function PdfUploadDialog({ open, onClose, onRefresh }: {
   open: boolean
@@ -29,19 +89,39 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
   const inputRef = useRef<HTMLInputElement>(null)
 
   const reset = () => { setUploadState('idle'); setFileName(null) }
-
   const handleClose = () => { reset(); onClose() }
 
   const processFile = useCallback(async (file: File) => {
-    if (!file.name.endsWith('.pdf')) { toast.error('Nur PDF-Dateien erlaubt.'); return }
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    const isImage = isImageFile(file)
+
+    if (!isPdf && !isImage) {
+      toast.error('Nur PDF oder Bildateien erlaubt (PDF, HEIC, JPG, PNG, WEBP).')
+      return
+    }
+
     setFileName(file.name)
+
+    let uploadFile = file
+
+    if (isImage) {
+      setUploadState('converting')
+      try {
+        uploadFile = await convertImageToPdf(file)
+      } catch (err) {
+        setUploadState('idle')
+        toast.error(`Konvertierung fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
+        return
+      }
+    }
+
     setUploadState('processing')
 
     const webhookUrl = import.meta.env.VITE_N8N_OCR_WEBHOOK_URL as string | undefined
     if (!webhookUrl) {
       setTimeout(() => {
         setUploadState('done')
-        toast.success(`${file.name} wird verarbeitet (kein OCR-Webhook konfiguriert)`)
+        toast.success(`${uploadFile.name} wird verarbeitet (kein OCR-Webhook konfiguriert)`)
         setTimeout(() => { reset(); onClose(); onRefresh() }, 800)
       }, 1000)
       return
@@ -49,13 +129,13 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
 
     try {
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', uploadFile)
 
       const res = await fetch(webhookUrl, { method: 'POST', body: formData })
       if (!res.ok) throw new Error(`Webhook Fehler: ${res.status}`)
 
       setUploadState('done')
-      toast.success(`${file.name} wurde importiert und verarbeitet`)
+      toast.success(`${uploadFile.name} wurde importiert und verarbeitet`)
       setTimeout(() => { reset(); onClose(); onRefresh() }, 800)
     } catch (err) {
       setUploadState('idle')
@@ -75,6 +155,8 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
     if (file) processFile(file)
   }
 
+  const isBusy = uploadState === 'converting' || uploadState === 'processing'
+
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
       <DialogContent className="max-w-lg bg-white border border-border shadow-xl">
@@ -83,7 +165,13 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
         </DialogHeader>
 
         <div className="pt-2">
-          {uploadState === 'processing' ? (
+          {uploadState === 'converting' ? (
+            <div className="flex flex-col items-center justify-center h-52 gap-3 rounded-card bg-bg-muted border border-border">
+              <Loader2 size={32} className="text-accent-500 animate-spin" />
+              <p className="text-sm font-medium text-ink">Wird zu PDF konvertiert…</p>
+              <p className="text-xs text-ink-muted font-mono truncate max-w-xs">{fileName}</p>
+            </div>
+          ) : uploadState === 'processing' ? (
             <div className="flex flex-col items-center justify-center h-52 gap-3 rounded-card bg-bg-muted border border-border">
               <Loader2 size={32} className="text-accent-500 animate-spin" />
               <p className="text-sm font-medium text-ink">OCR wird verarbeitet…</p>
@@ -110,7 +198,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
               <input
                 ref={inputRef}
                 type="file"
-                accept=".pdf"
+                accept={ACCEPTED_TYPES}
                 className="hidden"
                 onChange={handleFileChange}
               />
@@ -120,7 +208,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
               )}>
                 <Upload size={22} className={cn('transition-colors', uploadState === 'dragover' ? 'text-accent-500' : 'text-ink-muted')} />
               </div>
-              <p className="text-sm font-medium text-ink mb-1">PDF hier ablegen</p>
+              <p className="text-sm font-medium text-ink mb-1">Datei hier ablegen</p>
               <p className="text-xs text-ink-muted">
                 oder{' '}
                 <span className="text-accent-500 font-semibold underline underline-offset-2">Datei auswählen</span>
@@ -131,11 +219,12 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
           <div className="flex justify-between items-center mt-4 pt-3 border-t border-border">
             <div className="flex items-center gap-1.5 text-xs text-ink-muted">
               <FileText size={12} />
-              <span>Nur .pdf · max. 25 MB</span>
+              <span>PDF, HEIC, JPG, PNG, WEBP · max. 25 MB</span>
             </div>
             <button
               onClick={handleClose}
-              className="px-4 py-1.5 rounded-card-sm text-sm font-medium text-ink-muted border border-border hover:bg-bg-muted transition-colors"
+              disabled={isBusy}
+              className="px-4 py-1.5 rounded-card-sm text-sm font-medium text-ink-muted border border-border hover:bg-bg-muted transition-colors disabled:opacity-40"
             >
               Abbrechen
             </button>
