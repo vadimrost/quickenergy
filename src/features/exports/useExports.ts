@@ -52,6 +52,12 @@ export function useTriggerExport() {
       } else {
         await triggerDatev(rechnungIds)
       }
+      await supabase.from('export_log').insert({
+        rechnung_ids_json: rechnungIds,
+        ziel,
+        exported_at: new Date().toISOString(),
+        success: true,
+      })
     },
     onSuccess: (_data, variables) => {
       const label = variables.ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'

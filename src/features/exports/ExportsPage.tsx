@@ -41,6 +41,19 @@ export function ExportsPage() {
   const sevdeskCount = exportLog.filter(e => e.ziel === 'lexoffice').length
   const datevCount = exportLog.filter(e => e.ziel === 'datev').length
 
+  const lastExport = exportLog[0]
+  const lastSevdesk = exportLog.find(e => e.ziel === 'lexoffice')
+  const lastDatev = exportLog.find(e => e.ziel === 'datev')
+
+  function lastExportSub(entry: ExportLog | undefined, fallback: string) {
+    if (!entry) return fallback
+    try {
+      return `Letzter: ${format(parseISO(entry.exported_at), 'dd.MM.yyyy', { locale: de })}`
+    } catch {
+      return fallback
+    }
+  }
+
   const filtered: ExportLog[] = exportLog.filter(e =>
     selectedZiel === 'alle' || e.ziel === selectedZiel
   )
@@ -50,9 +63,9 @@ export function ExportsPage() {
       <PageTitle title="Export-Verlauf" subtitle="Alle sevDesk- und DATEV-Exports im Überblick" />
 
       <div className="grid grid-cols-3 gap-3 md:gap-5 mb-6">
-        <StatCard label="Exports Gesamt" value={logLoading ? '…' : exportLog.length.toString()} sub="Alle Zeiträume" icon={<ArrowUpFromLine size={16} />} />
-        <StatCard label="sevDesk" value={logLoading ? '…' : sevdeskCount.toString()} sub="Buchhalter-Exports" accent />
-        <StatCard label="DATEV" value={logLoading ? '…' : datevCount.toString()} sub="Steuerberater-Exports" />
+        <StatCard label="Exports Gesamt" value={logLoading ? '…' : exportLog.length.toString()} sub={lastExportSub(lastExport, 'Alle Zeiträume')} icon={<ArrowUpFromLine size={16} />} />
+        <StatCard label="sevDesk" value={logLoading ? '…' : sevdeskCount.toString()} sub={lastExportSub(lastSevdesk, 'Buchhalter-Exports')} accent />
+        <StatCard label="DATEV" value={logLoading ? '…' : datevCount.toString()} sub={lastExportSub(lastDatev, 'Steuerberater-Exports')} />
       </div>
 
       <SectionCard

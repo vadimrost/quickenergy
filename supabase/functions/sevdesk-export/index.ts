@@ -10,6 +10,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+
 async function sevGet(path: string) {
   const res = await fetch(`${SEVDESK_BASE}${path}`, {
     headers: { Authorization: SEVDESK_TOKEN },
@@ -31,20 +32,6 @@ async function sevPost(path: string, body: unknown) {
   return res.json()
 }
 
-// sevDesk Factory-Endpunkte (saveVoucher) erwarten URL-encoded Form-Daten
-async function sevPostForm(path: string, fields: Record<string, string>) {
-  const body = new URLSearchParams(fields).toString()
-  const res = await fetch(`${SEVDESK_BASE}${path}`, {
-    method: 'POST',
-    headers: { Authorization: SEVDESK_TOKEN, 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`sevDesk POST ${path} → ${res.status}: ${text}`)
-  }
-  return res.json()
-}
 
 async function findOrCreateContact(name: string): Promise<string> {
   const found = await sevGet(`/Contact?name=${encodeURIComponent(name)}&limit=1`)
@@ -118,17 +105,19 @@ Deno.serve(async (req) => {
         try {
           supplierId = await findOrCreateContact(supplierName)
         } catch {
-          // Fallback: supplierName als Freitext auf Voucher
+          // Fallback: supplierName als Freitext
         }
 
         const voucherDate = r.created_at.slice(0, 10) + 'T00:00:00+01:00'
         const paymentDeadline = r.faelligkeit ? r.faelligkeit + 'T00:00:00+01:00' : null
 
         const voucher: Record<string, unknown> = {
+          id: null,
           objectName: 'Voucher',
+          mapAll: 'true',
           voucherDate,
           description: r.rechnungsnr,
-          status: '100',
+          status: 100,
           currency: 'EUR',
           taxType: 'default',
           creditDebit: 'C',
@@ -140,31 +129,32 @@ Deno.serve(async (req) => {
         if (paymentDeadline) voucher.paymentDeadline = paymentDeadline
 
         const voucherPos = {
+          id: null,
           objectName: 'VoucherPos',
+          mapAll: 'true',
           accountingType: { id: '2', objectName: 'AccountingType' },
-          taxRate: String(taxRate),
-          sum: String(netAmount),
-          net: '1',
-          isAsset: '0',
+          taxRate: Number(taxRate),
+          sum: Number(netAmount),
+          net: true,
+          isAsset: false,
           sevClient: { id: SEV_CLIENT_ID, objectName: 'SevClient' },
         }
 
-        const saved = await sevPostForm('/Voucher/Factory/saveVoucher', {
-          voucher: JSON.stringify(voucher),
-          voucherPosSave: JSON.stringify([voucherPos]),
-          voucherPosDelete: 'null',
+        const saved = await sevPost('/Voucher/Factory/saveVoucher', {
+          voucher,
+          voucherPosSave: [voucherPos],
+          voucherPosDelete: null,
+          filename: null,
         })
 
         const sevdeskId = saved.objects?.voucher?.id
         let pdfUploaded = false
 
-        // Upload PDF if available
         if (sevdeskId && r.pdf_url && r.pdf_url !== 'demo') {
           try {
             await uploadPdfToVoucher(sevdeskId, r.pdf_url, r.rechnungsnr)
             pdfUploaded = true
           } catch (uploadErr) {
-            // Voucher wurde erstellt — PDF-Upload-Fehler separat loggen, nicht den ganzen Export abbrechen
             console.error(`PDF upload für Voucher ${sevdeskId}:`, uploadErr)
           }
         }
