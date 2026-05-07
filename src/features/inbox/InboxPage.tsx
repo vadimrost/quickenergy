@@ -123,7 +123,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
     const newEntries: FileEntry[] = valid.map(f => ({
       id: crypto.randomUUID(), name: f.name, status: 'pending',
     }))
-    setEntries(newEntries)
+    setEntries(prev => [...prev, ...newEntries])
 
     // Alle Dateien parallel verarbeiten
     await Promise.allSettled(valid.map(async (file, i) => {
