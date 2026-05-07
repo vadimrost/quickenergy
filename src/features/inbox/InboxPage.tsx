@@ -34,37 +34,58 @@ function isHeic(file: File): boolean {
 
 async function convertImageToPdf(file: File): Promise<File> {
   let imageBlob: Blob = file
+
   if (isHeic(file)) {
     const heic2any = (await import('heic2any')).default
-    const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+    const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.90 })
     imageBlob = Array.isArray(result) ? result[0] : result
   }
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(imageBlob)
-  })
+
+  // Object URL avoids huge base64 strings — much more reliable on mobile Safari
+  const objectUrl = URL.createObjectURL(imageBlob)
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image()
     el.onload = () => resolve(el)
-    el.onerror = reject
-    el.src = dataUrl
+    el.onerror = () => reject(new Error('Bild konnte nicht geladen werden'))
+    el.src = objectUrl
   })
+
+  // Scale down to max 2480px (A4 @ 300dpi) so mobile memory stays manageable
+  const MAX_DIM = 2480
+  const scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth || 1, img.naturalHeight || 1))
+  const cw = Math.max(1, Math.round(img.naturalWidth * scale))
+  const ch = Math.max(1, Math.round(img.naturalHeight * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = cw
+  canvas.height = ch
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Canvas nicht verfügbar')
+  ctx.drawImage(img, 0, 0, cw, ch)
+  URL.revokeObjectURL(objectUrl)
+
+  // canvas.toDataURL is synchronous and avoids an extra FileReader round-trip
+  const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.90)
+  if (jpegDataUrl === 'data:,') throw new Error('Canvas-Export fehlgeschlagen')
+
   const { jsPDF } = await import('jspdf')
   const A4_W = 210, A4_H = 297
-  const pxToMm = (px: number) => px * 25.4 / 96
-  let imgW = pxToMm(img.naturalWidth), imgH = pxToMm(img.naturalHeight)
+  const mmPerPx = 25.4 / 96
+  let imgW = cw * mmPerPx
+  let imgH = ch * mmPerPx
   const orientation = imgW > imgH ? 'l' : 'p'
   const pageW = orientation === 'p' ? A4_W : A4_H
   const pageH = orientation === 'p' ? A4_H : A4_W
   if (imgW > pageW || imgH > pageH) {
-    const scale = Math.min(pageW / imgW, pageH / imgH)
-    imgW *= scale; imgH *= scale
+    const s = Math.min(pageW / imgW, pageH / imgH)
+    imgW *= s; imgH *= s
   }
   const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
-  doc.addImage(dataUrl, 'JPEG', (pageW - imgW) / 2, (pageH - imgH) / 2, imgW, imgH)
-  return new File([doc.output('blob')], file.name.replace(/\.[^.]+$/, '') + '.pdf', { type: 'application/pdf' })
+  doc.addImage(jpegDataUrl, 'JPEG', (pageW - imgW) / 2, (pageH - imgH) / 2, imgW, imgH)
+
+  const blob = doc.output('blob')
+  if (!blob || blob.size < 100) throw new Error('PDF-Erzeugung fehlgeschlagen (leeres Ergebnis)')
+  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.pdf', { type: 'application/pdf' })
 }
 
 function FileStatusIcon({ status }: { status: FileStatus }) {
@@ -122,8 +143,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       updateEntry(id, { status: 'uploading' })
 
       if (!webhookUrl) {
-        await new Promise(r => setTimeout(r, 800 + Math.random() * 400))
-        updateEntry(id, { status: 'done' })
+        updateEntry(id, { status: 'error', error: 'OCR-Webhook nicht konfiguriert (VITE_N8N_OCR_WEBHOOK_URL fehlt)' })
         return
       }
 
