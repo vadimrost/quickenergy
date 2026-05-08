@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { differenceInDays, parseISO } from 'date-fns'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, Building2 } from 'lucide-react'
+import { differenceInDays, parseISO, format } from 'date-fns'
+import { de } from 'date-fns/locale'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, Building2, FileSpreadsheet } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { PageTitle } from '@/components/shared/PageTitle'
 import { StatCard } from '@/components/shared/StatCard'
@@ -312,6 +314,7 @@ export function InboxPage() {
   const [kpiFilter, setKpiFilter] = useState<'heute_faellig' | 'skonto_alarm' | null>(null)
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
   const navigate = useNavigate()
 
@@ -377,12 +380,24 @@ export function InboxPage() {
         onClose={() => setUploadOpen(false)}
         onRefresh={() => void refetch()}
       />
+      <ExcelExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        rechnungen={allRechnungen}
+      />
 
       {/* Table section */}
       <SectionCard
         title="Rechnungen"
         actions={
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setExportOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
+            >
+              <FileSpreadsheet size={13} />
+              <span className="hidden sm:inline">Excel</span>
+            </button>
             <button
               onClick={() => setUploadOpen(true)}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm bg-accent-500 hover:bg-accent-600 text-white text-xs font-medium transition-colors"
@@ -453,6 +468,137 @@ export function InboxPage() {
 function getBrutto(r: Rechnung): number {
   const netto = (r.ocr_json as any)?.invoice_net_amount ?? r.betrag
   return netto * (1 + r.ust_satz / 100)
+}
+
+const STATUS_LABEL_EXPORT: Record<string, string> = {
+  eingegangen: 'Neu',
+  geprüft: 'In Prüfung',
+  gebucht: 'Gebucht',
+  bezahlt: 'Bezahlt',
+}
+
+function ExcelExportDialog({ open, onClose, rechnungen }: {
+  open: boolean
+  onClose: () => void
+  rechnungen: Rechnung[]
+}) {
+  const currentMonth = format(new Date(), 'yyyy-MM')
+  const [month, setMonth] = useState(currentMonth)
+
+  const monthRechnungen = rechnungen.filter(r => {
+    const date = r.faelligkeit || r.created_at
+    return date?.startsWith(month)
+  })
+
+  const handleExport = () => {
+    if (monthRechnungen.length === 0) {
+      toast.error('Keine Rechnungen für diesen Monat.')
+      return
+    }
+
+    const rows = monthRechnungen.map(r => {
+      const netto = (r.ocr_json as any)?.invoice_net_amount ?? r.betrag
+      const mwst = netto * (r.ust_satz / 100)
+      const brutto = netto + mwst
+      const karteLabel = KARTEN.find(k => k.value === r.karte)?.label ?? r.karte ?? ''
+      return {
+        'Lieferant': r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '',
+        'Rechnungs-Nr.': r.rechnungsnr,
+        'Eingegangen': r.created_at ? format(parseISO(r.created_at), 'dd.MM.yyyy', { locale: de }) : '',
+        'Fälligkeit': r.faelligkeit ? format(parseISO(r.faelligkeit), 'dd.MM.yyyy', { locale: de }) : '',
+        'Netto (€)': netto,
+        'USt. (%)': r.ust_satz,
+        'MwSt. (€)': Math.round(mwst * 100) / 100,
+        'Brutto (€)': Math.round(brutto * 100) / 100,
+        'Status': STATUS_LABEL_EXPORT[r.status] ?? r.status,
+        'Mitarbeiter': r.mitarbeiter ?? '',
+        'Karte': karteLabel,
+      }
+    })
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    ws['!cols'] = [
+      { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 14 },
+      { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+      { wch: 14 }, { wch: 18 }, { wch: 22 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Rechnungen')
+    const monthLabel = format(parseISO(`${month}-01`), 'yyyy-MM', { locale: de })
+    XLSX.writeFile(wb, `Rechnungen_${monthLabel}.xlsx`)
+    toast.success(`${monthRechnungen.length} Rechnungen exportiert`)
+    onClose()
+  }
+
+  const monthLabel = month ? format(parseISO(`${month}-01`), 'MMMM yyyy', { locale: de }) : ''
+  const totalBrutto = monthRechnungen.reduce((sum, r) => sum + getBrutto(r), 0)
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm bg-white border border-border shadow-xl">
+        <DialogHeader>
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="w-8 h-8 rounded-card-sm bg-bg-muted flex items-center justify-center">
+              <FileSpreadsheet size={15} className="text-ink-muted" />
+            </div>
+            <DialogTitle className="text-base font-semibold text-ink">Excel Export</DialogTitle>
+          </div>
+        </DialogHeader>
+
+        <div className="pt-1 space-y-4">
+          {/* Monat */}
+          <div>
+            <label className="label-caps block mb-1.5">Monat</label>
+            <input
+              type="month"
+              value={month}
+              onChange={e => setMonth(e.target.value)}
+              className="w-full h-9 px-3 text-sm border border-border rounded-card-sm bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400"
+            />
+          </div>
+
+          {/* Vorschau */}
+          <div className={cn(
+            'rounded-card border p-3.5 space-y-2 transition-colors',
+            monthRechnungen.length > 0 ? 'border-border bg-bg-muted/40' : 'border-border/50 bg-bg-muted/20'
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink-muted">Zeitraum</span>
+              <span className="text-xs font-medium text-ink">{monthLabel}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink-muted">Rechnungen</span>
+              <span className="text-xs font-medium text-ink">{monthRechnungen.length}</span>
+            </div>
+            {monthRechnungen.length > 0 && (
+              <div className="flex items-center justify-between border-t border-border/50 pt-2 mt-1">
+                <span className="text-xs text-ink-muted">Gesamt Brutto</span>
+                <span className="text-sm font-semibold text-ink">{formatEuro(totalBrutto)}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="flex-1 h-9 rounded-card-sm border border-border text-sm text-ink-muted hover:bg-bg-muted transition-colors"
+            >
+              Abbrechen
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={monthRechnungen.length === 0}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-card-sm bg-ink hover:bg-ink/80 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+            >
+              <FileSpreadsheet size={13} />
+              Herunterladen
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function ActionMenu({
