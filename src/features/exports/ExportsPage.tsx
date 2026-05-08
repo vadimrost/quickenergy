@@ -12,7 +12,7 @@ import { useExportLog } from './useExports'
 import { cn, formatDate } from '@/lib/utils'
 import type { ExportLog, ExportZiel } from '@/types/database'
 
-function ExportZielBadge({ ziel }: { ziel: ExportZiel }) {
+function ExportZielBadge(_: { ziel: ExportZiel }) {
   return (
     <span className="inline-flex items-center gap-1 text-label px-2.5 py-0.5 rounded-pill border bg-accent-50 text-accent-600 border-accent-200">
       <ArrowUpFromLine size={10} />

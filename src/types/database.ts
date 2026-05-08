@@ -52,6 +52,7 @@ export interface Rechnung {
   status: RechnungStatus
   mitarbeiter: string | null
   karte: string | null
+  rechnungsdatum: string | null
   created_at: string
   lieferant?: Lieferant | null
 }

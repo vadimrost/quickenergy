@@ -506,6 +506,7 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
       return {
         'Lieferant': r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '',
         'Rechnungs-Nr.': r.rechnungsnr,
+        'Rechnungsdatum': r.rechnungsdatum ? format(parseISO(r.rechnungsdatum), 'dd.MM.yyyy', { locale: de }) : '',
         'Eingegangen': r.created_at ? format(parseISO(r.created_at), 'dd.MM.yyyy', { locale: de }) : '',
         'Fälligkeit': r.faelligkeit ? format(parseISO(r.faelligkeit), 'dd.MM.yyyy', { locale: de }) : '',
         'Netto (€)': netto,
@@ -520,7 +521,7 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
 
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [
-      { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 14 },
+      { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
       { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
       { wch: 14 }, { wch: 18 }, { wch: 22 },
     ]
