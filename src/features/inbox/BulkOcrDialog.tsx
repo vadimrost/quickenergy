@@ -3,8 +3,8 @@ import { CheckCircle, XCircle, Loader2, KeyRound, Sparkles, SkipForward } from '
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
-import { normalizeDate, pdfUrlToBase64, resolveCard, CARD_MAP, geminiOcr } from '@/lib/gemini-ocr'
-import type { Rechnung } from '@/types/database'
+import { normalizeDate, pdfUrlToBase64, resolveCard, geminiOcr } from '@/lib/gemini-ocr'
+import type { Rechnung, Rechnungstyp } from '@/types/database'
 
 type ResultStatus = 'pending' | 'processing' | 'done' | 'error' | 'skipped'
 
@@ -105,7 +105,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
         // Kategorie
         const validTypes = ['bewirtung', 'dienstleistung', 'tanken_diesel', 'tanken_super']
         if (ocr.invoice_type && validTypes.includes(ocr.invoice_type) && (forceAll || !r.rechnungstyp)) {
-          updates.rechnungstyp = ocr.invoice_type
+          updates.rechnungstyp = ocr.invoice_type as Rechnungstyp
           updated.push('Kategorie')
         }
 

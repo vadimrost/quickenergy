@@ -570,12 +570,6 @@ function getBrutto(r: Rechnung): number {
   return netto * (1 + r.ust_satz / 100)
 }
 
-const STATUS_LABEL_EXPORT: Record<string, string> = {
-  eingegangen: 'Neu',
-  geprüft: 'In Prüfung',
-  gebucht: 'Gebucht',
-  bezahlt: 'Bezahlt',
-}
 
 function ExcelExportDialog({ open, onClose, rechnungen }: {
   open: boolean
@@ -619,8 +613,6 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
         'Rechnungs-Nr.': r.rechnungsnr,
         'Kategorie': kategorieLabel,
         'Rechnungsdatum': r.rechnungsdatum ? format(parseISO(r.rechnungsdatum), 'dd.MM.yyyy', { locale: de }) : '',
-        'Eingegangen': r.created_at ? format(parseISO(r.created_at), 'dd.MM.yyyy', { locale: de }) : '',
-        'Fälligkeit': r.faelligkeit ? format(parseISO(r.faelligkeit), 'dd.MM.yyyy', { locale: de }) : '',
         'Netto gesamt (€)': Math.round(netto * 100) / 100,
         'USt. (%)': isBewirtung && (netto10 != null || netto20 != null) ? '10% / 20%' : r.ust_satz,
         'MwSt. gesamt (€)': bruttoFromBreakdown != null
@@ -633,7 +625,6 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
         'Netto 20% (€)': netto20 ?? '',
         'MwSt. 20% (€)': mwst20 ?? '',
         'Trinkgeld 0% (€)': netto0 ?? '',
-        'Status': STATUS_LABEL_EXPORT[r.status] ?? r.status,
         'Mitarbeiter': r.mitarbeiter ?? '',
         'Karte': karteLabel,
         'PDF': r.pdf_url && r.pdf_url !== 'demo' ? r.pdf_url : '',
