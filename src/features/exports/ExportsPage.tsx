@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { ArrowUpFromLine, CheckCircle, XCircle, Database, Clock } from 'lucide-react'
+import { ArrowUpFromLine, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { PageTitle } from '@/components/shared/PageTitle'
 import { StatCard } from '@/components/shared/StatCard'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -12,16 +12,11 @@ import { useExportLog } from './useExports'
 import { cn, formatDate } from '@/lib/utils'
 import type { ExportLog, ExportZiel } from '@/types/database'
 
-const ZIEL_STYLES: Record<ExportZiel, string> = {
-  lexoffice: 'bg-accent-50 text-accent-600 border-accent-200',
-  datev: 'bg-ink/5 text-ink border-border',
-}
-
 function ExportZielBadge({ ziel }: { ziel: ExportZiel }) {
   return (
-    <span className={cn('inline-flex items-center gap-1 text-label px-2.5 py-0.5 rounded-pill border', ZIEL_STYLES[ziel])}>
-      {ziel === 'lexoffice' ? <ArrowUpFromLine size={10} /> : <Database size={10} />}
-      {ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'}
+    <span className="inline-flex items-center gap-1 text-label px-2.5 py-0.5 rounded-pill border bg-accent-50 text-accent-600 border-accent-200">
+      <ArrowUpFromLine size={10} />
+      sevDesk
     </span>
   )
 }
@@ -39,11 +34,9 @@ export function ExportsPage() {
   const [selectedZiel, setSelectedZiel] = useState<ExportZiel | 'alle'>('alle')
 
   const sevdeskCount = exportLog.filter(e => e.ziel === 'lexoffice').length
-  const datevCount = exportLog.filter(e => e.ziel === 'datev').length
 
   const lastExport = exportLog[0]
   const lastSevdesk = exportLog.find(e => e.ziel === 'lexoffice')
-  const lastDatev = exportLog.find(e => e.ziel === 'datev')
 
   function lastExportSub(entry: ExportLog | undefined, fallback: string) {
     if (!entry) return fallback
@@ -60,19 +53,18 @@ export function ExportsPage() {
 
   return (
     <div>
-      <PageTitle title="Export-Verlauf" subtitle="Alle sevDesk- und DATEV-Exports im Überblick" />
+      <PageTitle title="Export-Verlauf" subtitle="Alle sevDesk-Exports im Überblick" />
 
       <div className="grid grid-cols-3 gap-3 md:gap-5 mb-6">
         <StatCard label="Exports Gesamt" value={logLoading ? '…' : exportLog.length.toString()} sub={lastExportSub(lastExport, 'Alle Zeiträume')} icon={<ArrowUpFromLine size={16} />} />
         <StatCard label="sevDesk" value={logLoading ? '…' : sevdeskCount.toString()} sub={lastExportSub(lastSevdesk, 'Buchhalter-Exports')} accent />
-        <StatCard label="DATEV" value={logLoading ? '…' : datevCount.toString()} sub={lastExportSub(lastDatev, 'Steuerberater-Exports')} />
       </div>
 
       <SectionCard
         title="Verlauf"
         actions={
           <div className="flex items-center gap-1">
-            {(['alle', 'lexoffice', 'datev'] as const).map(z => (
+            {(['alle', 'lexoffice'] as const).map(z => (
               <button
                 key={z}
                 onClick={() => setSelectedZiel(z)}
@@ -81,7 +73,7 @@ export function ExportsPage() {
                   selectedZiel === z ? 'bg-ink text-white' : 'text-ink-muted hover:bg-bg-muted'
                 )}
               >
-                {z === 'alle' ? 'Alle' : z === 'lexoffice' ? 'sevDesk' : 'DATEV'}
+                {z === 'alle' ? 'Alle' : 'sevDesk'}
               </button>
             ))}
           </div>

@@ -98,9 +98,9 @@ export const MOCK_DUPLIKATE: Duplikat[] = [
 
 export const MOCK_EXPORT_LOG: ExportLog[] = [
   { id: 'e1', rechnung_ids_json: ['r5', 'r6', 'r7', 'r8', 'r3'], ziel: 'lexoffice', exported_at: past(2), success: true },
-  { id: 'e2', rechnung_ids_json: Array.from({ length: 12 }, (_, i) => `r${i + 1}`), ziel: 'datev', exported_at: past(8), success: true },
+  { id: 'e2', rechnung_ids_json: Array.from({ length: 12 }, (_, i) => `r${i + 1}`), ziel: 'lexoffice', exported_at: past(8), success: true },
   { id: 'e3', rechnung_ids_json: ['r4', 'r5', 'r6'], ziel: 'lexoffice', exported_at: past(15), success: true },
-  { id: 'e4', rechnung_ids_json: Array.from({ length: 8 }, (_, i) => `r${i + 1}`), ziel: 'datev', exported_at: past(23), success: true },
+  { id: 'e4', rechnung_ids_json: Array.from({ length: 8 }, (_, i) => `r${i + 1}`), ziel: 'lexoffice', exported_at: past(23), success: true },
   { id: 'e5', rechnung_ids_json: ['r1', 'r2', 'r3', 'r4', 'r5', 'r6'], ziel: 'lexoffice', exported_at: past(29), success: false },
-  { id: 'e6', rechnung_ids_json: Array.from({ length: 10 }, (_, i) => `r${i + 1}`), ziel: 'datev', exported_at: past(34), success: true },
+  { id: 'e6', rechnung_ids_json: Array.from({ length: 10 }, (_, i) => `r${i + 1}`), ziel: 'lexoffice', exported_at: past(34), success: true },
 ]

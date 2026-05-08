@@ -6,16 +6,21 @@ interface StatCardProps {
   value: string
   sub?: string
   accent?: boolean
+  active?: boolean
+  onClick?: () => void
   className?: string
   icon?: ReactNode
 }
 
-export function StatCard({ label, value, sub, accent = false, className, icon }: StatCardProps) {
+export function StatCard({ label, value, sub, accent = false, active = false, onClick, className, icon }: StatCardProps) {
   return (
     <div
+      onClick={onClick}
       className={cn(
-        'card-base p-4 md:p-7 transition-shadow hover:shadow-card-hover',
+        'card-base p-4 md:p-7 transition-all hover:shadow-card-hover',
         accent && 'bg-gradient-to-br from-accent-50 to-white border-accent-100',
+        onClick && 'cursor-pointer select-none',
+        active && 'ring-2 ring-ink ring-offset-1',
         className
       )}
     >

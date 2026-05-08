@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO } from 'date-fns'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, Send, Building2 } from 'lucide-react'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageTitle } from '@/components/shared/PageTitle'
 import { StatCard } from '@/components/shared/StatCard'
@@ -268,6 +268,13 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
 
 type FilterTab = 'alle' | RechnungStatus
 
+const KARTEN: { label: string; value: string }[] = [
+  { label: 'Spesen Philipp ···1380', value: 'spesen_philipp_1380' },
+  { label: 'Spesen Philipp ···0744', value: 'spesen_philipp_0744' },
+  { label: 'Firmenkarte ···6362', value: 'firmenkarte_6362' },
+  { label: 'Firmenkarte ···0660', value: 'firmenkarte_0660' },
+]
+
 const TABS: { key: FilterTab; label: string }[] = [
   { key: 'alle', label: 'Alle' },
   { key: 'eingegangen', label: 'Neu' },
@@ -302,6 +309,7 @@ function FaelligkeitCell({ date }: { date: string | null }) {
 
 export function InboxPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>('alle')
+  const [kpiFilter, setKpiFilter] = useState<'heute_faellig' | 'skonto_alarm' | null>(null)
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
@@ -319,7 +327,15 @@ export function InboxPage() {
   }).length
 
   const filtered = allRechnungen.filter(r => {
-    if (activeTab !== 'alle' && r.status !== activeTab) return false
+    if (kpiFilter === 'heute_faellig') {
+      if (!(r.faelligkeit && r.faelligkeit <= today && r.status !== 'bezahlt')) return false
+    } else if (kpiFilter === 'skonto_alarm') {
+      if (!r.skonto_datum) return false
+      const d = differenceInDays(parseISO(r.skonto_datum), new Date())
+      if (!(d >= 0 && d <= 3)) return false
+    } else {
+      if (activeTab !== 'alle' && r.status !== activeTab) return false
+    }
     if (search) {
       const q = search.toLowerCase()
       return (
@@ -338,8 +354,22 @@ export function InboxPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5 mb-6">
         <StatCard label="Neu Eingegangen" value={isLoading ? '…' : kpiEingegangen.toString()} sub="Warten auf Zahlung" icon={<Inbox size={16} />} />
         <StatCard label="Bezahlt" value={isLoading ? '…' : kpiBezahlt.toString()} sub="Erfolgreich abgeschlossen" accent icon={<CheckCircle size={16} />} />
-        <StatCard label="Heute Fällig" value={isLoading ? '…' : kpiHeuteFaellig.toString()} sub={kpiHeuteFaellig > 0 ? 'Sofortiger Handlungsbedarf' : 'Keine offenen Posten'} icon={<Clock size={16} />} />
-        <StatCard label="Skonto-Alarm" value={isLoading ? '…' : kpiSkontoAlarm.toString()} sub="Frist innerhalb 3 Tagen" icon={<AlertTriangle size={16} />} />
+        <StatCard
+          label="Heute Fällig"
+          value={isLoading ? '…' : kpiHeuteFaellig.toString()}
+          sub={kpiHeuteFaellig > 0 ? 'Sofortiger Handlungsbedarf' : 'Keine offenen Posten'}
+          icon={<Clock size={16} />}
+          active={kpiFilter === 'heute_faellig'}
+          onClick={() => setKpiFilter(f => f === 'heute_faellig' ? null : 'heute_faellig')}
+        />
+        <StatCard
+          label="Skonto-Alarm"
+          value={isLoading ? '…' : kpiSkontoAlarm.toString()}
+          sub="Frist innerhalb 3 Tagen"
+          icon={<AlertTriangle size={16} />}
+          active={kpiFilter === 'skonto_alarm'}
+          onClick={() => setKpiFilter(f => f === 'skonto_alarm' ? null : 'skonto_alarm')}
+        />
       </div>
 
       <PdfUploadDialog
@@ -373,11 +403,11 @@ export function InboxPage() {
         }
       >
         {/* Filter tabs */}
-        <div className="flex items-center gap-1 mb-5 -mt-1">
+        <div className="flex items-center gap-2 mb-5 -mt-1 flex-wrap">
           {TABS.map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => { setActiveTab(tab.key); setKpiFilter(null) }}
               className={cn(
                 'px-3.5 h-7 rounded-pill text-label uppercase transition-colors',
                 activeTab === tab.key
@@ -393,6 +423,15 @@ export function InboxPage() {
               )}
             </button>
           ))}
+          {kpiFilter && (
+            <button
+              onClick={() => setKpiFilter(null)}
+              className="ml-auto flex items-center gap-1.5 px-2.5 h-7 rounded-pill bg-ink text-white text-label uppercase"
+            >
+              {kpiFilter === 'heute_faellig' ? 'Heute Fällig' : 'Skonto-Alarm'}
+              <span className="text-white/70 text-xs">✕</span>
+            </button>
+          )}
         </div>
 
         {isLoading ? (
@@ -446,13 +485,6 @@ function ActionMenu({
       onClick={e => e.stopPropagation()}
     >
       <button
-        onClick={e => onExport(e, rechnungId, 'datev')}
-        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-ink hover:bg-bg-muted transition-colors text-left"
-      >
-        <Send size={13} className="text-ink-muted flex-shrink-0" />
-        Zu DATEV schicken
-      </button>
-      <button
         onClick={e => onExport(e, rechnungId, 'lexoffice')}
         className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-ink hover:bg-bg-muted transition-colors text-left"
       >
@@ -504,6 +536,14 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
     )
   }
 
+  const handleKarte = (e: React.ChangeEvent<HTMLSelectElement>, id: string) => {
+    const value = e.target.value || null
+    updateRechnung(
+      { id, updates: { karte: value } },
+      { onError: (err: Error) => toast.error(`Kartenzuweisung fehlgeschlagen: ${err.message}`) }
+    )
+  }
+
   return (
     <>
       {/* Mobile card list */}
@@ -542,17 +582,29 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
               onClick={e => e.stopPropagation()}
               className="px-3 py-2.5 border-t border-border/50 bg-bg-muted/40 space-y-2"
             >
-              {/* Zeile 1: Mitarbeiter */}
-              <select
-                value={r.mitarbeiter ?? ''}
-                onChange={e => handleMitarbeiter(e, r.id)}
-                className="w-full h-8 pl-3 pr-7 text-xs rounded-card-sm border border-border/60 bg-white text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none"
-              >
-                <option value="">— Mitarbeiter zuweisen</option>
-                {mitarbeiter.map(m => (
-                  <option key={m.id} value={m.name}>{m.name}</option>
-                ))}
-              </select>
+              {/* Zeile 1: Mitarbeiter + Karte */}
+              <div className="grid grid-cols-2 gap-1.5">
+                <select
+                  value={r.mitarbeiter ?? ''}
+                  onChange={e => handleMitarbeiter(e, r.id)}
+                  className="w-full h-8 pl-3 pr-7 text-xs rounded-card-sm border border-border/60 bg-white text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none"
+                >
+                  <option value="">— Mitarbeiter</option>
+                  {mitarbeiter.map(m => (
+                    <option key={m.id} value={m.name}>{m.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={r.karte ?? ''}
+                  onChange={e => handleKarte(e, r.id)}
+                  className="w-full h-8 pl-3 pr-7 text-xs rounded-card-sm border border-border/60 bg-white text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none"
+                >
+                  <option value="">— Karte</option>
+                  {KARTEN.map(k => (
+                    <option key={k.value} value={k.value}>{k.label}</option>
+                  ))}
+                </select>
+              </div>
 
               {/* Zeile 2: Aktionen gleichmäßig verteilt */}
               <div className={cn('grid gap-1.5', r.status !== 'bezahlt' ? 'grid-cols-3' : 'grid-cols-2')}>
@@ -562,13 +614,6 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                 >
                   <Building2 size={11} />
                   sevDesk
-                </button>
-                <button
-                  onClick={e => handleExport(e, r.id, 'datev')}
-                  className="inline-flex items-center justify-center gap-1 h-8 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
-                >
-                  <Send size={11} />
-                  DATEV
                 </button>
                 {r.status !== 'bezahlt' && (
                   <button
@@ -590,7 +635,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
         <table className="w-full">
           <thead>
             <tr>
-              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', 'Mitarbeiter', 'Aktionen'].map(h => (
+              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', 'Mitarbeiter', 'Karte', 'Aktionen'].map(h => (
                 <th key={h} className={cn(
                   'label-caps pb-3 border-b border-border/50 text-left font-normal',
                   h === 'Betrag' && 'text-right',
@@ -637,6 +682,18 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                     <option value="">— Zuweisen</option>
                     {mitarbeiter.map(m => (
                       <option key={m.id} value={m.name}>{m.name}</option>
+                    ))}
+                  </select>
+                </td>
+                <td onClick={e => e.stopPropagation()} className="pr-4">
+                  <select
+                    value={r.karte ?? ''}
+                    onChange={e => handleKarte(e, r.id)}
+                    className="h-7 pl-2.5 pr-7 text-xs rounded-card-sm border border-border/60 bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none cursor-pointer min-w-[150px]"
+                  >
+                    <option value="">— Karte</option>
+                    {KARTEN.map(k => (
+                      <option key={k.value} value={k.value}>{k.label}</option>
                     ))}
                   </select>
                 </td>

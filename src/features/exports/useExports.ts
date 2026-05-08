@@ -3,8 +3,6 @@ import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import type { ExportLog, ExportZiel } from '@/types/database'
 
-const DATEV_WEBHOOK_URL = import.meta.env.VITE_N8N_DATEV_WEBHOOK_URL as string | undefined
-
 async function triggerSevdesk(rechnungIds: string[]): Promise<void> {
   const { data, error } = await supabase.functions.invoke('sevdesk-export', {
     body: { rechnung_ids: rechnungIds },
@@ -16,18 +14,6 @@ async function triggerSevdesk(rechnungIds: string[]): Promise<void> {
   }
 }
 
-async function triggerDatev(rechnungIds: string[]): Promise<void> {
-  if (!DATEV_WEBHOOK_URL) {
-    toast.info('Kein DATEV-Webhook konfiguriert.')
-    return
-  }
-  const res = await fetch(DATEV_WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rechnung_ids: rechnungIds, ziel: 'datev' }),
-  })
-  if (!res.ok) throw new Error(`Webhook-Fehler: ${res.status}`)
-}
 
 export function useExportLog() {
   return useQuery<ExportLog[]>({
@@ -47,11 +33,7 @@ export function useTriggerExport() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ rechnungIds, ziel }: { rechnungIds: string[]; ziel: ExportZiel }) => {
-      if (ziel === 'lexoffice') {
-        await triggerSevdesk(rechnungIds)
-      } else {
-        await triggerDatev(rechnungIds)
-      }
+      await triggerSevdesk(rechnungIds)
       await supabase.from('export_log').insert({
         rechnung_ids_json: rechnungIds,
         ziel,
@@ -59,9 +41,8 @@ export function useTriggerExport() {
         success: true,
       })
     },
-    onSuccess: (_data, variables) => {
-      const label = variables.ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'
-      toast.success(`${label}-Export erfolgreich`)
+    onSuccess: () => {
+      toast.success('sevDesk-Export erfolgreich')
       void qc.invalidateQueries({ queryKey: ['export_log'] })
       void qc.invalidateQueries({ queryKey: ['rechnungen'] })
     },

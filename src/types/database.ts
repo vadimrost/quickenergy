@@ -1,7 +1,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type RechnungStatus = 'eingegangen' | 'geprüft' | 'gebucht' | 'bezahlt'
-export type ExportZiel = 'lexoffice' | 'datev'
+export type ExportZiel = 'lexoffice'
 
 export interface OcrField {
   value: string | number
@@ -51,6 +51,7 @@ export interface Rechnung {
   skonto_prozent: number | null
   status: RechnungStatus
   mitarbeiter: string | null
+  karte: string | null
   created_at: string
   lieferant?: Lieferant | null
 }

@@ -248,30 +248,19 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
       {/* Export */}
       <div className="card-base p-5">
         <p className="label-caps mb-3">Export</p>
-        <div className="grid grid-cols-2 gap-2">
-          {(['lexoffice', 'datev'] as ExportZiel[]).map(ziel => {
-            const label = ziel === 'lexoffice' ? 'sevDesk' : 'DATEV'
-            const isConfirming = confirmingZiel === ziel
-            return (
-              <button
-                key={ziel}
-                onClick={() => handleExport(ziel)}
-                disabled={isExporting}
-                className={cn(
-                  'flex items-center justify-center gap-1.5 py-2.5 rounded-card-sm text-sm font-medium transition-all disabled:opacity-40',
-                  isConfirming
-                    ? 'bg-status-warning text-white'
-                    : ziel === 'lexoffice'
-                    ? 'bg-accent-500 hover:bg-accent-600 text-white'
-                    : 'bg-ink hover:bg-ink/80 text-white'
-                )}
-              >
-                <ArrowUpFromLine size={13} />
-                {isConfirming ? 'Bestätigen?' : `→ ${label}`}
-              </button>
-            )
-          })}
-        </div>
+        <button
+          onClick={() => handleExport('lexoffice')}
+          disabled={isExporting}
+          className={cn(
+            'w-full flex items-center justify-center gap-1.5 py-2.5 rounded-card-sm text-sm font-medium transition-all disabled:opacity-40',
+            confirmingZiel === 'lexoffice'
+              ? 'bg-status-warning text-white'
+              : 'bg-accent-500 hover:bg-accent-600 text-white'
+          )}
+        >
+          <ArrowUpFromLine size={13} />
+          {confirmingZiel === 'lexoffice' ? 'Bestätigen?' : '→ sevDesk'}
+        </button>
       </div>
 
       {/* Action buttons */}
