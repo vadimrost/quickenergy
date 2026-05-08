@@ -411,39 +411,41 @@ export function InboxPage() {
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Suchen…"
-                className="pl-8 pr-4 h-8 text-sm border border-border rounded-card-sm bg-bg-surface text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-accent-400 w-36 sm:w-48"
+                className="pl-8 pr-4 h-8 text-sm border border-border rounded-card-sm bg-bg-surface text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-accent-400 w-24 sm:w-36 md:w-48"
               />
             </div>
           </div>
         }
       >
         {/* Filter tabs */}
-        <div className="flex items-center gap-2 mb-5 -mt-1 flex-wrap">
-          {TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => { setActiveTab(tab.key); setKpiFilter(null) }}
-              className={cn(
-                'px-3.5 h-7 rounded-pill text-label uppercase transition-colors',
-                activeTab === tab.key
-                  ? 'bg-ink text-white'
-                  : 'text-ink-muted hover:bg-bg-muted'
-              )}
-            >
-              {tab.label}
-              {tab.key !== 'alle' && (
-                <span className="ml-1.5 opacity-70">
-                  {allRechnungen.filter(r => r.status === tab.key).length}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="flex items-center justify-between gap-2 mb-5 -mt-1">
+          <div className="flex items-center gap-1">
+            {TABS.map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => { setActiveTab(tab.key); setKpiFilter(null) }}
+                className={cn(
+                  'px-3.5 h-7 rounded-pill text-label uppercase transition-colors',
+                  activeTab === tab.key && !kpiFilter
+                    ? 'bg-ink text-white'
+                    : 'text-ink-muted hover:bg-bg-muted'
+                )}
+              >
+                {tab.label}
+                {tab.key !== 'alle' && (
+                  <span className="ml-1.5 opacity-70">
+                    {allRechnungen.filter(r => r.status === tab.key).length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
           {kpiFilter && (
             <button
               onClick={() => setKpiFilter(null)}
-              className="ml-auto flex items-center gap-1.5 px-2.5 h-7 rounded-pill bg-ink text-white text-label uppercase"
+              className="flex-shrink-0 flex items-center gap-1.5 px-2.5 h-7 rounded-pill bg-ink text-white text-label uppercase"
             >
-              {kpiFilter === 'heute_faellig' ? 'Heute Fällig' : 'Skonto-Alarm'}
+              {kpiFilter === 'heute_faellig' ? 'Fällig' : 'Skonto'}
               <span className="text-white/70 text-xs">✕</span>
             </button>
           )}
@@ -753,7 +755,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
               </div>
 
               {/* Zeile 2: Aktionen gleichmäßig verteilt */}
-              <div className={cn('grid gap-1.5', r.status !== 'bezahlt' ? 'grid-cols-3' : 'grid-cols-2')}>
+              <div className={cn('grid gap-1.5', r.status !== 'bezahlt' ? 'grid-cols-2' : 'grid-cols-1')}>
                 <button
                   onClick={e => handleExport(e, r.id, 'lexoffice')}
                   className="inline-flex items-center justify-center gap-1 h-8 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"

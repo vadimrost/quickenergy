@@ -29,11 +29,16 @@
   html {
     font-family: 'Inter', system-ui, sans-serif;
     font-feature-settings: 'cv11', 'ss01';
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
   }
 
   body {
     @apply bg-bg-base text-ink antialiased;
     margin: 0;
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+    touch-action: pan-y;
   }
 
   * {
@@ -43,6 +48,8 @@
 
   #root {
     min-height: 100vh;
+    max-width: 100vw;
+    overflow-x: hidden;
   }
 }
 

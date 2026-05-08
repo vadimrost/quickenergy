@@ -55,7 +55,7 @@ export function ExportsPage() {
     <div>
       <PageTitle title="Export-Verlauf" subtitle="Alle sevDesk-Exports im Überblick" />
 
-      <div className="grid grid-cols-3 gap-3 md:gap-5 mb-6">
+      <div className="grid grid-cols-2 gap-3 md:gap-5 mb-6">
         <StatCard label="Exports Gesamt" value={logLoading ? '…' : exportLog.length.toString()} sub={lastExportSub(lastExport, 'Alle Zeiträume')} icon={<ArrowUpFromLine size={16} />} />
         <StatCard label="sevDesk" value={logLoading ? '…' : sevdeskCount.toString()} sub={lastExportSub(lastSevdesk, 'Buchhalter-Exports')} accent />
       </div>
