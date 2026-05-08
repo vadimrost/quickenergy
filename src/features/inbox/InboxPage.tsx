@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, Building2, FileSpreadsheet } from 'lucide-react'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, Building2, FileSpreadsheet, Sparkles } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { PageTitle } from '@/components/shared/PageTitle'
@@ -15,10 +15,11 @@ import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
+import { BulkOcrDialog } from './BulkOcrDialog'
 import { useMitarbeiter } from './useMitarbeiter'
 import { useTriggerExport } from '@/features/exports/useExports'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
-import type { Rechnung, RechnungStatus, ExportZiel } from '@/types/database'
+import type { Rechnung, Rechnungstyp, RechnungStatus, ExportZiel } from '@/types/database'
 
 const ACCEPTED_TYPES = '.pdf,.heic,.heif,.jpg,.jpeg,.png,.webp'
 
@@ -270,6 +271,13 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
 
 type FilterTab = 'alle' | RechnungStatus
 
+const RECHNUNGSTYP_LABEL: Record<Rechnungstyp, string> = {
+  bewirtung: 'Bewirtung',
+  dienstleistung: 'Dienstleistung',
+  tanken_diesel: 'Tank Diesel',
+  tanken_super: 'Tank Super',
+}
+
 const KARTEN: { label: string; value: string }[] = [
   { label: 'Spesen Philipp ···1380', value: 'spesen_philipp_1380' },
   { label: 'Spesen Philipp ···0744', value: 'spesen_philipp_0744' },
@@ -315,6 +323,7 @@ export function InboxPage() {
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [bulkOcrOpen, setBulkOcrOpen] = useState(false)
   const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
   const navigate = useNavigate()
 
@@ -385,12 +394,25 @@ export function InboxPage() {
         onClose={() => setExportOpen(false)}
         rechnungen={allRechnungen}
       />
+      <BulkOcrDialog
+        open={bulkOcrOpen}
+        onClose={() => setBulkOcrOpen(false)}
+        rechnungen={allRechnungen}
+        onRefresh={() => void refetch()}
+      />
 
       {/* Table section */}
       <SectionCard
         title="Rechnungen"
         actions={
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setBulkOcrOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
+            >
+              <Sparkles size={13} />
+              <span className="hidden sm:inline">OCR</span>
+            </button>
             <button
               onClick={() => setExportOpen(true)}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
@@ -500,19 +522,44 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
 
     const rows = monthRechnungen.map(r => {
       const netto = (r.ocr_json as any)?.invoice_net_amount ?? r.betrag
-      const mwst = netto * (r.ust_satz / 100)
-      const brutto = netto + mwst
+      const isBewirtung = r.rechnungstyp === 'bewirtung'
+
+      // For Bewirtung: sum up the individual buckets if available
+      const netto10 = r.betrag_10 ?? null
+      const netto20 = r.betrag_20 ?? null
+      const netto0  = r.betrag_0  ?? null
+      const mwst10  = netto10 != null ? Math.round(netto10 * 0.10 * 100) / 100 : null
+      const mwst20  = netto20 != null ? Math.round(netto20 * 0.20 * 100) / 100 : null
+
+      // Total brutto: prefer breakdown sum, fall back to single rate
+      const bruttoFromBreakdown = isBewirtung && (netto10 != null || netto20 != null || netto0 != null)
+        ? (netto10 ?? 0) + (mwst10 ?? 0) + (netto20 ?? 0) + (mwst20 ?? 0) + (netto0 ?? 0)
+        : null
+      const mwstSingle = netto * (r.ust_satz / 100)
+      const brutto = bruttoFromBreakdown ?? (netto + mwstSingle)
+
       const karteLabel = KARTEN.find(k => k.value === r.karte)?.label ?? r.karte ?? ''
+      const kategorieLabel = r.rechnungstyp ? RECHNUNGSTYP_LABEL[r.rechnungstyp] : ''
+
       return {
         'Lieferant': r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '',
         'Rechnungs-Nr.': r.rechnungsnr,
+        'Kategorie': kategorieLabel,
         'Rechnungsdatum': r.rechnungsdatum ? format(parseISO(r.rechnungsdatum), 'dd.MM.yyyy', { locale: de }) : '',
         'Eingegangen': r.created_at ? format(parseISO(r.created_at), 'dd.MM.yyyy', { locale: de }) : '',
         'Fälligkeit': r.faelligkeit ? format(parseISO(r.faelligkeit), 'dd.MM.yyyy', { locale: de }) : '',
-        'Netto (€)': netto,
-        'USt. (%)': r.ust_satz,
-        'MwSt. (€)': Math.round(mwst * 100) / 100,
+        'Netto gesamt (€)': Math.round(netto * 100) / 100,
+        'USt. (%)': isBewirtung && (netto10 != null || netto20 != null) ? '10% / 20%' : r.ust_satz,
+        'MwSt. gesamt (€)': bruttoFromBreakdown != null
+          ? Math.round(((mwst10 ?? 0) + (mwst20 ?? 0)) * 100) / 100
+          : Math.round(mwstSingle * 100) / 100,
         'Brutto (€)': Math.round(brutto * 100) / 100,
+        // Bewirtung breakdown
+        'Netto 10% (€)': netto10 ?? '',
+        'MwSt. 10% (€)': mwst10 ?? '',
+        'Netto 20% (€)': netto20 ?? '',
+        'MwSt. 20% (€)': mwst20 ?? '',
+        'Trinkgeld 0% (€)': netto0 ?? '',
         'Status': STATUS_LABEL_EXPORT[r.status] ?? r.status,
         'Mitarbeiter': r.mitarbeiter ?? '',
         'Karte': karteLabel,
@@ -521,8 +568,9 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
 
     const ws = XLSX.utils.json_to_sheet(rows)
     ws['!cols'] = [
-      { wch: 24 }, { wch: 18 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
-      { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 },
+      { wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+      { wch: 13 }, { wch: 12 }, { wch: 13 }, { wch: 12 }, { wch: 14 },
       { wch: 14 }, { wch: 18 }, { wch: 22 },
     ]
     const wb = XLSX.utils.book_new()
@@ -716,7 +764,14 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                 </div>
                 <StatusBadge variant={STATUS_VARIANT[r.status]} label={STATUS_LABEL[r.status]} />
               </div>
-              <div className="text-xs font-mono text-ink-muted mb-1">{r.rechnungsnr}</div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-mono text-ink-muted">{r.rechnungsnr}</span>
+                {r.rechnungstyp && (
+                  <span className="text-xs text-ink-subtle bg-bg-muted px-1.5 py-0.5 rounded">
+                    {RECHNUNGSTYP_LABEL[r.rechnungstyp]}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-ink">{formatEuro(getBrutto(r))}</span>
                 <span className="text-xs text-ink-muted">{r.ust_satz}% USt.</span>
@@ -784,7 +839,7 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
         <table className="w-full">
           <thead>
             <tr>
-              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Status', 'Mitarbeiter', 'Karte', 'Aktionen'].map(h => (
+              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Kategorie', 'Status', 'Mitarbeiter', 'Karte', 'Aktionen'].map(h => (
                 <th key={h} className={cn(
                   'label-caps pb-3 border-b border-border/50 text-left font-normal',
                   h === 'Betrag' && 'text-right',
@@ -816,6 +871,9 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
                 </td>
                 <td className="text-sm text-ink-muted pl-6">{r.ust_satz}%</td>
                 <td className="text-sm"><FaelligkeitCell date={r.faelligkeit} /></td>
+                <td className="text-xs text-ink-muted">
+                  {r.rechnungstyp ? RECHNUNGSTYP_LABEL[r.rechnungstyp] : '—'}
+                </td>
                 <td>
                   <StatusBadge
                     variant={STATUS_VARIANT[r.status]}

@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
 import { useTriggerExport } from '@/features/exports/useExports'
-import type { Rechnung, RechnungStatus, ExportZiel } from '@/types/database'
+import type { Rechnung, RechnungStatus, ExportZiel, Rechnungstyp } from '@/types/database'
 import { formatDate, cn } from '@/lib/utils'
 
 interface ExtrahierteFelder_Props {
@@ -43,6 +43,10 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     skonto_datum: rechnung.skonto_datum ?? '',
     skonto_prozent: rechnung.skonto_prozent?.toString() ?? '',
     status: rechnung.status,
+    rechnungstyp: rechnung.rechnungstyp ?? '' as Rechnungstyp | '',
+    betrag_10: rechnung.betrag_10?.toString() ?? '',
+    betrag_20: rechnung.betrag_20?.toString() ?? '',
+    betrag_0: rechnung.betrag_0?.toString() ?? '',
   })
 
   useEffect(() => {
@@ -55,6 +59,10 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
       skonto_datum: rechnung.skonto_datum ?? '',
       skonto_prozent: rechnung.skonto_prozent?.toString() ?? '',
       status: rechnung.status,
+      rechnungstyp: rechnung.rechnungstyp ?? '',
+      betrag_10: rechnung.betrag_10?.toString() ?? '',
+      betrag_20: rechnung.betrag_20?.toString() ?? '',
+      betrag_0: rechnung.betrag_0?.toString() ?? '',
     })
   }, [rechnung])
 
@@ -72,6 +80,10 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
         skonto_datum: form.skonto_datum || null,
         skonto_prozent: form.skonto_prozent ? parseFloat(form.skonto_prozent) : null,
         status: form.status as RechnungStatus,
+        rechnungstyp: (form.rechnungstyp || null) as Rechnungstyp | null,
+        betrag_10: form.rechnungstyp === 'bewirtung' && form.betrag_10 ? parseFloat(form.betrag_10) : null,
+        betrag_20: form.rechnungstyp === 'bewirtung' && form.betrag_20 ? parseFloat(form.betrag_20) : null,
+        betrag_0: form.rechnungstyp === 'bewirtung' && form.betrag_0 ? parseFloat(form.betrag_0) : null,
       },
     })
     toast.success('Rechnung gespeichert')
@@ -114,6 +126,25 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
 
   return (
     <div className="space-y-6">
+      {/* Kategorie */}
+      <div className="card-base p-5">
+        <p className="label-caps mb-4">Kategorie</p>
+        <Select
+          value={form.rechnungstyp}
+          onValueChange={v => setForm(f => ({ ...f, rechnungstyp: v as Rechnungstyp | '' }))}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="— Kategorie wählen" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="bewirtung">Bewirtung</SelectItem>
+            <SelectItem value="dienstleistung">Dienstleistung</SelectItem>
+            <SelectItem value="tanken_diesel">Tanken Diesel</SelectItem>
+            <SelectItem value="tanken_super">Tanken Super</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Rechnungsdaten */}
       <div className="card-base p-5">
         <p className="label-caps mb-4">Rechnungsdaten</p>
@@ -151,9 +182,8 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="0">0%</SelectItem>
-                <SelectItem value="7">7%</SelectItem>
-                <SelectItem value="19">19%</SelectItem>
+                <SelectItem value="10">10%</SelectItem>
+                <SelectItem value="20">20%</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -162,6 +192,65 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
             <span className="label-caps">Bruttobetrag</span>
             <span className="text-base font-semibold text-ink">€ {brutto.toFixed(2)}</span>
           </div>
+
+          {/* Bewirtung: USt-Aufschlüsselung */}
+          {form.rechnungstyp === 'bewirtung' && (
+            <div className="col-span-2 space-y-2 pt-1">
+              <p className="label-caps text-ink-subtle">USt-Aufschlüsselung (Bewirtung)</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="label-caps text-ink-subtle mb-1 block">Netto 10%</Label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
+                    <Input
+                      type="number" step="0.01"
+                      value={form.betrag_10}
+                      onChange={e => setForm(f => ({ ...f, betrag_10: e.target.value }))}
+                      className="pl-6 font-mono text-xs h-8"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="label-caps text-ink-subtle mb-1 block">Netto 20%</Label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
+                    <Input
+                      type="number" step="0.01"
+                      value={form.betrag_20}
+                      onChange={e => setForm(f => ({ ...f, betrag_20: e.target.value }))}
+                      className="pl-6 font-mono text-xs h-8"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="label-caps text-ink-subtle mb-1 block">Trinkgeld 0%</Label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
+                    <Input
+                      type="number" step="0.01"
+                      value={form.betrag_0}
+                      onChange={e => setForm(f => ({ ...f, betrag_0: e.target.value }))}
+                      className="pl-6 font-mono text-xs h-8"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              </div>
+              {(form.betrag_10 || form.betrag_20 || form.betrag_0) && (
+                <div className="flex items-center justify-between bg-bg-muted rounded-card-sm px-3 py-2 text-xs">
+                  <span className="label-caps">USt. gesamt</span>
+                  <span className="font-mono font-semibold text-ink">
+                    € {(
+                      parseFloat(form.betrag_10 || '0') * 0.10 +
+                      parseFloat(form.betrag_20 || '0') * 0.20
+                    ).toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
