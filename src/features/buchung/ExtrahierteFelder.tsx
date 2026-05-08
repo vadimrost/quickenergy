@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { CreditCard, X, AlertTriangle, ArrowUpFromLine } from 'lucide-react'
+import { CreditCard, X, AlertTriangle, ArrowUpFromLine, Sparkles, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
 import { useTriggerExport } from '@/features/exports/useExports'
+import { geminiOcr, pdfUrlToBase64, normalizeDate, resolveCard } from '@/lib/gemini-ocr'
 import type { Rechnung, RechnungStatus, ExportZiel, Rechnungstyp } from '@/types/database'
 import { formatDate, cn } from '@/lib/utils'
 
@@ -38,6 +39,45 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const { mutate: triggerExport, isPending: isExporting } = useTriggerExport()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmingZiel, setConfirmingZiel] = useState<ExportZiel | null>(null)
+  const [ocrLoading, setOcrLoading] = useState(false)
+
+  const handleOcr = async () => {
+    if (!rechnung.pdf_url || rechnung.pdf_url === 'demo') return
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY
+    if (!apiKey) { toast.error('VITE_GEMINI_API_KEY nicht gesetzt'); return }
+    setOcrLoading(true)
+    try {
+      const base64 = await pdfUrlToBase64(rechnung.pdf_url)
+      const ocr = await geminiOcr(base64, apiKey)
+      const updated: string[] = []
+      const validTypes = ['bewirtung', 'dienstleistung', 'tanken_diesel', 'tanken_super']
+      setForm(f => {
+        const next = { ...f }
+        if (ocr.invoice_date) { next.rechnungsdatum = normalizeDate(ocr.invoice_date) ?? f.rechnungsdatum; updated.push('Rechnungsdatum') }
+        if (ocr.due_date)     { next.faelligkeit    = normalizeDate(ocr.due_date)     ?? f.faelligkeit;    updated.push('Fälligkeit') }
+        if (ocr.invoice_number?.trim()) { next.rechnungsnr = ocr.invoice_number.trim(); updated.push('Rechnungs-Nr.') }
+        if (ocr.net_amount)   { next.betrag   = String(ocr.net_amount);  updated.push('Betrag') }
+        if (ocr.tax_rate)     { next.ust_satz = String(ocr.tax_rate);    updated.push('USt.') }
+        if (ocr.invoice_type && validTypes.includes(ocr.invoice_type)) {
+          next.rechnungstyp = ocr.invoice_type as Rechnungstyp
+          updated.push('Kategorie')
+        }
+        if (ocr.net_amount_10 != null) { next.betrag_10 = String(ocr.net_amount_10); updated.push('Netto 10%') }
+        if (ocr.net_amount_20 != null) { next.betrag_20 = String(ocr.net_amount_20); updated.push('Netto 20%') }
+        if (ocr.net_amount_0  != null) { next.betrag_0  = String(ocr.net_amount_0);  updated.push('Trinkgeld') }
+        if (ocr.tax_amount_10 != null) { next.mwst_10 = String(ocr.tax_amount_10) }
+        if (ocr.tax_amount_20 != null) { next.mwst_20 = String(ocr.tax_amount_20) }
+        const card = resolveCard(ocr.card_last_four)
+        if (card) { next.karte = card; updated.push('Karte') }
+        return next
+      })
+      toast.success(updated.length > 0 ? `OCR: ${updated.join(', ')}` : 'Keine neuen Felder gefunden')
+    } catch (err) {
+      toast.error(`OCR fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
+    } finally {
+      setOcrLoading(false)
+    }
+  }
 
   const ocrNetto = (rechnung.ocr_json as any)?.invoice_net_amount
   const nettoWert = ocrNetto ?? rechnung.betrag
@@ -56,6 +96,8 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     betrag_10: rechnung.betrag_10?.toString() ?? '',
     betrag_20: rechnung.betrag_20?.toString() ?? '',
     betrag_0: rechnung.betrag_0?.toString() ?? '',
+    mwst_10: rechnung.mwst_10?.toString() ?? '',
+    mwst_20: rechnung.mwst_20?.toString() ?? '',
   })
 
   useEffect(() => {
@@ -74,6 +116,8 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
       betrag_10: rechnung.betrag_10?.toString() ?? '',
       betrag_20: rechnung.betrag_20?.toString() ?? '',
       betrag_0: rechnung.betrag_0?.toString() ?? '',
+      mwst_10: rechnung.mwst_10?.toString() ?? '',
+      mwst_20: rechnung.mwst_20?.toString() ?? '',
     })
   }, [rechnung])
 
@@ -94,9 +138,11 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
         status: form.status as RechnungStatus,
         karte: form.karte || null,
         rechnungstyp: (form.rechnungstyp || null) as Rechnungstyp | null,
-        betrag_10: form.rechnungstyp === 'bewirtung' && form.betrag_10 ? parseFloat(form.betrag_10) : null,
-        betrag_20: form.rechnungstyp === 'bewirtung' && form.betrag_20 ? parseFloat(form.betrag_20) : null,
+        betrag_10: form.betrag_10 ? parseFloat(form.betrag_10) : null,
+        betrag_20: form.betrag_20 ? parseFloat(form.betrag_20) : null,
         betrag_0: form.rechnungstyp === 'bewirtung' && form.betrag_0 ? parseFloat(form.betrag_0) : null,
+        mwst_10: form.mwst_10 ? parseFloat(form.mwst_10) : null,
+        mwst_20: form.mwst_20 ? parseFloat(form.mwst_20) : null,
       },
     })
     toast.success('Rechnung gespeichert')
@@ -139,6 +185,20 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
 
   return (
     <div className="space-y-6">
+      {/* OCR Button */}
+      {rechnung.pdf_url && rechnung.pdf_url !== 'demo' && (
+        <button
+          onClick={handleOcr}
+          disabled={ocrLoading}
+          className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-card border border-border/60 text-sm font-medium text-ink-muted hover:bg-bg-muted transition-colors disabled:opacity-40"
+        >
+          {ocrLoading
+            ? <><Loader2 size={14} className="animate-spin" /> OCR läuft…</>
+            : <><Sparkles size={14} /> Felder per OCR ergänzen</>
+          }
+        </button>
+      )}
+
       {/* Kategorie */}
       <div className="card-base p-5">
         <p className="label-caps mb-4">Kategorie</p>
@@ -210,69 +270,101 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
             </Select>
           </div>
 
+          {/* MwSt-Zeile für Dienstleistung (einfacher Steuersatz) */}
+          {!(['bewirtung', 'tanken_diesel', 'tanken_super'] as const).includes(form.rechnungstyp as any) && (
+            <div className="col-span-2 flex items-center justify-between bg-bg-muted/50 rounded-card-sm px-3 py-2">
+              <span className="label-caps">MwSt ({form.ust_satz}%)</span>
+              <span className="text-sm font-mono text-status-warning">
+                € {(parseFloat(form.betrag || '0') * parseFloat(form.ust_satz || '0') / 100).toFixed(2)}
+              </span>
+            </div>
+          )}
+
           <div className="col-span-2 flex items-center justify-between bg-bg-muted rounded-card-sm px-3 py-2.5">
             <span className="label-caps">Bruttobetrag</span>
             <span className="text-base font-semibold text-ink">€ {brutto.toFixed(2)}</span>
           </div>
 
-          {/* Bewirtung: USt-Aufschlüsselung */}
-          {form.rechnungstyp === 'bewirtung' && (
-            <div className="col-span-2 space-y-2 pt-1">
-              <p className="label-caps text-ink-subtle">USt-Aufschlüsselung (Bewirtung)</p>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <Label className="label-caps text-ink-subtle mb-1 block">Netto 10%</Label>
+          {/* MwSt-Aufschlüsselung: Bewirtung + Tanken */}
+          {(['bewirtung', 'tanken_diesel', 'tanken_super'] as const).includes(form.rechnungstyp as any) && (() => {
+            const n10 = parseFloat(form.betrag_10 || '0')
+            const n20 = parseFloat(form.betrag_20 || '0')
+            const n0  = parseFloat(form.betrag_0  || '0')
+            // Use OCR-extracted MwSt amounts when available (avoids 1-cent rounding error)
+            const t10 = form.mwst_10 ? parseFloat(form.mwst_10) : Math.round(n10 * 0.10 * 100) / 100
+            const t20 = form.mwst_20 ? parseFloat(form.mwst_20) : Math.round(n20 * 0.20 * 100) / 100
+            const totalNetto  = Math.round((n10 + n20 + n0) * 100) / 100
+            const totalMwst   = Math.round((t10 + t20) * 100) / 100
+            const totalBrutto = Math.round((n10 + t10 + n20 + t20 + n0) * 100) / 100
+            return (
+              <div className="col-span-2 pt-1">
+                <p className="label-caps text-ink-subtle mb-2">MwSt-Aufschlüsselung</p>
+                {/* Header */}
+                <div className="grid grid-cols-4 gap-1 mb-1 px-1">
+                  {['Satz', 'Netto', 'MwSt', 'Brutto'].map(h => (
+                    <span key={h} className="label-caps text-ink-subtle text-right first:text-left">{h}</span>
+                  ))}
+                </div>
+                {/* 10% row */}
+                <div className="grid grid-cols-4 gap-1 items-center mb-1">
+                  <span className="text-xs font-medium text-ink">10%</span>
                   <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
-                    <Input
-                      type="number" step="0.01"
-                      value={form.betrag_10}
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
+                    <Input type="number" step="0.01" value={form.betrag_10}
                       onChange={e => setForm(f => ({ ...f, betrag_10: e.target.value }))}
-                      className="pl-6 font-mono text-xs h-8"
-                      placeholder="0.00"
-                    />
+                      className="pl-5 font-mono text-xs h-8 text-right" placeholder="—" />
+                  </div>
+                  <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink-muted">
+                    {n10 > 0 ? `€ ${t10.toFixed(2)}` : '—'}
+                  </div>
+                  <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink">
+                    {n10 > 0 ? `€ ${(n10 + t10).toFixed(2)}` : '—'}
                   </div>
                 </div>
-                <div>
-                  <Label className="label-caps text-ink-subtle mb-1 block">Netto 20%</Label>
+                {/* 20% row */}
+                <div className="grid grid-cols-4 gap-1 items-center mb-1">
+                  <span className="text-xs font-medium text-ink">20%</span>
                   <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
-                    <Input
-                      type="number" step="0.01"
-                      value={form.betrag_20}
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
+                    <Input type="number" step="0.01" value={form.betrag_20}
                       onChange={e => setForm(f => ({ ...f, betrag_20: e.target.value }))}
-                      className="pl-6 font-mono text-xs h-8"
-                      placeholder="0.00"
-                    />
+                      className="pl-5 font-mono text-xs h-8 text-right" placeholder="—" />
+                  </div>
+                  <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink-muted">
+                    {n20 > 0 ? `€ ${t20.toFixed(2)}` : '—'}
+                  </div>
+                  <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink">
+                    {n20 > 0 ? `€ ${(n20 + t20).toFixed(2)}` : '—'}
                   </div>
                 </div>
-                <div>
-                  <Label className="label-caps text-ink-subtle mb-1 block">Trinkgeld 0%</Label>
-                  <div className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
-                    <Input
-                      type="number" step="0.01"
-                      value={form.betrag_0}
-                      onChange={e => setForm(f => ({ ...f, betrag_0: e.target.value }))}
-                      className="pl-6 font-mono text-xs h-8"
-                      placeholder="0.00"
-                    />
+                {/* 0% row — nur Bewirtung */}
+                {form.rechnungstyp === 'bewirtung' && (
+                  <div className="grid grid-cols-4 gap-1 items-center mb-1">
+                    <span className="text-xs font-medium text-ink">0% Tipp</span>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-muted text-xs">€</span>
+                      <Input type="number" step="0.01" value={form.betrag_0}
+                        onChange={e => setForm(f => ({ ...f, betrag_0: e.target.value }))}
+                        className="pl-5 font-mono text-xs h-8 text-right" placeholder="—" />
+                    </div>
+                    <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink-muted">—</div>
+                    <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink">
+                      {n0 > 0 ? `€ ${n0.toFixed(2)}` : '—'}
+                    </div>
                   </div>
-                </div>
+                )}
+                {/* Summenzeile */}
+                {(n10 > 0 || n20 > 0 || n0 > 0) && (
+                  <div className="grid grid-cols-4 gap-1 mt-1 pt-1 border-t border-border/50">
+                    <span className="label-caps text-ink">Σ</span>
+                    <div className="text-right px-2 text-xs font-mono font-semibold text-ink">€ {totalNetto.toFixed(2)}</div>
+                    <div className="text-right px-2 text-xs font-mono font-semibold text-status-warning">€ {totalMwst.toFixed(2)}</div>
+                    <div className="text-right px-2 text-xs font-mono font-semibold text-ink">€ {totalBrutto.toFixed(2)}</div>
+                  </div>
+                )}
               </div>
-              {(form.betrag_10 || form.betrag_20 || form.betrag_0) && (
-                <div className="flex items-center justify-between bg-bg-muted rounded-card-sm px-3 py-2 text-xs">
-                  <span className="label-caps">USt. gesamt</span>
-                  <span className="font-mono font-semibold text-ink">
-                    € {(
-                      parseFloat(form.betrag_10 || '0') * 0.10 +
-                      parseFloat(form.betrag_20 || '0') * 0.20
-                    ).toFixed(2)}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+            )
+          })()}
         </div>
       </div>
 

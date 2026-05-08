@@ -14,6 +14,8 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { geminiOcr, fileToBase64, normalizeDate, resolveCard } from '@/lib/gemini-ocr'
+import { supabase } from '@/lib/supabase'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
 import { BulkOcrDialog } from './BulkOcrDialog'
 import { useMitarbeiter } from './useMitarbeiter'
@@ -23,8 +25,8 @@ import type { Rechnung, Rechnungstyp, RechnungStatus, ExportZiel } from '@/types
 
 const ACCEPTED_TYPES = '.pdf,.heic,.heif,.jpg,.jpeg,.png,.webp'
 
-type FileStatus = 'pending' | 'converting' | 'uploading' | 'done' | 'error'
-interface FileEntry { id: string; name: string; status: FileStatus; error?: string }
+type FileStatus = 'pending' | 'converting' | 'uploading' | 'ocr' | 'done' | 'error'
+interface FileEntry { id: string; name: string; status: FileStatus; error?: string; supplier?: string }
 
 function isImageFile(file: File): boolean {
   return file.type.startsWith('image/') || /\.(heic|heif|jpe?g|png|webp)$/i.test(file.name)
@@ -92,9 +94,37 @@ async function convertImageToPdf(file: File): Promise<File> {
 }
 
 function FileStatusIcon({ status }: { status: FileStatus }) {
-  if (status === 'done') return <CheckCircle size={14} className="text-status-active flex-shrink-0" />
+  if (status === 'done')  return <CheckCircle size={14} className="text-status-active flex-shrink-0" />
   if (status === 'error') return <span className="text-status-danger text-xs flex-shrink-0">✕</span>
   return <Loader2 size={14} className="text-accent-500 animate-spin flex-shrink-0" />
+}
+
+function fileStatusLabel(status: FileStatus): string {
+  switch (status) {
+    case 'pending':    return 'Wartend…'
+    case 'converting': return 'Konvertierung…'
+    case 'uploading':  return 'Hochladen…'
+    case 'ocr':        return 'OCR läuft…'
+    case 'done':       return 'Fertig'
+    default:           return ''
+  }
+}
+
+async function findOrCreateLieferant(name: string | null | undefined): Promise<string | null> {
+  if (!name?.trim()) return null
+  const { data: existing } = await supabase
+    .from('lieferanten')
+    .select('id')
+    .ilike('name', name.trim())
+    .limit(1)
+    .maybeSingle()
+  if (existing) return existing.id
+  const { data: created } = await supabase
+    .from('lieferanten')
+    .insert({ name: name.trim(), ustid: null, iban: null, auto_kostengruppe: null, anzahl_rechnungen: 1 })
+    .select('id')
+    .single()
+  return created?.id ?? null
 }
 
 function PdfUploadDialog({ open, onClose, onRefresh }: {
@@ -117,7 +147,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
   }, [])
 
   const processFiles = useCallback(async (files: File[]) => {
-    const webhookUrl = import.meta.env.VITE_N8N_OCR_WEBHOOK_URL as string | undefined
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
     const valid = files.filter(f =>
       f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || isImageFile(f)
     )
@@ -128,38 +158,86 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
     }))
     setEntries(prev => [...prev, ...newEntries])
 
-    // Alle Dateien parallel verarbeiten
-    await Promise.allSettled(valid.map(async (file, i) => {
+    // Sequenziell verarbeiten (Gemini Rate-Limit)
+    for (let i = 0; i < valid.length; i++) {
+      const file = valid[i]
       const { id } = newEntries[i]
-      let uploadFile = file
+      let pdfFile = file
 
+      // 1. Bild → PDF
       if (isImageFile(file)) {
         updateEntry(id, { status: 'converting' })
         try {
-          uploadFile = await convertImageToPdf(file)
+          pdfFile = await convertImageToPdf(file)
         } catch (err) {
           updateEntry(id, { status: 'error', error: err instanceof Error ? err.message : 'Konvertierung fehlgeschlagen' })
-          return
+          continue
         }
       }
 
+      // 2. Upload → Supabase Storage
       updateEntry(id, { status: 'uploading' })
+      const storagePath = `${Date.now()}_${pdfFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const { error: storageError } = await supabase.storage
+        .from('rechnungen')
+        .upload(storagePath, pdfFile, { contentType: 'application/pdf', upsert: false })
+      if (storageError) {
+        updateEntry(id, { status: 'error', error: `Storage: ${storageError.message}` })
+        continue
+      }
+      const { data: { publicUrl } } = supabase.storage.from('rechnungen').getPublicUrl(storagePath)
 
-      if (!webhookUrl) {
-        updateEntry(id, { status: 'error', error: 'OCR-Webhook nicht konfiguriert (VITE_N8N_OCR_WEBHOOK_URL fehlt)' })
-        return
+      // 3. Gemini OCR
+      updateEntry(id, { status: 'ocr' })
+      let ocr: Awaited<ReturnType<typeof geminiOcr>> | null = null
+      if (apiKey) {
+        try {
+          const base64 = await fileToBase64(pdfFile)
+          ocr = await geminiOcr(base64, apiKey)
+        } catch {
+          // OCR-Fehler → trotzdem Rechnung mit Platzhaltern anlegen
+        }
       }
 
-      try {
-        const formData = new FormData()
-        formData.append('file', uploadFile)
-        const res = await fetch(webhookUrl, { method: 'POST', body: formData })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        updateEntry(id, { status: 'done' })
-      } catch (err) {
-        updateEntry(id, { status: 'error', error: err instanceof Error ? err.message : 'Upload fehlgeschlagen' })
+      // 4. Lieferant suchen / anlegen
+      const lieferantId = await findOrCreateLieferant(ocr?.supplier_name)
+
+      // 5. Rechnung einfügen
+      const validTypes = ['bewirtung', 'dienstleistung', 'tanken_diesel', 'tanken_super']
+      const rechnungstyp = ocr?.invoice_type && validTypes.includes(ocr.invoice_type)
+        ? ocr.invoice_type as any
+        : null
+
+      const { error: insertError } = await supabase.from('rechnungen').insert({
+        pdf_url:       publicUrl,
+        rechnungsnr:   ocr?.invoice_number?.trim() || `BELEG-${Date.now()}`,
+        betrag:        ocr?.net_amount        ?? 0,
+        ust_satz:      ocr?.tax_rate          ?? 20,
+        faelligkeit:   normalizeDate(ocr?.due_date),
+        rechnungsdatum: normalizeDate(ocr?.invoice_date),
+        rechnungstyp,
+        betrag_10:     ocr?.net_amount_10  ?? null,
+        betrag_20:     ocr?.net_amount_20  ?? null,
+        betrag_0:      ocr?.net_amount_0   ?? null,
+        mwst_10:       ocr?.tax_amount_10  ?? null,
+        mwst_20:       ocr?.tax_amount_20  ?? null,
+        karte:         resolveCard(ocr?.card_last_four),
+        status:        'eingegangen',
+        lieferant_id:  lieferantId,
+        mitarbeiter:   null,
+        skonto_datum:  null,
+        skonto_prozent: null,
+        ocr_json:      ocr as any ?? null,
+      })
+
+      if (insertError) {
+        updateEntry(id, { status: 'error', error: insertError.message })
+        continue
       }
-    }))
+
+      updateEntry(id, { status: 'done', supplier: ocr?.supplier_name ?? undefined })
+      await new Promise(r => setTimeout(r, 500))
+    }
 
     onRefresh()
   }, [updateEntry, onRefresh])
@@ -204,10 +282,8 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
                       {entry.error
                         ? <p className="text-xs text-status-danger truncate">{entry.error}</p>
                         : <p className="text-xs text-ink-muted">
-                            {entry.status === 'pending' && 'Wartend…'}
-                            {entry.status === 'converting' && 'Konvertierung…'}
-                            {entry.status === 'uploading' && 'Wird gesendet…'}
-                            {entry.status === 'done' && 'Fertig'}
+                            {entry.status !== 'done' && fileStatusLabel(entry.status)}
+                            {entry.status === 'done' && (entry.supplier ?? 'Fertig')}
                           </p>
                       }
                     </div>
@@ -509,10 +585,7 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
   const currentMonth = format(new Date(), 'yyyy-MM')
   const [month, setMonth] = useState(currentMonth)
 
-  const monthRechnungen = rechnungen.filter(r => {
-    const date = r.faelligkeit || r.created_at
-    return date?.startsWith(month)
-  })
+  const monthRechnungen = rechnungen.filter(r => r.rechnungsdatum?.startsWith(month))
 
   const handleExport = () => {
     if (monthRechnungen.length === 0) {

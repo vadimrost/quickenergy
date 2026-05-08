@@ -58,6 +58,8 @@ export interface Rechnung {
   betrag_10: number | null
   betrag_20: number | null
   betrag_0: number | null
+  mwst_10: number | null
+  mwst_20: number | null
   created_at: string
   lieferant?: Lieferant | null
 }

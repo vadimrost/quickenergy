@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, Loader2, KeyRound, Sparkles, SkipForward } from '
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import { normalizeDate, pdfUrlToBase64, resolveCard, CARD_MAP, geminiOcr } from '@/lib/gemini-ocr'
 import type { Rechnung } from '@/types/database'
 
 type ResultStatus = 'pending' | 'processing' | 'done' | 'error' | 'skipped'
@@ -13,106 +14,6 @@ interface OcrResult {
   status: ResultStatus
   updated: string[]
   error?: string
-}
-
-function normalizeDate(raw: string | null | undefined): string | null {
-  if (!raw) return null
-  const s = String(raw).trim()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  if (s.includes('.')) {
-    const parts = s.split('.')
-    if (parts.length === 3) {
-      const [d, m, y] = parts
-      return `${y.trim()}-${m.trim().padStart(2, '0')}-${d.trim().padStart(2, '0')}`
-    }
-  }
-  const p = new Date(s)
-  return isNaN(p.getTime()) ? null : p.toISOString().split('T')[0]
-}
-
-async function pdfUrlToBase64(url: string): Promise<string> {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`PDF nicht ladbar (${res.status})`)
-  const blob = await res.blob()
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve((reader.result as string).split(',')[1])
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
-
-const CARD_MAP: Record<string, string> = {
-  '1380': 'spesen_philipp_1380',
-  '0744': 'spesen_philipp_0744',
-  '6362': 'firmenkarte_6362',
-  '0660': 'firmenkarte_0660',
-}
-
-function resolveCard(lastFour: string | null | undefined): string | null {
-  if (!lastFour) return null
-  return CARD_MAP[String(lastFour).trim()] ?? null
-}
-
-async function geminiOcr(base64: string, apiKey: string): Promise<Record<string, any>> {
-  const prompt = `Analysiere diese Rechnung und extrahiere alle Felder als JSON.
-
-KATEGORIEN (invoice_type):
-- "tanken_diesel" → Tankquittung mit Diesel
-- "tanken_super"  → Tankquittung mit Benzin/Super/E10/E5
-- "bewirtung"     → Restaurant, Café, Essen, Bewirtung
-- "dienstleistung" → alles andere (IT, Handwerk, Beratung, etc.)
-
-MEHRWERTSTEUER bei Bewirtung:
-- net_amount_10: Nettobetrag für Positionen mit 10% MwSt (Speisen)
-- net_amount_20: Nettobetrag für Positionen mit 20% MwSt (Getränke, Sonstiges)
-- net_amount_0:  Betrag ohne MwSt (z.B. Trinkgeld)
-- Wenn keine Aufschlüsselung vorhanden: nur net_amount füllen, rest null
-- Bei anderen Kategorien: nur net_amount, die drei Einzelfelder auf null setzen
-
-KARTE: card_last_four = letzte 4 Ziffern der Kreditkarte falls auf Beleg sichtbar, sonst null.
-DATUM: immer Format YYYY-MM-DD.`
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: 'application/pdf', data: base64 } },
-            { text: prompt },
-          ],
-        }],
-        generationConfig: {
-          response_mime_type: 'application/json',
-          response_schema: {
-            type: 'OBJECT',
-            properties: {
-              invoice_date:   { type: 'STRING', nullable: true },
-              due_date:       { type: 'STRING', nullable: true },
-              invoice_number: { type: 'STRING', nullable: true },
-              net_amount:     { type: 'NUMBER', nullable: true },
-              tax_rate:       { type: 'NUMBER', nullable: true },
-              net_amount_10:  { type: 'NUMBER', nullable: true },
-              net_amount_20:  { type: 'NUMBER', nullable: true },
-              net_amount_0:   { type: 'NUMBER', nullable: true },
-              invoice_type:   { type: 'STRING', nullable: true },
-              card_last_four: { type: 'STRING', nullable: true },
-            },
-          },
-        },
-      }),
-    }
-  )
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message ?? `Gemini Fehler ${res.status}`)
-  }
-  const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  return typeof text === 'string' ? JSON.parse(text) : (text ?? {})
 }
 
 function isPlaceholderNr(nr: string) {
@@ -137,11 +38,14 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
 }) {
   const [apiKey, setApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY ?? '')
   const [limit, setLimit] = useState<number>(5)
+  const [forceAll, setForceAll] = useState(false)
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [results, setResults] = useState<OcrResult[]>([])
 
-  const allToProcess = rechnungen.filter(needsProcessing)
+  const allToProcess = rechnungen
+    .filter(r => forceAll ? r.pdf_url && r.pdf_url !== 'demo' : needsProcessing(r))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
   const toProcess = limit === 0 ? allToProcess : allToProcess.slice(0, limit)
 
   const updateResult = useCallback((id: string, patch: Partial<OcrResult>) => {
@@ -200,30 +104,36 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
 
         // Kategorie
         const validTypes = ['bewirtung', 'dienstleistung', 'tanken_diesel', 'tanken_super']
-        if (ocr.invoice_type && validTypes.includes(ocr.invoice_type) && !r.rechnungstyp) {
+        if (ocr.invoice_type && validTypes.includes(ocr.invoice_type) && (forceAll || !r.rechnungstyp)) {
           updates.rechnungstyp = ocr.invoice_type
           updated.push('Kategorie')
         }
 
-        // MwSt-Aufschlüsselung (nur bei Bewirtung)
+        // MwSt-Aufschlüsselung: Bewirtung + Tanken (kann gemischte Sätze haben)
         const typ = (updates.rechnungstyp ?? r.rechnungstyp)
-        if (typ === 'bewirtung') {
-          if (ocr.net_amount_10 != null && !r.betrag_10) {
+        if (typ === 'bewirtung' || typ === 'tanken_diesel' || typ === 'tanken_super') {
+          if (ocr.net_amount_10 != null && (forceAll || !r.betrag_10)) {
             updates.betrag_10 = Number(ocr.net_amount_10)
             updated.push('Netto 10%')
           }
-          if (ocr.net_amount_20 != null && !r.betrag_20) {
+          if (ocr.net_amount_20 != null && (forceAll || !r.betrag_20)) {
             updates.betrag_20 = Number(ocr.net_amount_20)
             updated.push('Netto 20%')
           }
-          if (ocr.net_amount_0 != null && !r.betrag_0) {
+          if (ocr.net_amount_0 != null && (forceAll || !r.betrag_0)) {
             updates.betrag_0 = Number(ocr.net_amount_0)
             updated.push('Trinkgeld 0%')
+          }
+          if (ocr.tax_amount_10 != null && (forceAll || !r.mwst_10)) {
+            updates.mwst_10 = Number(ocr.tax_amount_10)
+          }
+          if (ocr.tax_amount_20 != null && (forceAll || !r.mwst_20)) {
+            updates.mwst_20 = Number(ocr.tax_amount_20)
           }
         }
 
         const resolvedCard = resolveCard(ocr.card_last_four)
-        if (resolvedCard && !r.karte) {
+        if (resolvedCard && (forceAll || !r.karte)) {
           updates.karte = resolvedCard
           updated.push('Karte')
         }
@@ -312,6 +222,27 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
                 </div>
               </div>
 
+              {/* Überschreiben-Toggle */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <div
+                  onClick={() => setForceAll(v => !v)}
+                  className={cn(
+                    'w-8 h-4.5 rounded-full transition-colors relative flex-shrink-0',
+                    forceAll ? 'bg-ink' : 'bg-border'
+                  )}
+                  style={{ height: '18px', width: '32px' }}
+                >
+                  <div className={cn(
+                    'absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform',
+                    forceAll ? 'translate-x-4' : 'translate-x-0.5'
+                  )} />
+                </div>
+                <span className="text-xs text-ink-muted">
+                  Bestehende Felder überschreiben
+                  {forceAll && <span className="ml-1 text-ink font-medium">(alle PDFs)</span>}
+                </span>
+              </label>
+
               <div className="rounded-card border border-border p-3.5 space-y-1.5 bg-bg-muted/30">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-ink-muted">Werden verarbeitet</span>
@@ -323,10 +254,10 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-ink-muted">Fehlende Felder gesucht</span>
-                  <span className="text-xs text-ink-muted">Datum · Nr. · Kategorie · MwSt · Karte</span>
+                  <span className="text-xs text-ink-muted">Modus</span>
+                  <span className="text-xs text-ink-muted">{forceAll ? 'Alle Felder neu' : 'Nur fehlende Felder'}</span>
                 </div>
-                {allToProcess.length === 0 && (
+                {allToProcess.length === 0 && !forceAll && (
                   <p className="text-xs text-status-active font-medium pt-1">Alle Felder bereits befüllt ✓</p>
                 )}
               </div>
