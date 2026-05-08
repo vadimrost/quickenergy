@@ -135,12 +135,14 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
   rechnungen: Rechnung[]
   onRefresh: () => void
 }) {
-  const [apiKey, setApiKey] = useState('')
+  const [apiKey, setApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY ?? '')
+  const [limit, setLimit] = useState<number>(5)
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [results, setResults] = useState<OcrResult[]>([])
 
-  const toProcess = rechnungen.filter(needsProcessing)
+  const allToProcess = rechnungen.filter(needsProcessing)
+  const toProcess = limit === 0 ? allToProcess : allToProcess.slice(0, limit)
 
   const updateResult = useCallback((id: string, patch: Partial<OcrResult>) => {
     setResults(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r))
@@ -290,16 +292,41 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
                 <p className="text-xs text-ink-muted mt-1.5">Wird nur für diese Sitzung verwendet, nicht gespeichert.</p>
               </div>
 
+              <div>
+                <label className="label-caps block mb-1.5">Anzahl Rechnungen</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[5, 10, 20, 0].map(n => (
+                    <button
+                      key={n}
+                      onClick={() => setLimit(n)}
+                      className={cn(
+                        'h-8 rounded-card-sm text-sm font-medium border transition-colors',
+                        limit === n
+                          ? 'bg-ink text-white border-ink'
+                          : 'border-border text-ink-muted hover:bg-bg-muted'
+                      )}
+                    >
+                      {n === 0 ? 'Alle' : n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="rounded-card border border-border p-3.5 space-y-1.5 bg-bg-muted/30">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-ink-muted">Rechnungen zum Verarbeiten</span>
-                  <span className="text-xs font-semibold text-ink">{toProcess.length}</span>
+                  <span className="text-xs text-ink-muted">Werden verarbeitet</span>
+                  <span className="text-xs font-semibold text-ink">
+                    {toProcess.length}
+                    {limit !== 0 && allToProcess.length > limit && (
+                      <span className="text-ink-subtle font-normal"> von {allToProcess.length}</span>
+                    )}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-ink-muted">Fehlende Felder gesucht</span>
-                  <span className="text-xs text-ink-muted">Datum · Fälligkeit · Nr. · Kategorie · MwSt · Karte</span>
+                  <span className="text-xs text-ink-muted">Datum · Nr. · Kategorie · MwSt · Karte</span>
                 </div>
-                {toProcess.length === 0 && (
+                {allToProcess.length === 0 && (
                   <p className="text-xs text-status-active font-medium pt-1">Alle Felder bereits befüllt ✓</p>
                 )}
               </div>

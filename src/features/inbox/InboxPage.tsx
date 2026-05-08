@@ -563,15 +563,30 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
         'Status': STATUS_LABEL_EXPORT[r.status] ?? r.status,
         'Mitarbeiter': r.mitarbeiter ?? '',
         'Karte': karteLabel,
+        'PDF': r.pdf_url && r.pdf_url !== 'demo' ? r.pdf_url : '',
       }
     })
 
     const ws = XLSX.utils.json_to_sheet(rows)
+
+    // Make PDF column cells proper hyperlinks
+    const pdfColIndex = Object.keys(rows[0] ?? {}).indexOf('PDF')
+    if (pdfColIndex >= 0) {
+      rows.forEach((row, rowIdx) => {
+        const url = (row as any)['PDF']
+        if (!url) return
+        const cellAddr = XLSX.utils.encode_cell({ c: pdfColIndex, r: rowIdx + 1 })
+        if (ws[cellAddr]) {
+          ws[cellAddr].l = { Target: url, Tooltip: 'PDF öffnen' }
+        }
+      })
+    }
+
     ws['!cols'] = [
       { wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
       { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
       { wch: 13 }, { wch: 12 }, { wch: 13 }, { wch: 12 }, { wch: 14 },
-      { wch: 14 }, { wch: 18 }, { wch: 22 },
+      { wch: 14 }, { wch: 18 }, { wch: 22 }, { wch: 60 },
     ]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Rechnungen')

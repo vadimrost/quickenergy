@@ -15,6 +15,13 @@ interface ExtrahierteFelder_Props {
   rechnung: Rechnung
 }
 
+const KARTEN: { label: string; value: string }[] = [
+  { label: 'Spesen Philipp ···1380', value: 'spesen_philipp_1380' },
+  { label: 'Spesen Philipp ···0744', value: 'spesen_philipp_0744' },
+  { label: 'Firmenkarte ···6362',    value: 'firmenkarte_6362' },
+  { label: 'Firmenkarte ···0660',    value: 'firmenkarte_0660' },
+]
+
 const STATUS_LABELS: Record<RechnungStatus, string> = {
   eingegangen: 'Neu',
   geprüft: 'Neu',
@@ -37,12 +44,14 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
 
   const [form, setForm] = useState({
     rechnungsnr: rechnung.rechnungsnr,
+    rechnungsdatum: rechnung.rechnungsdatum ?? '',
     betrag: nettoWert.toString(),
     ust_satz: rechnung.ust_satz.toString(),
     faelligkeit: rechnung.faelligkeit ?? '',
     skonto_datum: rechnung.skonto_datum ?? '',
     skonto_prozent: rechnung.skonto_prozent?.toString() ?? '',
     status: rechnung.status,
+    karte: rechnung.karte ?? '',
     rechnungstyp: rechnung.rechnungstyp ?? '' as Rechnungstyp | '',
     betrag_10: rechnung.betrag_10?.toString() ?? '',
     betrag_20: rechnung.betrag_20?.toString() ?? '',
@@ -53,12 +62,14 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     const ocrNettoVal = (rechnung.ocr_json as any)?.invoice_net_amount
     setForm({
       rechnungsnr: rechnung.rechnungsnr,
+      rechnungsdatum: rechnung.rechnungsdatum ?? '',
       betrag: (ocrNettoVal ?? rechnung.betrag).toString(),
       ust_satz: rechnung.ust_satz.toString(),
       faelligkeit: rechnung.faelligkeit ?? '',
       skonto_datum: rechnung.skonto_datum ?? '',
       skonto_prozent: rechnung.skonto_prozent?.toString() ?? '',
       status: rechnung.status,
+      karte: rechnung.karte ?? '',
       rechnungstyp: rechnung.rechnungstyp ?? '',
       betrag_10: rechnung.betrag_10?.toString() ?? '',
       betrag_20: rechnung.betrag_20?.toString() ?? '',
@@ -74,12 +85,14 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
       id: rechnung.id,
       updates: {
         rechnungsnr: form.rechnungsnr,
+        rechnungsdatum: form.rechnungsdatum || null,
         betrag: parseFloat(form.betrag),
         ust_satz: parseFloat(form.ust_satz),
         faelligkeit: form.faelligkeit || null,
         skonto_datum: form.skonto_datum || null,
         skonto_prozent: form.skonto_prozent ? parseFloat(form.skonto_prozent) : null,
         status: form.status as RechnungStatus,
+        karte: form.karte || null,
         rechnungstyp: (form.rechnungstyp || null) as Rechnungstyp | null,
         betrag_10: form.rechnungstyp === 'bewirtung' && form.betrag_10 ? parseFloat(form.betrag_10) : null,
         betrag_20: form.rechnungstyp === 'bewirtung' && form.betrag_20 ? parseFloat(form.betrag_20) : null,
@@ -155,6 +168,15 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
               value={form.rechnungsnr}
               onChange={e => setForm(f => ({ ...f, rechnungsnr: e.target.value }))}
               className={`font-mono ${confidenceColor('rechnungsnr')}`}
+            />
+          </div>
+
+          <div className="col-span-2">
+            <Label className="label-caps text-ink-subtle mb-1.5 block">Rechnungsdatum</Label>
+            <Input
+              type="date"
+              value={form.rechnungsdatum}
+              onChange={e => setForm(f => ({ ...f, rechnungsdatum: e.target.value }))}
             />
           </div>
 
@@ -330,6 +352,20 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
             <div className="h-10 flex items-center px-3 bg-bg-muted rounded-card-sm text-sm text-ink-muted">
               {formatDate(rechnung.created_at)}
             </div>
+          </div>
+
+          <div className="col-span-2">
+            <Label className="label-caps text-ink-subtle mb-1.5 block">Karte</Label>
+            <select
+              value={form.karte}
+              onChange={e => setForm(f => ({ ...f, karte: e.target.value }))}
+              className="w-full h-10 pl-3 pr-8 text-sm border border-input rounded-md bg-background text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none"
+            >
+              <option value="">— Keine Karte</option>
+              {KARTEN.map(k => (
+                <option key={k.value} value={k.value}>{k.label}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
