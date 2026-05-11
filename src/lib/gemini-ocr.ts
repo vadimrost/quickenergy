@@ -84,7 +84,8 @@ MEHRWERTSTEUER:
 - net_amount_0:  Betrag ohne MwSt (Trinkgeld bei Bewirtung)
 - tax_amount_10: tatsächlicher MwSt-Betrag bei 10% direkt vom Beleg
 - tax_amount_20: tatsächlicher MwSt-Betrag bei 20% direkt vom Beleg
-- Falls "enth. Mwst": Netto = Brutto - MwSt-Betrag
+- "enth. MwSt" / "Inkl. X% MwSt" / "inkl. MwSt" → MwSt ist im Betrag enthalten: Netto = Gesamtbetrag − MwSt-Betrag. IMMER ausrechnen und net_amount_XX befüllen.
+- Beispiel: Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR → net_amount_20 = 98,33, tax_amount_20 = 19,67
 - Bei Dienstleistung mit einem Satz: nur net_amount + tax_rate füllen, Einzelfelder null
 
 RECHNUNGSNUMMER: Formale Rechnungs-Nr. bevorzugen. Bei Kassenbons (Tankstelle, Restaurant) alternativ Bon-Nr., Beleg-Nr. oder Kassen-ID verwenden — niemals null lassen wenn irgendeine Belegnummer sichtbar ist.
