@@ -152,6 +152,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || isImageFile(f)
     )
     if (!valid.length) { toast.error('Keine gültigen Dateien (PDF, HEIC, JPG, PNG, WEBP).'); return }
+    if (!apiKey) { toast.error('Kein Gemini API Key konfiguriert – Rechnungen werden ohne OCR hochgeladen.') }
 
     const newEntries: FileEntry[] = valid.map(f => ({
       id: crypto.randomUUID(), name: f.name, status: 'pending',
@@ -194,8 +195,10 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
         try {
           const base64 = await fileToBase64(pdfFile)
           ocr = await geminiOcr(base64, apiKey)
-        } catch {
-          // OCR-Fehler → trotzdem Rechnung mit Platzhaltern anlegen
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'OCR fehlgeschlagen'
+          updateEntry(id, { status: 'error', error: `OCR: ${msg}` })
+          continue
         }
       }
 
