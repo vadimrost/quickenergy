@@ -403,6 +403,7 @@ export function InboxPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [bulkOcrOpen, setBulkOcrOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
   const navigate = useNavigate()
 
@@ -475,8 +476,8 @@ export function InboxPage() {
       />
       <BulkOcrDialog
         open={bulkOcrOpen}
-        onClose={() => setBulkOcrOpen(false)}
-        rechnungen={allRechnungen}
+        onClose={() => { setBulkOcrOpen(false); setSelectedIds(new Set()) }}
+        rechnungen={selectedIds.size > 0 ? allRechnungen.filter(r => selectedIds.has(r.id)) : allRechnungen}
         onRefresh={() => void refetch()}
       />
 
@@ -487,10 +488,15 @@ export function InboxPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setBulkOcrOpen(true)}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
+              className={cn(
+                'inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm text-xs font-medium transition-colors',
+                selectedIds.size > 0
+                  ? 'bg-ink text-white hover:bg-ink/80'
+                  : 'border border-border/60 text-ink-muted hover:bg-bg-muted'
+              )}
             >
               <Sparkles size={13} />
-              <span className="hidden sm:inline">OCR</span>
+              <span className="hidden sm:inline">OCR{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}</span>
             </button>
             <button
               onClick={() => setExportOpen(true)}
@@ -561,7 +567,19 @@ export function InboxPage() {
         ) : filtered.length === 0 ? (
           <EmptyState title="Keine Rechnungen" description="Keine Einträge für den gewählten Filter." />
         ) : (
-          <RechnungenTable rows={filtered} onRowClick={id => navigate(`/buchung/${id}`)} />
+          <RechnungenTable
+            rows={filtered}
+            onRowClick={id => navigate(`/buchung/${id}`)}
+            selectedIds={selectedIds}
+            onToggle={id => setSelectedIds(prev => {
+              const next = new Set(prev)
+              next.has(id) ? next.delete(id) : next.add(id)
+              return next
+            })}
+            onToggleAll={ids => setSelectedIds(prev =>
+              ids.every(id => prev.has(id)) ? new Set() : new Set(ids)
+            )}
+          />
         )}
       </SectionCard>
     </div>
@@ -786,7 +804,13 @@ function ActionMenu({
   )
 }
 
-function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (id: string) => void }) {
+function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll }: {
+  rows: Rechnung[]
+  onRowClick: (id: string) => void
+  selectedIds: Set<string>
+  onToggle: (id: string) => void
+  onToggleAll: (ids: string[]) => void
+}) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const { mutate: updateRechnung } = useUpdateRechnung()
   const { mutate: triggerExport } = useTriggerExport()
@@ -921,6 +945,14 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
         <table className="w-full">
           <thead>
             <tr>
+              <th className="pb-3 border-b border-border/50 w-8 pr-2">
+                <input
+                  type="checkbox"
+                  className="rounded border-border cursor-pointer"
+                  checked={rows.length > 0 && rows.every(r => selectedIds.has(r.id))}
+                  onChange={() => onToggleAll(rows.map(r => r.id))}
+                />
+              </th>
               {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Kategorie', 'Status', 'Mitarbeiter', 'Karte', 'Aktionen'].map(h => (
                 <th key={h} className={cn(
                   'label-caps pb-3 border-b border-border/50 text-left font-normal',
@@ -937,8 +969,19 @@ function RechnungenTable({ rows, onRowClick }: { rows: Rechnung[]; onRowClick: (
               <tr
                 key={r.id}
                 onClick={() => onRowClick(r.id)}
-                className="h-14 border-b border-border/50 last:border-0 hover:bg-bg-hover cursor-pointer transition-colors"
+                className={cn(
+                  'h-14 border-b border-border/50 last:border-0 hover:bg-bg-hover cursor-pointer transition-colors',
+                  selectedIds.has(r.id) && 'bg-accent-50'
+                )}
               >
+                <td onClick={e => e.stopPropagation()} className="pr-2">
+                  <input
+                    type="checkbox"
+                    className="rounded border-border cursor-pointer"
+                    checked={selectedIds.has(r.id)}
+                    onChange={() => onToggle(r.id)}
+                  />
+                </td>
                 <td>
                   <div className="flex items-center gap-2.5">
                     <ProjectColorDot id={r.id} />
