@@ -3,6 +3,7 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type RechnungStatus = 'eingegangen' | 'geprüft' | 'gebucht' | 'bezahlt'
 export type ExportZiel = 'lexoffice'
 export type Rechnungstyp = 'bewirtung' | 'dienstleistung' | 'tanken_diesel' | 'tanken_super'
+export type RechnungFlag = 'green' | 'yellow'
 
 export interface OcrField {
   value: string | number
@@ -60,6 +61,7 @@ export interface Rechnung {
   betrag_0: number | null
   mwst_10: number | null
   mwst_20: number | null
+  flag: RechnungFlag | null
   created_at: string
   lieferant?: Lieferant | null
 }

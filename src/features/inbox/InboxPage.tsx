@@ -953,7 +953,7 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll 
                   onChange={() => onToggleAll(rows.map(r => r.id))}
                 />
               </th>
-              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Kategorie', 'Status', 'Mitarbeiter', 'Karte', 'Aktionen'].map(h => (
+              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Kategorie', 'Status', 'Mitarbeiter', 'Karte', 'Aktionen', ''].map(h => (
                 <th key={h} className={cn(
                   'label-caps pb-3 border-b border-border/50 text-left font-normal',
                   h === 'Betrag' && 'text-right',
@@ -1048,6 +1048,24 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll 
                       />
                     )}
                   </div>
+                </td>
+                <td onClick={e => e.stopPropagation()} className="pl-2">
+                  <button
+                    onClick={() => {
+                      const next = r.flag === null ? 'yellow' : r.flag === 'yellow' ? 'green' : null
+                      updateRechnung({ id: r.id, updates: { flag: next } })
+                    }}
+                    title={r.flag === 'yellow' ? 'Gelb → Grün' : r.flag === 'green' ? 'Grün → Löschen' : 'Flag setzen'}
+                    className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-bg-muted transition-colors"
+                  >
+                    <svg width="13" height="16" viewBox="0 0 13 16" fill="none">
+                      <path d="M1 1v14M1 1h8l-2 4 2 4H1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
+                        stroke={r.flag ? 'transparent' : '#CBD5E1'}
+                        fill={r.flag === 'yellow' ? '#FBBF24' : r.flag === 'green' ? '#22C55E' : 'none'}
+                      />
+                      {!r.flag && <path d="M1 1h8l-2 4 2 4H1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" stroke="#CBD5E1" fill="none" />}
+                    </svg>
+                  </button>
                 </td>
               </tr>
             ))}
