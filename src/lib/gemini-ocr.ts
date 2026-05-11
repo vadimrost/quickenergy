@@ -81,9 +81,10 @@ MEHRWERTSTEUER:
 - Falls "enth. Mwst": Netto = Brutto - MwSt-Betrag
 - Bei Dienstleistung mit einem Satz: nur net_amount + tax_rate füllen, Einzelfelder null
 
+RECHNUNGSNUMMER: Formale Rechnungs-Nr. bevorzugen. Bei Kassenbons (Tankstelle, Restaurant) alternativ Bon-Nr., Beleg-Nr. oder Kassen-ID verwenden — niemals null lassen wenn irgendeine Belegnummer sichtbar ist.
 DATUM: immer YYYY-MM-DD.
 card_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.
-supplier_name: Firmenname des Rechnungsstellers.`
+supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).`
 
 export async function geminiOcr(base64: string, apiKey: string): Promise<GeminiOcrResult> {
   const res = await fetch(

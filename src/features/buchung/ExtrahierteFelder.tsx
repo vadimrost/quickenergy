@@ -9,6 +9,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
 import { useTriggerExport } from '@/features/exports/useExports'
 import { geminiOcr, pdfUrlToBase64, normalizeDate, resolveCard } from '@/lib/gemini-ocr'
+import { supabase } from '@/lib/supabase'
 import type { Rechnung, RechnungStatus, ExportZiel, Rechnungstyp } from '@/types/database'
 import { formatDate, cn } from '@/lib/utils'
 
@@ -71,6 +72,21 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
         if (card) { next.karte = card; updated.push('Karte') }
         return next
       })
+
+      // Lieferant aktualisieren wenn OCR einen Namen gefunden hat
+      if (ocr.supplier_name && !rechnung.lieferant_id) {
+        const name = ocr.supplier_name.trim()
+        const { data: existing } = await supabase
+          .from('lieferanten').select('id').ilike('name', name).maybeSingle()
+        const lieferantId = existing?.id ?? (
+          await supabase.from('lieferanten').insert({ name }).select('id').single()
+        ).data?.id
+        if (lieferantId) {
+          updateRechnung({ id: rechnung.id, updates: { lieferant_id: lieferantId } as any })
+          updated.push('Lieferant')
+        }
+      }
+
       toast.success(updated.length > 0 ? `OCR: ${updated.join(', ')}` : 'Keine neuen Felder gefunden')
     } catch (err) {
       toast.error(`OCR fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
