@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { geminiOcr, fileToBase64, normalizeDate, resolveCard } from '@/lib/gemini-ocr'
+import { geminiOcr, fileToBase64, normalizeDate, resolveCard, effectiveNetto } from '@/lib/gemini-ocr'
 import { supabase } from '@/lib/supabase'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
 import { BulkOcrDialog } from './BulkOcrDialog'
@@ -214,7 +214,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       const { error: insertError } = await supabase.from('rechnungen').insert({
         pdf_url:       publicUrl,
         rechnungsnr:   ocr?.invoice_number?.trim() || `BELEG-${Date.now()}`,
-        betrag:        ocr?.net_amount        ?? 0,
+        betrag:        (ocr ? effectiveNetto(ocr) : null) ?? 0,
         ust_satz:      ocr?.tax_rate          ?? 20,
         faelligkeit:   normalizeDate(ocr?.due_date),
         rechnungsdatum: normalizeDate(ocr?.invoice_date),

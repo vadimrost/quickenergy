@@ -5,6 +5,12 @@ export const CARD_MAP: Record<string, string> = {
   '0660': 'firmenkarte_0660',
 }
 
+export function effectiveNetto(ocr: Pick<GeminiOcrResult, 'net_amount' | 'net_amount_10' | 'net_amount_20' | 'net_amount_0'>): number | null {
+  if (ocr.net_amount) return ocr.net_amount
+  const sum = (ocr.net_amount_10 ?? 0) + (ocr.net_amount_20 ?? 0) + (ocr.net_amount_0 ?? 0)
+  return sum > 0 ? Math.round(sum * 100) / 100 : null
+}
+
 export function resolveCard(lastFour: string | null | undefined): string | null {
   if (!lastFour) return null
   const digits = String(lastFour).trim()

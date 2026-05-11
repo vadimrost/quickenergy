@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
 import { useTriggerExport } from '@/features/exports/useExports'
-import { geminiOcr, pdfUrlToBase64, normalizeDate, resolveCard } from '@/lib/gemini-ocr'
+import { geminiOcr, pdfUrlToBase64, normalizeDate, resolveCard, effectiveNetto } from '@/lib/gemini-ocr'
 import { supabase } from '@/lib/supabase'
 import type { Rechnung, RechnungStatus, ExportZiel, Rechnungstyp } from '@/types/database'
 import { formatDate, cn } from '@/lib/utils'
@@ -57,7 +57,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
         if (ocr.invoice_date) { next.rechnungsdatum = normalizeDate(ocr.invoice_date) ?? f.rechnungsdatum; updated.push('Rechnungsdatum') }
         if (ocr.due_date)     { next.faelligkeit    = normalizeDate(ocr.due_date)     ?? f.faelligkeit;    updated.push('Fälligkeit') }
         if (ocr.invoice_number?.trim()) { next.rechnungsnr = ocr.invoice_number.trim(); updated.push('Rechnungs-Nr.') }
-        if (ocr.net_amount)   { next.betrag   = String(ocr.net_amount);  updated.push('Betrag') }
+        const netto = effectiveNetto(ocr); if (netto) { next.betrag = String(netto); updated.push('Betrag') }
         if (ocr.tax_rate)     { next.ust_satz = String(ocr.tax_rate);    updated.push('USt.') }
         if (ocr.invoice_type && validTypes.includes(ocr.invoice_type)) {
           next.rechnungstyp = ocr.invoice_type as Rechnungstyp

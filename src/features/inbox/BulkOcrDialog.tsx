@@ -3,7 +3,7 @@ import { CheckCircle, XCircle, Loader2, KeyRound, Sparkles, SkipForward } from '
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
-import { normalizeDate, pdfUrlToBase64, resolveCard, geminiOcr } from '@/lib/gemini-ocr'
+import { normalizeDate, pdfUrlToBase64, resolveCard, geminiOcr, effectiveNetto } from '@/lib/gemini-ocr'
 import type { Rechnung, Rechnungstyp } from '@/types/database'
 
 type ResultStatus = 'pending' | 'processing' | 'done' | 'error' | 'skipped'
@@ -92,8 +92,9 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           updated.push('Rechnungs-Nr.')
         }
 
-        if (ocr.net_amount && (!r.betrag || r.betrag === 0)) {
-          updates.betrag = Number(ocr.net_amount)
+        const netto = effectiveNetto(ocr)
+        if (netto && (!r.betrag || r.betrag === 0)) {
+          updates.betrag = netto
           updated.push('Betrag')
         }
 
