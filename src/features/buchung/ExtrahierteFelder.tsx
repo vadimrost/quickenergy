@@ -145,9 +145,16 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const t20 = form.mwst_20 ? parseFloat(form.mwst_20) : Math.round(n20 * 0.20 * 100) / 100
   const breakdownBrutto = Math.round((n10 + t10 + n20 + t20 + n0) * 100) / 100
 
+  // For single-rate: prefer stored MwSt amount over calculated (avoids rounding diff)
+  const storedSingleMwst = !hasBreakdown
+    ? (form.mwst_20 ? parseFloat(form.mwst_20) : form.mwst_10 ? parseFloat(form.mwst_10) : null)
+    : null
+  const singleMwst = storedSingleMwst
+    ?? Math.round(parseFloat(form.betrag || '0') * parseFloat(form.ust_satz || '0') / 100 * 100) / 100
+
   const brutto = hasBreakdown && breakdownBrutto > 0
     ? breakdownBrutto
-    : Math.round(parseFloat(form.betrag || '0') * (1 + parseFloat(form.ust_satz || '0') / 100) * 100) / 100
+    : Math.round((parseFloat(form.betrag || '0') + singleMwst) * 100) / 100
   const skontoWert = parseFloat(form.betrag || '0') * (parseFloat(form.skonto_prozent || '0') / 100)
 
   const handleSave = () => {
@@ -301,7 +308,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
             <div className="col-span-2 flex items-center justify-between bg-bg-muted/50 rounded-card-sm px-3 py-2">
               <span className="label-caps">MwSt ({form.ust_satz}%)</span>
               <span className="text-sm font-mono text-status-warning">
-                € {(parseFloat(form.betrag || '0') * parseFloat(form.ust_satz || '0') / 100).toFixed(2)}
+                € {singleMwst.toFixed(2)}
               </span>
             </div>
           )}

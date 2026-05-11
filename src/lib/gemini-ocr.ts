@@ -78,15 +78,19 @@ KATEGORIEN (invoice_type):
 - "dienstleistung" → ALLES andere: Telekom, Internet, Strom, IT, Handwerk, Baumärkte, etc.
 - Gemischte Steuersätze allein sind KEIN Hinweis auf Tanken
 
+NETTOBETRAG (net_amount / net_amount_XX):
+- IMMER den Nettobetrag NACH allen Rabatten verwenden ("Netto abzüglich Rabatt", "Nettobetrag", "Zwischensumme exkl. USt.")
+- NIE den Brutto- oder Zahlbetrag als Netto verwenden
+- Bei Skonto: Netto VOR Skonto nehmen (Skonto ist kein Rabatt auf den Nettobetrag)
+
 MEHRWERTSTEUER:
+- tax_amount_10 / tax_amount_20: den TATSÄCHLICHEN MwSt-Betrag direkt vom Beleg nehmen ("Steuer", "MwSt-Betrag", "Umsatzsteuer von €X") — NIEMALS selbst ausrechnen
 - net_amount_10: NETTO (exkl. MwSt) aller Positionen mit 10%
 - net_amount_20: NETTO (exkl. MwSt) aller Positionen mit 20%
 - net_amount_0:  Betrag ohne MwSt (Trinkgeld bei Bewirtung)
-- tax_amount_10: tatsächlicher MwSt-Betrag bei 10% direkt vom Beleg
-- tax_amount_20: tatsächlicher MwSt-Betrag bei 20% direkt vom Beleg
-- "enth. MwSt" / "Inkl. X% MwSt" / "inkl. MwSt" → MwSt ist im Betrag enthalten: Netto = Gesamtbetrag − MwSt-Betrag. IMMER ausrechnen und net_amount_XX befüllen.
+- "enth. MwSt" / "Inkl. X% MwSt" / "inkl. MwSt" → Netto = Gesamtbetrag − MwSt-Betrag. IMMER ausrechnen und net_amount_XX befüllen.
 - Beispiel: Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR → net_amount_20 = 98,33, tax_amount_20 = 19,67
-- Bei Dienstleistung mit einem Satz: nur net_amount + tax_rate füllen, Einzelfelder null
+- Bei Dienstleistung mit einem Satz: net_amount + tax_rate + tax_amount_20 (oder tax_amount_10) füllen, net_amount_XX = null
 
 RECHNUNGSNUMMER: Formale Rechnungs-Nr. bevorzugen. Bei Kassenbons (Tankstelle, Restaurant) alternativ Bon-Nr., Beleg-Nr. oder Kassen-ID verwenden — niemals null lassen wenn irgendeine Belegnummer sichtbar ist.
 DATUM: immer YYYY-MM-DD.
