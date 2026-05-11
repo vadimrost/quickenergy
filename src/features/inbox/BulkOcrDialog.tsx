@@ -139,6 +139,20 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           updated.push('Karte')
         }
 
+        // Lieferant aktualisieren wenn OCR einen Namen gefunden hat und noch keiner gesetzt ist
+        if (ocr.supplier_name && !r.lieferant_id) {
+          const name = ocr.supplier_name.trim()
+          const { data: existing } = await supabase
+            .from('lieferanten').select('id').ilike('name', name).maybeSingle()
+          const lieferantId = existing?.id ?? (
+            await supabase.from('lieferanten').insert({ name }).select('id').single()
+          ).data?.id
+          if (lieferantId) {
+            updates.lieferant_id = lieferantId as any
+            updated.push('Lieferant')
+          }
+        }
+
         if (Object.keys(updates).length > 0) {
           const { error } = await supabase.from('rechnungen').update(updates).eq('id', r.id)
           if (error) throw new Error(error.message)
