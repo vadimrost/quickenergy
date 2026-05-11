@@ -137,7 +137,17 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     })
   }, [rechnung])
 
-  const brutto = parseFloat(form.betrag || '0') * (1 + parseFloat(form.ust_satz || '0') / 100)
+  const hasBreakdown = (['bewirtung', 'tanken_diesel', 'tanken_super'] as const).includes(form.rechnungstyp as any)
+  const n10 = parseFloat(form.betrag_10 || '0')
+  const n20 = parseFloat(form.betrag_20 || '0')
+  const n0  = parseFloat(form.betrag_0  || '0')
+  const t10 = form.mwst_10 ? parseFloat(form.mwst_10) : Math.round(n10 * 0.10 * 100) / 100
+  const t20 = form.mwst_20 ? parseFloat(form.mwst_20) : Math.round(n20 * 0.20 * 100) / 100
+  const breakdownBrutto = Math.round((n10 + t10 + n20 + t20 + n0) * 100) / 100
+
+  const brutto = hasBreakdown && breakdownBrutto > 0
+    ? breakdownBrutto
+    : Math.round(parseFloat(form.betrag || '0') * (1 + parseFloat(form.ust_satz || '0') / 100) * 100) / 100
   const skontoWert = parseFloat(form.betrag || '0') * (parseFloat(form.skonto_prozent || '0') / 100)
 
   const handleSave = () => {
@@ -302,16 +312,9 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
           </div>
 
           {/* MwSt-Aufschlüsselung: Bewirtung + Tanken */}
-          {(['bewirtung', 'tanken_diesel', 'tanken_super'] as const).includes(form.rechnungstyp as any) && (() => {
-            const n10 = parseFloat(form.betrag_10 || '0')
-            const n20 = parseFloat(form.betrag_20 || '0')
-            const n0  = parseFloat(form.betrag_0  || '0')
-            // Use OCR-extracted MwSt amounts when available (avoids 1-cent rounding error)
-            const t10 = form.mwst_10 ? parseFloat(form.mwst_10) : Math.round(n10 * 0.10 * 100) / 100
-            const t20 = form.mwst_20 ? parseFloat(form.mwst_20) : Math.round(n20 * 0.20 * 100) / 100
+          {hasBreakdown && (() => {
             const totalNetto  = Math.round((n10 + n20 + n0) * 100) / 100
             const totalMwst   = Math.round((t10 + t20) * 100) / 100
-            const totalBrutto = Math.round((n10 + t10 + n20 + t20 + n0) * 100) / 100
             return (
               <div className="col-span-2 pt-1">
                 <p className="label-caps text-ink-subtle mb-2">MwSt-Aufschlüsselung</p>
@@ -375,7 +378,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                     <span className="label-caps text-ink">Σ</span>
                     <div className="text-right px-2 text-xs font-mono font-semibold text-ink">€ {totalNetto.toFixed(2)}</div>
                     <div className="text-right px-2 text-xs font-mono font-semibold text-status-warning">€ {totalMwst.toFixed(2)}</div>
-                    <div className="text-right px-2 text-xs font-mono font-semibold text-ink">€ {totalBrutto.toFixed(2)}</div>
+                    <div className="text-right px-2 text-xs font-mono font-semibold text-ink">€ {breakdownBrutto.toFixed(2)}</div>
                   </div>
                 )}
               </div>
