@@ -137,7 +137,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     })
   }, [rechnung])
 
-  const hasBreakdown = (['bewirtung', 'tanken_diesel', 'tanken_super'] as const).includes(form.rechnungstyp as any)
+  const hasBreakdown = parseFloat(form.betrag_10 || '0') > 0 || parseFloat(form.betrag_20 || '0') > 0
   const n10 = parseFloat(form.betrag_10 || '0')
   const n20 = parseFloat(form.betrag_20 || '0')
   const n0  = parseFloat(form.betrag_0  || '0')
@@ -296,8 +296,8 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
             </Select>
           </div>
 
-          {/* MwSt-Zeile für Dienstleistung (einfacher Steuersatz) */}
-          {!(['bewirtung', 'tanken_diesel', 'tanken_super'] as const).includes(form.rechnungstyp as any) && (
+          {/* MwSt-Zeile nur wenn keine Aufschlüsselung vorhanden */}
+          {!hasBreakdown && (
             <div className="col-span-2 flex items-center justify-between bg-bg-muted/50 rounded-card-sm px-3 py-2">
               <span className="label-caps">MwSt ({form.ust_satz}%)</span>
               <span className="text-sm font-mono text-status-warning">
@@ -357,7 +357,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                   </div>
                 </div>
                 {/* 0% row — nur Bewirtung */}
-                {form.rechnungstyp === 'bewirtung' && (
+                {(form.rechnungstyp === 'bewirtung' || parseFloat(form.betrag_0 || '0') > 0) && (
                   <div className="grid grid-cols-4 gap-1 items-center mb-1">
                     <span className="text-xs font-medium text-ink">0% Tipp</span>
                     <div className="relative">

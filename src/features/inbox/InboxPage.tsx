@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
@@ -348,7 +348,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
   )
 }
 
-type FilterTab = 'alle' | RechnungStatus
+type FilterTab = 'alle' | RechnungStatus | 'duplikate'
 
 const RECHNUNGSTYP_LABEL: Record<Rechnungstyp, string> = {
   bewirtung: 'Bewirtung',
@@ -418,6 +418,26 @@ export function InboxPage() {
     return d >= 0 && d <= 3
   }).length
 
+  // Compute IDs involved in duplicate pairs (score ≥ 0.5)
+  const duplikateIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (let i = 0; i < allRechnungen.length; i++) {
+      for (let j = i + 1; j < allRechnungen.length; j++) {
+        const a = allRechnungen[i], b = allRechnungen[j]
+        let score = 0
+        if (a.rechnungsnr === b.rechnungsnr) score += 0.60
+        else {
+          const aP = a.rechnungsnr.replace(/\d+$/, ''), bP = b.rechnungsnr.replace(/\d+$/, '')
+          if (aP.length > 2 && aP === bP) score += 0.10
+        }
+        if (a.betrag === b.betrag && a.betrag > 0) score += 0.30
+        if (a.ust_satz === b.ust_satz) score += 0.10
+        if (score >= 0.5) { ids.add(a.id); ids.add(b.id) }
+      }
+    }
+    return ids
+  }, [allRechnungen])
+
   const filtered = allRechnungen.filter(r => {
     if (kpiFilter === 'heute_faellig') {
       if (!(r.faelligkeit && r.faelligkeit <= today && r.status !== 'bezahlt')) return false
@@ -426,7 +446,8 @@ export function InboxPage() {
       const d = differenceInDays(parseISO(r.skonto_datum), new Date())
       if (!(d >= 0 && d <= 3)) return false
     } else {
-      if (activeTab !== 'alle' && r.status !== activeTab) return false
+      if (activeTab === 'duplikate') { if (!duplikateIds.has(r.id)) return false }
+      else if (activeTab !== 'alle' && r.status !== activeTab) return false
     }
     if (search) {
       const q = search.toLowerCase()
@@ -546,6 +567,20 @@ export function InboxPage() {
                 )}
               </button>
             ))}
+            {duplikateIds.size > 0 && (
+              <button
+                onClick={() => { setActiveTab('duplikate'); setKpiFilter(null) }}
+                className={cn(
+                  'px-3.5 h-7 rounded-pill text-label uppercase transition-colors flex items-center gap-1.5',
+                  activeTab === 'duplikate' && !kpiFilter
+                    ? 'bg-status-warning text-white'
+                    : 'text-status-warning border border-status-warning/30 hover:bg-status-warning/10'
+                )}
+              >
+                Duplikate
+                <span className="opacity-80">{duplikateIds.size}</span>
+              </button>
+            )}
           </div>
           {kpiFilter && (
             <button

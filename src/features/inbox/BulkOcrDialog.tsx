@@ -110,27 +110,24 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           updated.push('Kategorie')
         }
 
-        // MwSt-Aufschlüsselung: Bewirtung + Tanken (kann gemischte Sätze haben)
-        const typ = (updates.rechnungstyp ?? r.rechnungstyp)
-        if (typ === 'bewirtung' || typ === 'tanken_diesel' || typ === 'tanken_super') {
-          if (ocr.net_amount_10 != null && (forceAll || !r.betrag_10)) {
-            updates.betrag_10 = Number(ocr.net_amount_10)
-            updated.push('Netto 10%')
-          }
-          if (ocr.net_amount_20 != null && (forceAll || !r.betrag_20)) {
-            updates.betrag_20 = Number(ocr.net_amount_20)
-            updated.push('Netto 20%')
-          }
-          if (ocr.net_amount_0 != null && (forceAll || !r.betrag_0)) {
-            updates.betrag_0 = Number(ocr.net_amount_0)
-            updated.push('Trinkgeld 0%')
-          }
-          if (ocr.tax_amount_10 != null && (forceAll || !r.mwst_10)) {
-            updates.mwst_10 = Number(ocr.tax_amount_10)
-          }
-          if (ocr.tax_amount_20 != null && (forceAll || !r.mwst_20)) {
-            updates.mwst_20 = Number(ocr.tax_amount_20)
-          }
+        // MwSt-Aufschlüsselung für alle Kategorien (auch Dienstleistung mit gemischten Sätzen)
+        if (ocr.net_amount_10 != null && (forceAll || !r.betrag_10)) {
+          updates.betrag_10 = Number(ocr.net_amount_10)
+          updated.push('Netto 10%')
+        }
+        if (ocr.net_amount_20 != null && (forceAll || !r.betrag_20)) {
+          updates.betrag_20 = Number(ocr.net_amount_20)
+          updated.push('Netto 20%')
+        }
+        if (ocr.net_amount_0 != null && (forceAll || !r.betrag_0)) {
+          updates.betrag_0 = Number(ocr.net_amount_0)
+          updated.push('Trinkgeld 0%')
+        }
+        if (ocr.tax_amount_10 != null && (forceAll || !r.mwst_10)) {
+          updates.mwst_10 = Number(ocr.tax_amount_10)
+        }
+        if (ocr.tax_amount_20 != null && (forceAll || !r.mwst_20)) {
+          updates.mwst_20 = Number(ocr.tax_amount_20)
         }
 
         const resolvedCard = resolveCard(ocr.card_last_four)
