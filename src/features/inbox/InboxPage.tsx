@@ -20,9 +20,10 @@ import { supabase } from '@/lib/supabase'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
 import { BulkOcrDialog } from './BulkOcrDialog'
 import { useMitarbeiter } from './useMitarbeiter'
+import { useKategorien } from '@/features/kategorien/useKategorien'
 import { useTriggerExport } from '@/features/exports/useExports'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
-import type { Rechnung, Rechnungstyp, RechnungStatus, ExportZiel } from '@/types/database'
+import type { Rechnung, RechnungStatus, ExportZiel } from '@/types/database'
 
 const ACCEPTED_TYPES = '.pdf,.heic,.heif,.jpg,.jpeg,.png,.webp'
 
@@ -136,6 +137,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [dragover, setDragover] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const { data: kategorien = [] } = useKategorien()
 
   const isDone = entries.length > 0 && entries.every(e => e.status === 'done' || e.status === 'error')
   const isBusy = entries.length > 0 && !isDone
@@ -195,7 +197,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       if (apiKey) {
         try {
           const base64 = await fileToBase64(pdfFile)
-          ocr = await geminiOcr(base64, apiKey)
+          ocr = await geminiOcr(base64, apiKey, kategorien)
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'OCR fehlgeschlagen'
           updateEntry(id, { status: 'error', error: `OCR: ${msg}` })
@@ -207,8 +209,8 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       const lieferantId = await findOrCreateLieferant(ocr?.supplier_name)
 
       // 5. Rechnung einfügen
-      const validTypes = ['bewirtung', 'dienstleistung', 'tanken_diesel', 'tanken_super']
-      const rechnungstyp = ocr?.invoice_type && validTypes.includes(ocr.invoice_type)
+      const validTypes = kategorien.map(k => k.wert)
+      const rechnungstyp = ocr?.invoice_type && (validTypes.length === 0 || validTypes.includes(ocr.invoice_type))
         ? ocr.invoice_type as any
         : null
 
@@ -351,7 +353,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
 
 type FilterTab = 'alle' | RechnungStatus | 'duplikate'
 
-const RECHNUNGSTYP_LABEL: Record<Rechnungstyp, string> = {
+const RECHNUNGSTYP_LABEL: Record<string, string> = {
   bewirtung: 'Bewirtung',
   dienstleistung: 'Dienstleistung',
   tanken_diesel: 'Tank Diesel',

@@ -69,14 +69,31 @@ export interface GeminiOcrResult {
   card_last_four: string | null
 }
 
-const OCR_PROMPT = `Analysiere diese Rechnung und extrahiere alle Felder als JSON.
+export interface KategoriePrompt {
+  wert: string
+  beschreibung: string
+}
+
+const DEFAULT_KATEGORIEN: KategoriePrompt[] = [
+  { wert: 'tanken_diesel',  beschreibung: 'NUR wenn explizit Diesel/Kraftstoff auf einer TANKSTELLE (Shell, OMV, BP, Jet, etc.)' },
+  { wert: 'tanken_super',   beschreibung: 'NUR wenn explizit Benzin/Super/E5/E10 auf einer TANKSTELLE' },
+  { wert: 'bewirtung',      beschreibung: 'Restaurant, Café, Bar, Sushi, Gasthaus — Essen & Trinken' },
+  { wert: 'dienstleistung', beschreibung: 'ALLES andere: Telekom, Internet, Strom, IT, Handwerk, Baumärkte, etc.' },
+]
+
+function buildKategorienSection(kategorien: KategoriePrompt[]): string {
+  return kategorien.map(k => `- "${k.wert}" → ${k.beschreibung}`).join('\n')
+}
+
+function buildOcrPrompt(kategorien: KategoriePrompt[]): string {
+  return `Analysiere diese Rechnung und extrahiere alle Felder als JSON.
 
 KATEGORIEN (invoice_type):
-- "tanken_diesel" → NUR wenn explizit Diesel/Kraftstoff auf einer TANKSTELLE (Shell, OMV, BP, Jet, etc.)
-- "tanken_super"  → NUR wenn explizit Benzin/Super/E5/E10 auf einer TANKSTELLE
-- "bewirtung"     → Restaurant, Café, Bar, Sushi, Gasthaus — Essen & Trinken
-- "dienstleistung" → ALLES andere: Telekom, Internet, Strom, IT, Handwerk, Baumärkte, etc.
-- Gemischte Steuersätze allein sind KEIN Hinweis auf Tanken
+${buildKategorienSection(kategorien)}
+- Gemischte Steuersätze allein sind KEIN Hinweis auf Tanken`
+}
+
+const OCR_PROMPT = buildOcrPrompt(DEFAULT_KATEGORIEN) + `
 
 NETTOBETRAG (net_amount / net_amount_XX):
 - IMMER den Nettobetrag NACH allen Rabatten/Positionsrabatten verwenden ("Netto abzüglich Rabatt", "Nettobetrag", "Zwischensumme exkl. USt.", "Summe Positionen" + Zuschläge)
@@ -109,7 +126,8 @@ DATUM: immer YYYY-MM-DD.
 card_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.
 supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).`
 
-export async function geminiOcr(base64: string, apiKey: string): Promise<GeminiOcrResult> {
+export async function geminiOcr(base64: string, apiKey: string, kategorien?: KategoriePrompt[]): Promise<GeminiOcrResult> {
+  const prompt = kategorien?.length ? buildOcrPrompt(kategorien) + OCR_PROMPT.slice(OCR_PROMPT.indexOf('\n\nNETTOBETRAG')) : OCR_PROMPT
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
@@ -118,7 +136,7 @@ export async function geminiOcr(base64: string, apiKey: string): Promise<GeminiO
       body: JSON.stringify({
         contents: [{ parts: [
           { inline_data: { mime_type: 'application/pdf', data: base64 } },
-          { text: OCR_PROMPT },
+          { text: prompt },
         ]}],
         generationConfig: {
           response_mime_type: 'application/json',

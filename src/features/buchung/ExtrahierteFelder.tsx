@@ -9,6 +9,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
 import { useTriggerExport } from '@/features/exports/useExports'
 import { geminiOcr, pdfUrlToBase64, normalizeDate, resolveCard, effectiveNetto } from '@/lib/gemini-ocr'
+import { useKategorien } from '@/features/kategorien/useKategorien'
 import { supabase } from '@/lib/supabase'
 import type { Rechnung, RechnungStatus, ExportZiel, Rechnungstyp } from '@/types/database'
 import { formatDate, cn } from '@/lib/utils'
@@ -41,6 +42,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [confirmingZiel, setConfirmingZiel] = useState<ExportZiel | null>(null)
   const [ocrLoading, setOcrLoading] = useState(false)
+  const { data: kategorien = [] } = useKategorien()
 
   const handleOcr = async () => {
     if (!rechnung.pdf_url || rechnung.pdf_url === 'demo') return
@@ -49,9 +51,9 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     setOcrLoading(true)
     try {
       const base64 = await pdfUrlToBase64(rechnung.pdf_url)
-      const ocr = await geminiOcr(base64, apiKey)
+      const ocr = await geminiOcr(base64, apiKey, kategorien)
       const updated: string[] = []
-      const validTypes = ['bewirtung', 'dienstleistung', 'tanken_diesel', 'tanken_super']
+      const validTypes = kategorien.map(k => k.wert)
       setForm(f => {
         const next = { ...f }
         if (ocr.invoice_date) { next.rechnungsdatum = normalizeDate(ocr.invoice_date) ?? f.rechnungsdatum; updated.push('Rechnungsdatum') }
@@ -246,10 +248,9 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
             <SelectValue placeholder="— Kategorie wählen" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="bewirtung">Bewirtung</SelectItem>
-            <SelectItem value="dienstleistung">Dienstleistung</SelectItem>
-            <SelectItem value="tanken_diesel">Tanken Diesel</SelectItem>
-            <SelectItem value="tanken_super">Tanken Super</SelectItem>
+            {kategorien.map(k => (
+              <SelectItem key={k.wert} value={k.wert}>{k.name}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

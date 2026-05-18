@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { normalizeDate, pdfUrlToBase64, resolveCard, geminiOcr, effectiveNetto } from '@/lib/gemini-ocr'
+import { useKategorien } from '@/features/kategorien/useKategorien'
 import type { Rechnung, Rechnungstyp } from '@/types/database'
 
 type ResultStatus = 'pending' | 'processing' | 'done' | 'error' | 'skipped'
@@ -39,6 +40,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
   const [apiKey, setApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY ?? '')
   const [limit, setLimit] = useState<number>(5)
   const [forceAll, setForceAll] = useState(false)
+  const { data: kategorien = [] } = useKategorien()
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [results, setResults] = useState<OcrResult[]>([])
@@ -70,7 +72,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
 
       try {
         const base64 = await pdfUrlToBase64(r.pdf_url!)
-        const ocr = await geminiOcr(base64, apiKey.trim())
+        const ocr = await geminiOcr(base64, apiKey.trim(), kategorien)
 
         const updates: Partial<Rechnung> = {}
         const updated: string[] = []
