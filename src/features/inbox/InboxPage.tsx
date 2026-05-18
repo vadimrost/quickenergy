@@ -1049,7 +1049,7 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll 
                   onChange={() => onToggleAll(rows.map(r => r.id))}
                 />
               </th>
-              {['Lieferant', 'Rechnungs-Nr.', 'Betrag', 'USt.', 'Fälligkeit', 'Kategorie', 'Status', 'Mitarbeiter', 'Karte', 'Aktionen', ''].map(h => (
+              {['Lieferant', 'Rechnungs-Nr.', 'Datum', 'Betrag', 'USt.', 'Fälligkeit', 'Kategorie', 'Status', 'Mitarbeiter', 'Karte', 'Aktionen', ''].map(h => (
                 <th key={h} className={cn(
                   'label-caps pb-3 border-b border-border/50 text-left font-normal',
                   h === 'Betrag' && 'text-right',
@@ -1087,6 +1087,9 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll 
                   </div>
                 </td>
                 <td className="text-sm font-mono text-ink-muted">{r.rechnungsnr}</td>
+                <td className="text-sm text-ink-muted">
+                  {r.rechnungsdatum ? formatDate(r.rechnungsdatum) : <span className="text-ink-subtle">—</span>}
+                </td>
                 <td className="text-right">
                   <span className="text-sm font-semibold text-ink">{formatEuro(getBrutto(r))}</span>
                 </td>
