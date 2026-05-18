@@ -15,6 +15,7 @@ import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { geminiOcr, fileToBase64, normalizeDate, resolveCard, effectiveNetto } from '@/lib/gemini-ocr'
+import { isPairDismissed } from '@/lib/dismissed-duplikate'
 import { supabase } from '@/lib/supabase'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
 import { BulkOcrDialog } from './BulkOcrDialog'
@@ -441,7 +442,7 @@ export function InboxPage() {
         }
         if (a.betrag === b.betrag && a.betrag > 0) score += 0.30
         if (a.ust_satz === b.ust_satz) score += 0.10
-        if (score >= 0.5) { ids.add(a.id); ids.add(b.id) }
+        if (score >= 0.5 && !isPairDismissed(a.id, b.id)) { ids.add(a.id); ids.add(b.id) }
       }
     }
     return ids

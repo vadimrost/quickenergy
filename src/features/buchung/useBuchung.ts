@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { MOCK_RECHNUNGEN } from '@/lib/mock-data'
+import { isPairDismissed } from '@/lib/dismissed-duplikate'
 import type { Duplikat, Rechnung } from '@/types/database'
 
 const DEMO = import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co'
@@ -24,7 +25,7 @@ function computeDuplikate(all: Rechnung[], id: string): Duplikat[] {
       if (r.ust_satz === current.ust_satz) score += 0.10
       return { id: `dup-${id}-${r.id}`, rechnung_a_id: id, rechnung_b_id: r.id, match_score: score }
     })
-    .filter(d => d.match_score >= 0.5)
+    .filter(d => d.match_score >= 0.5 && !isPairDismissed(d.rechnung_a_id, d.rechnung_b_id))
     .sort((a, b) => b.match_score - a.match_score)
     .slice(0, 3)
 }
