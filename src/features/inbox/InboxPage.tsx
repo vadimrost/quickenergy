@@ -399,6 +399,7 @@ function FaelligkeitCell({ date }: { date: string | null }) {
 export function InboxPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>('alle')
   const [kpiFilter, setKpiFilter] = useState<'heute_faellig' | 'skonto_alarm' | null>(null)
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -417,6 +418,14 @@ export function InboxPage() {
     const d = differenceInDays(parseISO(r.skonto_datum), new Date())
     return d >= 0 && d <= 3
   }).length
+
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>()
+    allRechnungen.forEach(r => {
+      if (r.rechnungsdatum) months.add(r.rechnungsdatum.slice(0, 7))
+    })
+    return [...months].sort().reverse()
+  }, [allRechnungen])
 
   // Compute IDs involved in duplicate pairs (score ≥ 0.5)
   const duplikateIds = useMemo(() => {
@@ -449,6 +458,7 @@ export function InboxPage() {
       if (activeTab === 'duplikate') { if (!duplikateIds.has(r.id)) return false }
       else if (activeTab !== 'alle' && r.status !== activeTab) return false
     }
+    if (selectedMonth && r.rechnungsdatum?.slice(0, 7) !== selectedMonth) return false
     if (search) {
       const q = search.toLowerCase()
       return (
@@ -546,8 +556,8 @@ export function InboxPage() {
         }
       >
         {/* Filter tabs */}
-        <div className="flex items-center justify-between gap-2 mb-5 -mt-1">
-          <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between gap-2 mb-5 -mt-1 flex-wrap">
+          <div className="flex items-center gap-1 flex-wrap">
             {TABS.map(tab => (
               <button
                 key={tab.key}
@@ -582,15 +592,36 @@ export function InboxPage() {
               </button>
             )}
           </div>
-          {kpiFilter && (
-            <button
-              onClick={() => setKpiFilter(null)}
-              className="flex-shrink-0 flex items-center gap-1.5 px-2.5 h-7 rounded-pill bg-ink text-white text-label uppercase"
-            >
-              {kpiFilter === 'heute_faellig' ? 'Fällig' : 'Skonto'}
-              <span className="text-white/70 text-xs">✕</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {kpiFilter && (
+              <button
+                onClick={() => setKpiFilter(null)}
+                className="flex-shrink-0 flex items-center gap-1.5 px-2.5 h-7 rounded-pill bg-ink text-white text-label uppercase"
+              >
+                {kpiFilter === 'heute_faellig' ? 'Fällig' : 'Skonto'}
+                <span className="text-white/70 text-xs">✕</span>
+              </button>
+            )}
+            {availableMonths.length > 0 && (
+              <select
+                value={selectedMonth ?? ''}
+                onChange={e => setSelectedMonth(e.target.value || null)}
+                className={cn(
+                  'h-7 pl-2.5 pr-7 text-xs rounded-pill border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-accent-400',
+                  selectedMonth
+                    ? 'border-accent-400 bg-accent-50 text-accent-600 font-medium'
+                    : 'border-border/60 bg-bg-surface text-ink-muted hover:bg-bg-muted'
+                )}
+              >
+                <option value="">Alle Monate</option>
+                {availableMonths.map(m => (
+                  <option key={m} value={m}>
+                    {format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -632,8 +663,23 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
   onClose: () => void
   rechnungen: Rechnung[]
 }) {
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>()
+    rechnungen.forEach(r => {
+      if (r.rechnungsdatum) months.add(r.rechnungsdatum.slice(0, 7))
+    })
+    return [...months].sort().reverse()
+  }, [rechnungen])
+
   const currentMonth = format(new Date(), 'yyyy-MM')
-  const [month, setMonth] = useState(currentMonth)
+  const defaultMonth = availableMonths.includes(currentMonth) ? currentMonth : (availableMonths[0] ?? currentMonth)
+  const [month, setMonth] = useState(defaultMonth)
+
+  useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.includes(month)) {
+      setMonth(availableMonths[0])
+    }
+  }, [availableMonths])
 
   const monthRechnungen = rechnungen.filter(r => r.rechnungsdatum?.startsWith(month))
 
@@ -735,12 +781,23 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
           {/* Monat */}
           <div>
             <label className="label-caps block mb-1.5">Monat</label>
-            <input
-              type="month"
-              value={month}
-              onChange={e => setMonth(e.target.value)}
-              className="w-full h-9 px-3 text-sm border border-border rounded-card-sm bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400"
-            />
+            {availableMonths.length > 0 ? (
+              <select
+                value={month}
+                onChange={e => setMonth(e.target.value)}
+                className="w-full h-9 px-3 text-sm border border-border rounded-card-sm bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none cursor-pointer"
+              >
+                {availableMonths.map(m => (
+                  <option key={m} value={m}>
+                    {format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="w-full h-9 px-3 flex items-center text-sm border border-border rounded-card-sm bg-bg-muted text-ink-subtle">
+                Keine Rechnungen mit Datum vorhanden
+              </div>
+            )}
           </div>
 
           {/* Vorschau */}
