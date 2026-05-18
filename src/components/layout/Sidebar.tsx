@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { ArrowUpFromLine, LogOut, ReceiptText } from 'lucide-react'
+import { ArrowUpFromLine, LogOut, ReceiptText, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useRechnungen } from '@/features/inbox/useRechnungen'
@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 const NAV_ITEMS = [
   { icon: ReceiptText, path: '/', label: 'Rechnungen', end: true, badge: true },
   { icon: ArrowUpFromLine, path: '/exports', label: 'Exports', end: false },
+  { icon: Users, path: '/mitarbeiter', label: 'Mitarbeiter', end: false },
 ]
 
 function getInitials(email: string): string {

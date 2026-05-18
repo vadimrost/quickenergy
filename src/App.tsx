@@ -6,6 +6,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { InboxPage } from '@/features/inbox/InboxPage'
 import { BuchungPage } from '@/features/buchung/BuchungPage'
 import { ExportsPage } from '@/features/exports/ExportsPage'
+import { MitarbeiterPage } from '@/features/mitarbeiter/MitarbeiterPage'
 import { useAuth } from '@/hooks/useAuth'
 
 const queryClient = new QueryClient({
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><InboxPage /></ProtectedRoute>} />
       <Route path="/buchung/:id" element={<ProtectedRoute><BuchungPage /></ProtectedRoute>} />
       <Route path="/exports" element={<ProtectedRoute><ExportsPage /></ProtectedRoute>} />
+      <Route path="/mitarbeiter" element={<ProtectedRoute><MitarbeiterPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

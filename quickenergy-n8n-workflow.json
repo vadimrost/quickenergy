@@ -51,6 +51,59 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"contents\": [{\n    \"parts\": [\n      { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $json.pdfBase64 } },\n      { \"text\": \"Klassifiziere dieses Dokument in GENAU EINE der folgenden Kategorien:\\n\\n1. INVOICE: Hat Rechnungsnummer, Zahlungsdetails (IBAN, Fälligkeitsdatum), finale Beträge zur Zahlung\\n2. RECEIPT: Kassenbon, Quittung, Bon, Bewirtungsbeleg, Restaurantrechnung — keine IBAN\\n3. OTHER: Angebot, AGB, Lieferschein, Newsletter, Sonstiges\\n\\nAntworte NUR mit JSON.\" }\n    ]\n  }],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"document_type\", \"confidence\"],\n      \"properties\": {\n        \"document_type\": { \"type\": \"STRING\", \"enum\": [\"invoice\", \"receipt\", \"other\"] },\n        \"confidence\": { \"type\": \"NUMBER\" },\n        \"reason\": { \"type\": \"STRING\" }\n      }\n    }\n  }\n}\n}}",
+        "options": {}
+      },
+      "id": "node-009",
+      "name": "Document Classifier (Gemini)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 200],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googlePalmApi": { "id": "", "name": "Google Gemini" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawText = $json.candidates?.[0]?.content?.parts?.[0]?.text\nlet result = {}\ntry {\n  result = typeof rawText === 'string' ? JSON.parse(rawText) : (rawText ?? {})\n} catch {}\n\nconst pdfBase64 = $('PDF extrahieren').first().json.pdfBase64\nconst fileName  = $('PDF extrahieren').first().json.fileName\n\nreturn [{ json: {\n  documentType: result.document_type ?? 'other',\n  confidence:   result.confidence   ?? 0,\n  reason:       result.reason       ?? '',\n  pdfBase64,\n  fileName\n} }]"
+      },
+      "id": "node-010",
+      "name": "Prüfung auswerten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-002",
+              "leftValue": "={{ $json.documentType }}",
+              "rightValue": "other",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-011",
+      "name": "Ist es eine Rechnung?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1300, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "=https://DEIN-PROJEKT.supabase.co/storage/v1/object/rechnungen/{{ $json.fileName }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
@@ -70,17 +123,17 @@
       "name": "PDF zu Supabase hochladen",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [860, 200]
+      "position": [1520, 200]
     },
     {
       "parameters": {
-        "jsCode": "const pdfBase64 = $('PDF extrahieren').first().json.pdfBase64\nconst pdfUrl = `https://DEIN-PROJEKT.supabase.co/storage/v1/object/public/rechnungen/${$('PDF extrahieren').first().json.fileName}`\n\nconst OCR_PROMPT = `Analysiere diese Rechnung und extrahiere alle Felder als JSON.\n\nKATEGORIEN (invoice_type):\n- \"tanken_diesel\" → NUR wenn explizit Diesel/Kraftstoff auf einer TANKSTELLE (Shell, OMV, BP, Jet, etc.)\n- \"tanken_super\"  → NUR wenn explizit Benzin/Super/E5/E10 auf einer TANKSTELLE\n- \"bewirtung\"     → Restaurant, Café, Bar, Sushi, Gasthaus — Essen & Trinken\n- \"dienstleistung\" → ALLES andere: Telekom, Internet, Strom, IT, Handwerk, Baumärkte, etc.\n- Gemischte Steuersätze allein sind KEIN Hinweis auf Tanken\n\nNETTOBETRAG (net_amount / net_amount_XX):\n- IMMER den Nettobetrag NACH allen Rabatten/Positionsrabatten verwenden\n- NIE den Brutto- oder Zahlbetrag als Netto verwenden\n- Bei Skonto: Netto VOR Skonto nehmen (kein Abzug vom Nettobetrag)\n- Zahlungen an Dritte NICHT zum Nettobetrag zählen — gehören in net_amount_0\n- Österreichische MwSt-Sätze (UID beginnt mit ATU): ausschließlich 0%, 10% oder 20% — NIE 19%\n- Deutsche MwSt-Sätze (UID beginnt mit DE): 19% oder 7% möglich\n- Zahlen in Adressen, Postleitzahlen oder Belegnummern sind NIEMALS Steuersätze\n\nPROFORMA / KEINE VORSTEUERABZUGSBERECHTIGUNG:\n- Proforma-Rechnung / Keine Rechnung iSd UStG → tax_rate = null, alle tax_amount = null\n- net_amount = Nettosumme aller Positionen inkl. Zuschläge, VOR Skonto\n\nMEHRWERTSTEUER:\n- tax_amount_10 / tax_amount_20: TATSÄCHLICHEN Betrag direkt vom Beleg nehmen — NIEMALS selbst ausrechnen\n- net_amount_10: NETTO aller Positionen mit 10%\n- net_amount_20: NETTO aller Positionen mit 20%\n- net_amount_0: Trinkgeld / Tip (Tip, + Tip, Tipp, Trinkgeld) — 0% MwSt\n- enth. MwSt / Inkl. X% MwSt: Netto = Brutto − MwSt-Betrag\n- Beispiel 1: Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR → net_amount_20 = 98,33, tax_amount_20 = 19,67\n- Beispiel 2: 10% Ware 46,10 enth.Mwst 4,19 → net_amount_10 = 41,91, tax_amount_10 = 4,19\n- Wenn KEINE MwSt auf Beleg: tax_rate = null, alle tax_amount = null\n- Bei Dienstleistung mit einem Satz: net_amount + tax_rate + tax_amount_20 (oder tax_amount_10), net_amount_XX = null\n\nRECHNUNGSNUMMER: Formale Nr. bevorzugen. Bei Kassenbons Bon-Nr./Beleg-Nr. verwenden — niemals null.\nDATUM: immer YYYY-MM-DD.\ncard_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.\nsupplier_name: Firmenname des Rechnungsstellers (oberster Name auf dem Beleg).`\n\nconst body = {\n  contents: [{ parts: [\n    { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },\n    { text: OCR_PROMPT }\n  ]}],\n  generationConfig: {\n    response_mime_type: 'application/json',\n    response_schema: {\n      type: 'OBJECT',\n      properties: {\n        invoice_date:   { type: 'STRING',  nullable: true },\n        due_date:       { type: 'STRING',  nullable: true },\n        invoice_number: { type: 'STRING',  nullable: true },\n        supplier_name:  { type: 'STRING',  nullable: true },\n        net_amount:     { type: 'NUMBER',  nullable: true },\n        tax_rate:       { type: 'NUMBER',  nullable: true },\n        net_amount_10:  { type: 'NUMBER',  nullable: true },\n        net_amount_20:  { type: 'NUMBER',  nullable: true },\n        net_amount_0:   { type: 'NUMBER',  nullable: true },\n        tax_amount_10:  { type: 'NUMBER',  nullable: true },\n        tax_amount_20:  { type: 'NUMBER',  nullable: true },\n        invoice_type:   { type: 'STRING',  nullable: true },\n        card_last_four: { type: 'STRING',  nullable: true }\n      }\n    }\n  }\n}\n\nreturn [{ json: { geminiBody: JSON.stringify(body), pdfUrl } }]"
+        "jsCode": "const pdfBase64 = $('PDF extrahieren').first().json.pdfBase64\nconst fileName  = $('PDF extrahieren').first().json.fileName\nconst pdfUrl    = `https://DEIN-PROJEKT.supabase.co/storage/v1/object/public/rechnungen/${fileName}`\n\nconst OCR_PROMPT = `Analysiere diese Rechnung und extrahiere alle Felder als JSON.\n\nKATEGORIEN (invoice_type):\n- \"tanken_diesel\" → NUR wenn explizit Diesel/Kraftstoff auf einer TANKSTELLE (Shell, OMV, BP, Jet, etc.)\n- \"tanken_super\"  → NUR wenn explizit Benzin/Super/E5/E10 auf einer TANKSTELLE\n- \"bewirtung\"     → Restaurant, Café, Bar, Sushi, Gasthaus — Essen & Trinken\n- \"dienstleistung\" → ALLES andere: Telekom, Internet, Strom, IT, Handwerk, Baumärkte, etc.\n- Gemischte Steuersätze allein sind KEIN Hinweis auf Tanken\n\nNETTOBETRAG (net_amount / net_amount_XX):\n- IMMER den Nettobetrag NACH allen Rabatten/Positionsrabatten verwenden\n- NIE den Brutto- oder Zahlbetrag als Netto verwenden\n- Bei Skonto: Netto VOR Skonto nehmen (kein Abzug vom Nettobetrag)\n- Zahlungen an Dritte NICHT zum Nettobetrag zählen — gehören in net_amount_0\n- Österreichische MwSt-Sätze (UID beginnt mit ATU): ausschließlich 0%, 10% oder 20% — NIE 19%\n- Deutsche MwSt-Sätze (UID beginnt mit DE): 19% oder 7% möglich\n- Zahlen in Adressen, Postleitzahlen oder Belegnummern sind NIEMALS Steuersätze\n\nPROFORMA / KEINE VORSTEUERABZUGSBERECHTIGUNG:\n- Proforma-Rechnung / Keine Rechnung iSd UStG → tax_rate = null, alle tax_amount = null\n- net_amount = Nettosumme aller Positionen inkl. Zuschläge, VOR Skonto\n\nMEHRWERTSTEUER:\n- tax_amount_10 / tax_amount_20: TATSÄCHLICHEN Betrag direkt vom Beleg nehmen — NIEMALS selbst ausrechnen\n- net_amount_10: NETTO aller Positionen mit 10%\n- net_amount_20: NETTO aller Positionen mit 20%\n- net_amount_0: Trinkgeld / Tip (Tip, + Tip, Tipp, Trinkgeld) — 0% MwSt\n- enth. MwSt / Inkl. X% MwSt: Netto = Brutto − MwSt-Betrag\n- Beispiel 1: Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR → net_amount_20 = 98,33, tax_amount_20 = 19,67\n- Beispiel 2: 10% Ware 46,10 enth.Mwst 4,19 → net_amount_10 = 41,91, tax_amount_10 = 4,19\n- Wenn KEINE MwSt auf Beleg: tax_rate = null, alle tax_amount = null\n- Bei Dienstleistung mit einem Satz: net_amount + tax_rate + tax_amount_20 (oder tax_amount_10), net_amount_XX = null\n\nRECHNUNGSNUMMER: Formale Nr. bevorzugen. Bei Kassenbons Bon-Nr./Beleg-Nr. verwenden — niemals null.\nDATUM: immer YYYY-MM-DD.\ncard_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.\nsupplier_name: Firmenname des Rechnungsstellers (oberster Name auf dem Beleg).`\n\nconst body = {\n  contents: [{ parts: [\n    { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },\n    { text: OCR_PROMPT }\n  ]}],\n  generationConfig: {\n    response_mime_type: 'application/json',\n    response_schema: {\n      type: 'OBJECT',\n      properties: {\n        invoice_date:   { type: 'STRING',  nullable: true },\n        due_date:       { type: 'STRING',  nullable: true },\n        invoice_number: { type: 'STRING',  nullable: true },\n        supplier_name:  { type: 'STRING',  nullable: true },\n        net_amount:     { type: 'NUMBER',  nullable: true },\n        tax_rate:       { type: 'NUMBER',  nullable: true },\n        net_amount_10:  { type: 'NUMBER',  nullable: true },\n        net_amount_20:  { type: 'NUMBER',  nullable: true },\n        net_amount_0:   { type: 'NUMBER',  nullable: true },\n        tax_amount_10:  { type: 'NUMBER',  nullable: true },\n        tax_amount_20:  { type: 'NUMBER',  nullable: true },\n        invoice_type:   { type: 'STRING',  nullable: true },\n        card_last_four: { type: 'STRING',  nullable: true }\n      }\n    }\n  }\n}\n\nreturn [{ json: { geminiBody: JSON.stringify(body), pdfUrl } }]"
       },
       "id": "node-005",
       "name": "Gemini Request vorbereiten",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1080, 200]
+      "position": [1740, 200]
     },
     {
       "parameters": {
@@ -102,7 +155,7 @@
       "name": "Gemini OCR",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1300, 200]
+      "position": [1960, 200]
     },
     {
       "parameters": {
@@ -112,7 +165,7 @@
       "name": "OCR verarbeiten",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1520, 200]
+      "position": [2180, 200]
     },
     {
       "parameters": {
@@ -137,7 +190,7 @@
       "name": "Rechnung speichern",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1740, 200]
+      "position": [2400, 200]
     }
   ],
   "connections": {
@@ -148,6 +201,18 @@
       "main": [[{ "node": "Hat PDF?", "type": "main", "index": 0 }]]
     },
     "Hat PDF?": {
+      "main": [
+        [{ "node": "Document Classifier (Gemini)", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "Document Classifier (Gemini)": {
+      "main": [[{ "node": "Prüfung auswerten", "type": "main", "index": 0 }]]
+    },
+    "Prüfung auswerten": {
+      "main": [[{ "node": "Ist es eine Rechnung?", "type": "main", "index": 0 }]]
+    },
+    "Ist es eine Rechnung?": {
       "main": [
         [{ "node": "PDF zu Supabase hochladen", "type": "main", "index": 0 }],
         []
