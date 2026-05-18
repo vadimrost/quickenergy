@@ -90,13 +90,13 @@ export function Sidebar() {
             end={end}
             className={({ isActive }) =>
               cn(
-                'relative flex flex-col items-center gap-0.5 py-2 px-6',
+                'relative flex flex-col items-center gap-0.5 py-2 flex-1',
                 isActive ? 'text-accent-600' : 'text-ink-muted'
               )
             }
           >
             <div className="relative">
-              <Icon size={22} />
+              <Icon size={20} />
               {badge && pendingCount > 0 && (
                 <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-status-danger text-white text-[10px] font-bold flex items-center justify-center">
                   {pendingCount > 9 ? '9+' : pendingCount}
@@ -108,9 +108,9 @@ export function Sidebar() {
         ))}
         <button
           onClick={handleSignOut}
-          className="flex flex-col items-center gap-0.5 py-2 px-6 text-ink-muted"
+          className="flex flex-col items-center gap-0.5 py-2 flex-1 text-ink-muted"
         >
-          <LogOut size={22} />
+          <LogOut size={20} />
           <span className="text-[10px] font-medium">Logout</span>
         </button>
       </nav>

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, Building2, FileSpreadsheet, Sparkles } from 'lucide-react'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, ChevronUp, Building2, FileSpreadsheet, Sparkles } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { PageTitle } from '@/components/shared/PageTitle'
@@ -404,6 +404,7 @@ export function InboxPage() {
   const [activeTab, setActiveTab] = useState<FilterTab>('alle')
   const [kpiFilter, setKpiFilter] = useState<'heute_faellig' | 'skonto_alarm' | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
+  const [datumSort, setDatumSort] = useState<'asc' | 'desc' | null>(null)
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -451,7 +452,7 @@ export function InboxPage() {
     return ids
   }, [allRechnungen])
 
-  const filtered = allRechnungen.filter(r => {
+  const baseFiltered = allRechnungen.filter(r => {
     if (kpiFilter === 'heute_faellig') {
       if (!(r.faelligkeit && r.faelligkeit <= today && r.status !== 'bezahlt')) return false
     } else if (kpiFilter === 'skonto_alarm') {
@@ -472,6 +473,17 @@ export function InboxPage() {
     }
     return true
   })
+
+  const filtered = datumSort
+    ? [...baseFiltered].sort((a, b) => {
+        const aDate = a.rechnungsdatum ?? ''
+        const bDate = b.rechnungsdatum ?? ''
+        if (!aDate && !bDate) return 0
+        if (!aDate) return 1
+        if (!bDate) return -1
+        return datumSort === 'asc' ? aDate.localeCompare(bDate) : bDate.localeCompare(aDate)
+      })
+    : baseFiltered
 
   return (
     <div>
@@ -607,23 +619,26 @@ export function InboxPage() {
               </button>
             )}
             {availableMonths.length > 0 && (
-              <select
-                value={selectedMonth ?? ''}
-                onChange={e => setSelectedMonth(e.target.value || null)}
-                className={cn(
-                  'h-7 pl-2.5 pr-7 text-xs rounded-pill border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-accent-400',
-                  selectedMonth
-                    ? 'border-accent-400 bg-accent-50 text-accent-600 font-medium'
-                    : 'border-border/60 bg-bg-surface text-ink-muted hover:bg-bg-muted'
-                )}
-              >
-                <option value="">Alle Monate</option>
-                {availableMonths.map(m => (
-                  <option key={m} value={m}>
-                    {format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={selectedMonth ?? ''}
+                  onChange={e => setSelectedMonth(e.target.value || null)}
+                  className={cn(
+                    'h-7 pl-2.5 pr-7 text-xs rounded-pill border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-accent-400',
+                    selectedMonth
+                      ? 'border-accent-400 bg-accent-50 text-accent-600 font-medium'
+                      : 'border-border/60 bg-bg-surface text-ink-muted hover:bg-bg-muted'
+                  )}
+                >
+                  <option value="">Alle Monate</option>
+                  {availableMonths.map(m => (
+                    <option key={m} value={m}>
+                      {format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-ink" />
+              </div>
             )}
           </div>
         </div>
@@ -649,6 +664,8 @@ export function InboxPage() {
             onToggleAll={ids => setSelectedIds(prev =>
               ids.every(id => prev.has(id)) ? new Set() : new Set(ids)
             )}
+            datumSort={datumSort}
+            onDatumSort={() => setDatumSort(s => s === null ? 'desc' : s === 'desc' ? 'asc' : null)}
           />
         )}
       </SectionCard>
@@ -900,12 +917,14 @@ function ActionMenu({
   )
 }
 
-function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll }: {
+function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll, datumSort, onDatumSort }: {
   rows: Rechnung[]
   onRowClick: (id: string) => void
   selectedIds: Set<string>
   onToggle: (id: string) => void
   onToggleAll: (ids: string[]) => void
+  datumSort: 'asc' | 'desc' | null
+  onDatumSort: () => void
 }) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const { mutate: updateRechnung } = useUpdateRechnung()
@@ -1055,7 +1074,19 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll 
                   h === 'Betrag' && 'text-right',
                   h === 'USt.' && 'pl-6'
                 )}>
-                  {h}
+                  {h === 'Datum' ? (
+                    <button
+                      onClick={onDatumSort}
+                      className="inline-flex items-center gap-1 hover:text-ink transition-colors"
+                    >
+                      Datum
+                      {datumSort === 'asc'
+                        ? <ChevronUp size={12} className="text-ink" />
+                        : datumSort === 'desc'
+                          ? <ChevronDown size={12} className="text-ink" />
+                          : <ChevronDown size={12} className="opacity-30" />}
+                    </button>
+                  ) : h}
                 </th>
               ))}
             </tr>
