@@ -14,7 +14,7 @@ export function effectiveNetto(ocr: Pick<GeminiOcrResult, 'net_amount' | 'net_am
 export function resolveCard(lastFour: string | null | undefined): string | null {
   if (!lastFour) return null
   const digits = String(lastFour).trim()
-  return CARD_MAP[digits] ?? `****${digits}`
+  return CARD_MAP[digits] ?? 'sonstige'
 }
 
 export function normalizeDate(raw: string | null | undefined): string | null {

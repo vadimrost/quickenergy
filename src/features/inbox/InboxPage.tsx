@@ -363,6 +363,7 @@ const KARTEN: { label: string; value: string }[] = [
   { label: 'Spesen Philipp ···0744', value: 'spesen_philipp_0744' },
   { label: 'Firmenkarte ···6362', value: 'firmenkarte_6362' },
   { label: 'Firmenkarte ···0660', value: 'firmenkarte_0660' },
+  { label: 'Sonstige', value: 'sonstige' },
 ]
 
 const TABS: { key: FilterTab; label: string }[] = [
