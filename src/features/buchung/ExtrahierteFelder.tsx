@@ -152,9 +152,12 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const singleMwst = storedSingleMwst
     ?? Math.round(parseFloat(form.betrag || '0') * parseFloat(form.ust_satz || '0') / 100 * 100) / 100
 
+  const ustSatzNum = parseFloat(form.ust_satz || '0')
   const brutto = hasBreakdown && breakdownBrutto > 0
     ? breakdownBrutto
-    : Math.round((parseFloat(form.betrag || '0') + singleMwst) * 100) / 100
+    : ustSatzNum > 0
+      ? Math.round((parseFloat(form.betrag || '0') + singleMwst) * 100) / 100
+      : parseFloat(form.betrag || '0')
   const skontoWert = parseFloat(form.betrag || '0') * (parseFloat(form.skonto_prozent || '0') / 100)
 
   const handleSave = () => {
@@ -297,14 +300,16 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="0">0%</SelectItem>
                 <SelectItem value="10">10%</SelectItem>
+                <SelectItem value="19">19%</SelectItem>
                 <SelectItem value="20">20%</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* MwSt-Zeile nur wenn keine Aufschlüsselung vorhanden */}
-          {!hasBreakdown && (
+          {/* MwSt-Zeile nur wenn keine Aufschlüsselung und USt-Satz gesetzt */}
+          {!hasBreakdown && ustSatzNum > 0 && (
             <div className="col-span-2 flex items-center justify-between bg-bg-muted/50 rounded-card-sm px-3 py-2">
               <span className="label-caps">MwSt ({form.ust_satz}%)</span>
               <span className="text-sm font-mono text-status-warning">

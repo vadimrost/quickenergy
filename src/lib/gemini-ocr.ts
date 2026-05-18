@@ -79,17 +79,29 @@ KATEGORIEN (invoice_type):
 - Gemischte Steuersätze allein sind KEIN Hinweis auf Tanken
 
 NETTOBETRAG (net_amount / net_amount_XX):
-- IMMER den Nettobetrag NACH allen Rabatten verwenden ("Netto abzüglich Rabatt", "Nettobetrag", "Zwischensumme exkl. USt.")
+- IMMER den Nettobetrag NACH allen Rabatten/Positionsrabatten verwenden ("Netto abzüglich Rabatt", "Nettobetrag", "Zwischensumme exkl. USt.", "Summe Positionen" + Zuschläge)
 - NIE den Brutto- oder Zahlbetrag als Netto verwenden
 - Bei Skonto: Netto VOR Skonto nehmen (Skonto ist kein Rabatt auf den Nettobetrag)
+- "Zahlungen an Dritte" / "Zahlungen an A1 f. Dienste von Dritten" / "Drittanbieter" NICHT zum Nettobetrag dazuzählen — diese sind Durchleitungszahlungen ohne eigene MwSt-Aufschlüsselung und gehören in net_amount_0
+- Österreichische MwSt-Sätze (UID beginnt mit "ATU"): ausschließlich 0%, 10% oder 20% — NIE 19%
+- Deutsche MwSt-Sätze (UID beginnt mit "DE"): 19% oder 7% möglich
+- 19 aus einer österreichischen Postleitzahl (z.B. "1190 Wien", "1140 Wien") oder Auftragsnummer ist KEIN Steuersatz
+- Zahlen in Adressen, Postleitzahlen oder Belegnummern sind NIEMALS Steuersätze
+
+PROFORMA / KEINE VORSTEUERABZUGSBERECHTIGUNG:
+- "Proforma-Rechnung" / "Keine Rechnung iSd UStG" / "keine Vorsteuerabzugsberechtigung" → tax_rate = null, tax_amount_10 = null, tax_amount_20 = null, net_amount_10 = null, net_amount_20 = null
+- net_amount = Nettosumme aller Positionen inkl. Zuschläge, VOR Skonto (z.B. "Summe Positionen" + "Gefahrengutzuschlag" etc.) — Skonto ist ein Zahlungsrabatt, der NICHT vom Nettobetrag abgezogen wird
 
 MEHRWERTSTEUER:
 - tax_amount_10 / tax_amount_20: den TATSÄCHLICHEN MwSt-Betrag direkt vom Beleg nehmen ("Steuer", "MwSt-Betrag", "Umsatzsteuer von €X") — NIEMALS selbst ausrechnen
 - net_amount_10: NETTO (exkl. MwSt) aller Positionen mit 10%
 - net_amount_20: NETTO (exkl. MwSt) aller Positionen mit 20%
-- net_amount_0:  Betrag ohne MwSt (Trinkgeld bei Bewirtung)
-- "enth. MwSt" / "Inkl. X% MwSt" / "inkl. MwSt" → Netto = Gesamtbetrag − MwSt-Betrag. IMMER ausrechnen und net_amount_XX befüllen.
-- Beispiel: Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR → net_amount_20 = 98,33, tax_amount_20 = 19,67
+- net_amount_0:  Trinkgeld / Tip (bei Bewirtung): "Tip", "+ Tip", "Tipp", "Trinkgeld", "tip" — dieser Betrag hat 0% MwSt und wird NICHT in net_amount_10/20 eingerechnet
+- "enth. MwSt" / "Inkl. X% MwSt" / "inkl. MwSt" / "enth.Mwst" → Bruttoangabe enthält MwSt. Netto = Bruttoangabe − MwSt-Betrag. IMMER ausrechnen und net_amount_XX befüllen.
+- Beispiel 1: "Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR" → net_amount_20 = 98,33, tax_amount_20 = 19,67
+- Beispiel 2: "10% Ware 46,10 enth.Mwst 4,19" → net_amount_10 = 41,91, tax_amount_10 = 4,19  (46,10 − 4,19 = 41,91)
+- Beispiel 3: "20% Ware 7,80 enth.Mwst 1,30" → net_amount_20 = 6,50, tax_amount_20 = 1,30
+- Wenn KEINE MwSt auf dem Beleg steht: tax_rate = null, tax_amount_10 = null, tax_amount_20 = null, net_amount_XX = null
 - Bei Dienstleistung mit einem Satz: net_amount + tax_rate + tax_amount_20 (oder tax_amount_10) füllen, net_amount_XX = null
 
 RECHNUNGSNUMMER: Formale Rechnungs-Nr. bevorzugen. Bei Kassenbons (Tankstelle, Restaurant) alternativ Bon-Nr., Beleg-Nr. oder Kassen-ID verwenden — niemals null lassen wenn irgendeine Belegnummer sichtbar ist.

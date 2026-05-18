@@ -1,0 +1,173 @@
+{
+  "name": "Outlook → QuickEnergy OCR",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "filters": {},
+        "options": {}
+      },
+      "id": "node-001",
+      "name": "Outlook: Neue Email",
+      "type": "n8n-nodes-base.microsoftOutlookTrigger",
+      "typeVersion": 1,
+      "position": [200, 300],
+      "credentials": {
+        "microsoftOutlookOAuth2Api": { "id": "", "name": "Microsoft Outlook" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const attachments = $json.attachments || []\nconst pdf = attachments.find(a =>\n  (a.name || '').toLowerCase().endsWith('.pdf') ||\n  a.contentType === 'application/pdf'\n)\n\nif (!pdf || !pdf.contentBytes) {\n  return [{ json: { hasPdf: false } }]\n}\n\nconst fileName = `email-${Date.now()}.pdf`\n\nreturn [{\n  json: {\n    hasPdf: true,\n    pdfBase64: pdf.contentBytes,\n    fileName,\n    emailSubject: $json.subject || '',\n    emailFrom: $json.from?.emailAddress?.address || ''\n  },\n  binary: {\n    data: {\n      data: pdf.contentBytes,\n      mimeType: 'application/pdf',\n      fileName: pdf.name || fileName\n    }\n  }\n}]"
+      },
+      "id": "node-002",
+      "name": "PDF extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $json.hasPdf }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-003",
+      "name": "Hat PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://DEIN-PROJEKT.supabase.co/storage/v1/object/rechnungen/{{ $json.fileName }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer DEIN_SERVICE_ROLE_KEY" },
+            { "name": "Content-Type", "value": "application/pdf" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "node-004",
+      "name": "PDF zu Supabase hochladen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pdfBase64 = $('PDF extrahieren').first().json.pdfBase64\nconst pdfUrl = `https://DEIN-PROJEKT.supabase.co/storage/v1/object/public/rechnungen/${$('PDF extrahieren').first().json.fileName}`\n\nconst OCR_PROMPT = `Analysiere diese Rechnung und extrahiere alle Felder als JSON.\n\nKATEGORIEN (invoice_type):\n- \"tanken_diesel\" → NUR wenn explizit Diesel/Kraftstoff auf einer TANKSTELLE (Shell, OMV, BP, Jet, etc.)\n- \"tanken_super\"  → NUR wenn explizit Benzin/Super/E5/E10 auf einer TANKSTELLE\n- \"bewirtung\"     → Restaurant, Café, Bar, Sushi, Gasthaus — Essen & Trinken\n- \"dienstleistung\" → ALLES andere: Telekom, Internet, Strom, IT, Handwerk, Baumärkte, etc.\n- Gemischte Steuersätze allein sind KEIN Hinweis auf Tanken\n\nNETTOBETRAG (net_amount / net_amount_XX):\n- IMMER den Nettobetrag NACH allen Rabatten/Positionsrabatten verwenden\n- NIE den Brutto- oder Zahlbetrag als Netto verwenden\n- Bei Skonto: Netto VOR Skonto nehmen (kein Abzug vom Nettobetrag)\n- Zahlungen an Dritte NICHT zum Nettobetrag zählen — gehören in net_amount_0\n- Österreichische MwSt-Sätze (UID beginnt mit ATU): ausschließlich 0%, 10% oder 20% — NIE 19%\n- Deutsche MwSt-Sätze (UID beginnt mit DE): 19% oder 7% möglich\n- Zahlen in Adressen, Postleitzahlen oder Belegnummern sind NIEMALS Steuersätze\n\nPROFORMA / KEINE VORSTEUERABZUGSBERECHTIGUNG:\n- Proforma-Rechnung / Keine Rechnung iSd UStG → tax_rate = null, alle tax_amount = null\n- net_amount = Nettosumme aller Positionen inkl. Zuschläge, VOR Skonto\n\nMEHRWERTSTEUER:\n- tax_amount_10 / tax_amount_20: TATSÄCHLICHEN Betrag direkt vom Beleg nehmen — NIEMALS selbst ausrechnen\n- net_amount_10: NETTO aller Positionen mit 10%\n- net_amount_20: NETTO aller Positionen mit 20%\n- net_amount_0: Trinkgeld / Tip (Tip, + Tip, Tipp, Trinkgeld) — 0% MwSt\n- enth. MwSt / Inkl. X% MwSt: Netto = Brutto − MwSt-Betrag\n- Beispiel 1: Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR → net_amount_20 = 98,33, tax_amount_20 = 19,67\n- Beispiel 2: 10% Ware 46,10 enth.Mwst 4,19 → net_amount_10 = 41,91, tax_amount_10 = 4,19\n- Wenn KEINE MwSt auf Beleg: tax_rate = null, alle tax_amount = null\n- Bei Dienstleistung mit einem Satz: net_amount + tax_rate + tax_amount_20 (oder tax_amount_10), net_amount_XX = null\n\nRECHNUNGSNUMMER: Formale Nr. bevorzugen. Bei Kassenbons Bon-Nr./Beleg-Nr. verwenden — niemals null.\nDATUM: immer YYYY-MM-DD.\ncard_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.\nsupplier_name: Firmenname des Rechnungsstellers (oberster Name auf dem Beleg).`\n\nconst body = {\n  contents: [{ parts: [\n    { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },\n    { text: OCR_PROMPT }\n  ]}],\n  generationConfig: {\n    response_mime_type: 'application/json',\n    response_schema: {\n      type: 'OBJECT',\n      properties: {\n        invoice_date:   { type: 'STRING',  nullable: true },\n        due_date:       { type: 'STRING',  nullable: true },\n        invoice_number: { type: 'STRING',  nullable: true },\n        supplier_name:  { type: 'STRING',  nullable: true },\n        net_amount:     { type: 'NUMBER',  nullable: true },\n        tax_rate:       { type: 'NUMBER',  nullable: true },\n        net_amount_10:  { type: 'NUMBER',  nullable: true },\n        net_amount_20:  { type: 'NUMBER',  nullable: true },\n        net_amount_0:   { type: 'NUMBER',  nullable: true },\n        tax_amount_10:  { type: 'NUMBER',  nullable: true },\n        tax_amount_20:  { type: 'NUMBER',  nullable: true },\n        invoice_type:   { type: 'STRING',  nullable: true },\n        card_last_four: { type: 'STRING',  nullable: true }\n      }\n    }\n  }\n}\n\nreturn [{ json: { geminiBody: JSON.stringify(body), pdfUrl } }]"
+      },
+      "id": "node-005",
+      "name": "Gemini Request vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=DEIN_GEMINI_API_KEY",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "rawCustomBody",
+        "rawContentType": "application/json",
+        "body": "={{ $json.geminiBody }}",
+        "options": {}
+      },
+      "id": "node-006",
+      "name": "Gemini OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1300, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const CARD_MAP = {\n  '1380': 'spesen_philipp_1380',\n  '0744': 'spesen_philipp_0744',\n  '6362': 'firmenkarte_6362',\n  '0660': 'firmenkarte_0660'\n}\n\nfunction normalizeDate(raw) {\n  if (!raw) return null\n  const s = String(raw).trim()\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s\n  if (s.includes('.')) {\n    const parts = s.split('.')\n    if (parts.length === 3) {\n      const [d, m, y] = parts\n      return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`\n    }\n  }\n  const p = new Date(s)\n  return isNaN(p.getTime()) ? null : p.toISOString().split('T')[0]\n}\n\nconst rawText = $json.candidates?.[0]?.content?.parts?.[0]?.text\nconst ocr = typeof rawText === 'string' ? JSON.parse(rawText) : (rawText ?? {})\n\nconst n10 = ocr.net_amount_10 ?? 0\nconst n20 = ocr.net_amount_20 ?? 0\nconst n0  = ocr.net_amount_0  ?? 0\nconst netto = ocr.net_amount ?? (n10 + n20 + n0 > 0 ? Math.round((n10+n20+n0)*100)/100 : 0)\n\nconst digits = ocr.card_last_four ? String(ocr.card_last_four).trim() : null\nconst karte  = digits ? (CARD_MAP[digits] ?? `****${digits}`) : null\nconst validTypes = ['bewirtung','dienstleistung','tanken_diesel','tanken_super']\nconst pdfUrl = $('Gemini Request vorbereiten').first().json.pdfUrl\n\nreturn [{\n  json: {\n    rechnungsnr:    ocr.invoice_number?.trim() || `EMAIL-${Date.now()}`,\n    rechnungsdatum: normalizeDate(ocr.invoice_date) || null,\n    faelligkeit:    normalizeDate(ocr.due_date)     || null,\n    betrag:         netto,\n    ust_satz:       ocr.tax_rate ?? 0,\n    rechnungstyp:   validTypes.includes(ocr.invoice_type) ? ocr.invoice_type : null,\n    betrag_10:      ocr.net_amount_10 ?? null,\n    betrag_20:      ocr.net_amount_20 ?? null,\n    betrag_0:       ocr.net_amount_0  ?? null,\n    mwst_10:        ocr.tax_amount_10 ?? null,\n    mwst_20:        ocr.tax_amount_20 ?? null,\n    karte:          karte || null,\n    pdf_url:        pdfUrl,\n    status:         'eingegangen'\n  }\n}]"
+      },
+      "id": "node-007",
+      "name": "OCR verarbeiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1520, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://DEIN-PROJEKT.supabase.co/rest/v1/rechnungen",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "DEIN_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer DEIN_SERVICE_ROLE_KEY" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "rawCustomBody",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "node-008",
+      "name": "Rechnung speichern",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1740, 200]
+    }
+  ],
+  "connections": {
+    "Outlook: Neue Email": {
+      "main": [[{ "node": "PDF extrahieren", "type": "main", "index": 0 }]]
+    },
+    "PDF extrahieren": {
+      "main": [[{ "node": "Hat PDF?", "type": "main", "index": 0 }]]
+    },
+    "Hat PDF?": {
+      "main": [
+        [{ "node": "PDF zu Supabase hochladen", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "PDF zu Supabase hochladen": {
+      "main": [[{ "node": "Gemini Request vorbereiten", "type": "main", "index": 0 }]]
+    },
+    "Gemini Request vorbereiten": {
+      "main": [[{ "node": "Gemini OCR", "type": "main", "index": 0 }]]
+    },
+    "Gemini OCR": {
+      "main": [[{ "node": "OCR verarbeiten", "type": "main", "index": 0 }]]
+    },
+    "OCR verarbeiten": {
+      "main": [[{ "node": "Rechnung speichern", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "pinData": {},
+  "meta": { "templateCredsSetupCompleted": true }
+}
