@@ -54,7 +54,7 @@ async function uploadPdfToVoucher(voucherId: string, pdfUrl: string, filename: s
 
   const form = new FormData()
   form.append('object', JSON.stringify({ id: voucherId, objectName: 'Voucher' }))
-  form.append('file', new Blob([await pdfBlob.arrayBuffer()], { type: 'application/pdf' }), `${filename}.pdf`)
+  form.append('filename', new Blob([await pdfBlob.arrayBuffer()], { type: 'application/pdf' }), `${filename}.pdf`)
 
   const res = await fetch(`${SEVDESK_BASE}/Document`, {
     method: 'POST',
@@ -150,16 +150,18 @@ Deno.serve(async (req) => {
         const sevdeskId = saved.objects?.voucher?.id
         let pdfUploaded = false
 
+        let pdfError: string | undefined
         if (sevdeskId && r.pdf_url && r.pdf_url !== 'demo') {
           try {
             await uploadPdfToVoucher(sevdeskId, r.pdf_url, r.rechnungsnr)
             pdfUploaded = true
           } catch (uploadErr) {
-            console.error(`PDF upload für Voucher ${sevdeskId}:`, uploadErr)
+            pdfError = uploadErr instanceof Error ? uploadErr.message : String(uploadErr)
+            console.error(`PDF upload für Voucher ${sevdeskId}:`, pdfError)
           }
         }
 
-        results.push({ id: rechnungId, sevdesk_id: sevdeskId, supplier: supplierName, pdf_uploaded: pdfUploaded })
+        results.push({ id: rechnungId, sevdesk_id: sevdeskId, supplier: supplierName, pdf_uploaded: pdfUploaded, pdf_error: pdfError })
       } catch (err) {
         results.push({ id: rechnungId, error: err instanceof Error ? err.message : String(err) })
       }

@@ -1029,7 +1029,15 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll 
                 <td className="text-right">
                   <span className="text-sm font-semibold text-ink">{formatEuro(getBrutto(r))}</span>
                 </td>
-                <td className="text-sm text-ink-muted pl-6">{r.ust_satz}%</td>
+                <td className="text-sm text-ink-muted pl-6">
+                  {r.betrag_10 != null && r.betrag_10 > 0 && r.betrag_20 != null && r.betrag_20 > 0
+                    ? '10% / 20%'
+                    : r.betrag_10 != null && r.betrag_10 > 0
+                      ? '10%'
+                      : r.betrag_20 != null && r.betrag_20 > 0
+                        ? '20%'
+                        : r.ust_satz > 0 ? `${r.ust_satz}%` : '—'}
+                </td>
                 <td className="text-sm"><FaelligkeitCell date={r.faelligkeit} /></td>
                 <td className="text-xs text-ink-muted">
                   {r.rechnungstyp ? RECHNUNGSTYP_LABEL[r.rechnungstyp] : '—'}
