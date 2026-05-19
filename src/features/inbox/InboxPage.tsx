@@ -996,7 +996,7 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-ink">{formatEuro(getBrutto(r))}</span>
                 <span className="text-xs text-ink-muted">{r.ust_satz}% USt.</span>
-                {r.faelligkeit && (
+                {r.faelligkeit && r.status !== 'bezahlt' && (
                   <span className="text-xs"><FaelligkeitCell date={r.faelligkeit} /></span>
                 )}
               </div>
@@ -1133,7 +1133,7 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
                         ? '20%'
                         : r.ust_satz > 0 ? `${r.ust_satz}%` : '—'}
                 </td>
-                <td className="text-sm"><FaelligkeitCell date={r.faelligkeit} /></td>
+                <td className="text-sm">{r.status !== 'bezahlt' ? <FaelligkeitCell date={r.faelligkeit} /> : '—'}</td>
                 <td className="text-xs text-ink-muted">
                   {r.rechnungstyp ? RECHNUNGSTYP_LABEL[r.rechnungstyp] : '—'}
                 </td>
