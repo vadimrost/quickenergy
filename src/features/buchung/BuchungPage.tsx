@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, FileText, AlignLeft } from 'lucide-react'
-import { useRechnung } from '@/features/inbox/useRechnungen'
+import { ArrowLeft, ExternalLink, FileText, AlignLeft, Pencil, Check, X } from 'lucide-react'
+import { useRechnung, useUpdateRechnung } from '@/features/inbox/useRechnungen'
 import { useDuplikate } from './useBuchung'
 import { PdfViewer } from './PdfViewer'
 import { SkontoAlert } from './SkontoAlert'
@@ -10,6 +10,8 @@ import { ExtrahierteFelder } from './ExtrahierteFelder'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ProjectColorDot } from '@/components/shared/ProjectColorDot'
 import { Skeleton } from '@/components/ui/skeleton'
+import { supabase } from '@/lib/supabase'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import type { RechnungStatus } from '@/types/database'
 
@@ -29,10 +31,88 @@ const STATUS_LABEL: Record<RechnungStatus, string> = {
 
 type MobileTab = 'pdf' | 'details'
 
+function SupplierNameEdit({ rechnungId, currentName, onSaved }: {
+  rechnungId: string
+  currentName: string
+  onSaved: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState(currentName)
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const { mutate: updateRechnung } = useUpdateRechnung()
+
+  useEffect(() => {
+    if (editing) {
+      setValue(currentName)
+      setTimeout(() => inputRef.current?.select(), 0)
+    }
+  }, [editing, currentName])
+
+  const save = async () => {
+    const name = value.trim()
+    if (!name || name === currentName) { setEditing(false); return }
+    setSaving(true)
+    try {
+      const { data: existing } = await supabase
+        .from('lieferanten').select('id').ilike('name', name).maybeSingle()
+      const lieferantId = existing?.id ?? (
+        await supabase.from('lieferanten').insert({ name }).select('id').single()
+      ).data?.id
+      if (!lieferantId) throw new Error('Lieferant konnte nicht gespeichert werden')
+      updateRechnung(
+        { id: rechnungId, updates: { lieferant_id: lieferantId as any } },
+        {
+          onSuccess: () => { toast.success('Lieferant aktualisiert'); onSaved() },
+          onError: (e) => toast.error(e.message),
+        }
+      )
+      setEditing(false)
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Fehler')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cancel = () => { setValue(currentName); setEditing(false) }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="group flex items-center gap-1.5 text-sm font-semibold text-ink truncate hover:text-ink/70 transition-colors"
+      >
+        <span className="truncate">{currentName}</span>
+        <Pencil size={11} className="text-ink-subtle opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity" />
+      </button>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') cancel() }}
+        disabled={saving}
+        className="text-sm font-semibold text-ink bg-bg-muted border border-accent-400 rounded px-1.5 py-0.5 outline-none w-40 min-w-0"
+      />
+      <button onClick={save} disabled={saving} className="text-status-active hover:opacity-70 transition-opacity">
+        <Check size={14} />
+      </button>
+      <button onClick={cancel} disabled={saving} className="text-ink-subtle hover:opacity-70 transition-opacity">
+        <X size={14} />
+      </button>
+    </div>
+  )
+}
+
 export function BuchungPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: rechnung, isLoading } = useRechnung(id)
+  const { data: rechnung, isLoading, refetch } = useRechnung(id)
   const { data: duplikate = [] } = useDuplikate(id)
   const [mobileTab, setMobileTab] = useState<MobileTab>('details')
 
@@ -51,9 +131,11 @@ export function BuchungPage() {
           <ProjectColorDot id={rechnung.id} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-ink truncate">
-                {rechnung.lieferant?.name ?? (rechnung.ocr_json as any)?.supplier_name ?? 'Unbekannter Lieferant'}
-              </span>
+              <SupplierNameEdit
+                rechnungId={rechnung.id}
+                currentName={rechnung.lieferant?.name ?? (rechnung.ocr_json as any)?.supplier_name ?? 'Unbekannter Lieferant'}
+                onSaved={() => void refetch()}
+              />
               <StatusBadge
                 variant={STATUS_VARIANT[rechnung.status]}
                 label={STATUS_LABEL[rechnung.status]}
@@ -104,11 +186,10 @@ export function BuchungPage() {
 
   return (
     <>
-      {/* Mobile layout — fixed overlay so it's fully independent of AppLayout padding */}
+      {/* Mobile layout */}
       <div className="md:hidden fixed inset-0 bottom-16 flex flex-col bg-bg-base z-40">
         {header}
 
-        {/* Mobile tab bar */}
         <div className="flex border-b border-border flex-shrink-0">
           <button
             onClick={() => setMobileTab('details')}
@@ -155,7 +236,6 @@ export function BuchungPage() {
 
       {/* Desktop layout */}
       <div className="hidden md:flex -mx-10 -my-8 h-screen overflow-hidden bg-bg-base">
-        {/* LEFT: PDF Panel */}
         <div className="flex flex-col w-[52%] h-full border-r border-border bg-bg-surface">
           {header}
           <div className="flex-1 overflow-hidden">
@@ -169,7 +249,6 @@ export function BuchungPage() {
           </div>
         </div>
 
-        {/* RIGHT: Fields Panel */}
         <div className="flex-1 h-full overflow-y-auto">
           {detailContent}
         </div>
