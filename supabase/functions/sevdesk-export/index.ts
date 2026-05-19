@@ -10,7 +10,6 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-
 async function sevGet(path: string) {
   const res = await fetch(`${SEVDESK_BASE}${path}`, {
     headers: { Authorization: SEVDESK_TOKEN },
@@ -19,52 +18,48 @@ async function sevGet(path: string) {
   return res.json()
 }
 
-async function sevPost(path: string, body: unknown) {
-  const res = await fetch(`${SEVDESK_BASE}${path}`, {
-    method: 'POST',
-    headers: { Authorization: SEVDESK_TOKEN, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`sevDesk POST ${path} → ${res.status}: ${text}`)
-  }
-  return res.json()
-}
-
-
 async function findOrCreateContact(name: string): Promise<string> {
   const found = await sevGet(`/Contact?name=${encodeURIComponent(name)}&limit=1`)
   if (found.objects?.length > 0) return found.objects[0].id
 
-  const created = await sevPost('/Contact', {
-    objectName: 'Contact',
-    name,
-    status: '1000',
-    category: { id: '3', objectName: 'Category' },
-    sevClient: { id: SEV_CLIENT_ID, objectName: 'SevClient' },
+  const form = new FormData()
+  form.append('name', name)
+  form.append('status', '1000')
+  form.append('objectName', 'Contact')
+  form.append('category[id]', '3')
+  form.append('category[objectName]', 'Category')
+
+  const res = await fetch(`${SEVDESK_BASE}/Contact`, {
+    method: 'POST',
+    headers: { Authorization: SEVDESK_TOKEN },
+    body: form,
   })
-  return created.objects.id
+  if (!res.ok) throw new Error(`Kontakt anlegen fehlgeschlagen: ${res.status}`)
+  const data = await res.json()
+  return data.objects.id
 }
 
-async function uploadPdfToVoucher(voucherId: string, pdfUrl: string, filename: string): Promise<void> {
+async function uploadTempFile(pdfUrl: string, filename: string): Promise<string> {
   const pdfRes = await fetch(pdfUrl)
-  if (!pdfRes.ok) throw new Error(`PDF fetch fehlgeschlagen: ${pdfRes.status}`)
-  const pdfBlob = await pdfRes.blob()
+  if (!pdfRes.ok) throw new Error(`PDF nicht ladbar: ${pdfRes.status}`)
+  const blob = await pdfRes.blob()
 
   const form = new FormData()
-  form.append('object', JSON.stringify({ id: voucherId, objectName: 'Voucher' }))
-  form.append('filename', new Blob([await pdfBlob.arrayBuffer()], { type: 'application/pdf' }), `${filename}.pdf`)
+  form.append('file', new Blob([await blob.arrayBuffer()], { type: 'application/pdf' }), `${filename}.pdf`)
 
-  const res = await fetch(`${SEVDESK_BASE}/Document`, {
+  const res = await fetch(`${SEVDESK_BASE}/Voucher/Factory/uploadTempFile`, {
     method: 'POST',
     headers: { Authorization: SEVDESK_TOKEN },
     body: form,
   })
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`Dokument-Upload fehlgeschlagen: ${res.status} ${text}`)
+    throw new Error(`PDF-Upload fehlgeschlagen: ${res.status} ${text}`)
   }
+  const data = await res.json()
+  const tempFilename = data?.objects?.filename
+  if (!tempFilename) throw new Error('sevDesk: kein Dateiname zurückgegeben')
+  return tempFilename
 }
 
 Deno.serve(async (req) => {
@@ -95,11 +90,16 @@ Deno.serve(async (req) => {
 
         if (error || !r) throw new Error('Rechnung nicht gefunden')
 
-        const ocr = (r.ocr_json ?? {}) as Record<string, any>
         const supplierName: string =
-          r.lieferant?.name ?? ocr.supplier_name?.value ?? ocr.supplier_name ?? 'Unbekannter Lieferant'
-        const netAmount: number = ocr.invoice_net_amount?.value ?? ocr.invoice_net_amount ?? r.betrag
-        const taxRate: number = r.ust_satz
+          r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? 'Unbekannter Lieferant'
+        const netAmount: number = r.betrag
+        const taxRate: number = r.ust_satz ?? 20
+
+        // PDF erst hochladen, dann filename in saveVoucher mitgeben
+        let tempFilename: string | null = null
+        if (r.pdf_url && r.pdf_url !== 'demo') {
+          tempFilename = await uploadTempFile(r.pdf_url, r.rechnungsnr)
+        }
 
         let supplierId: string | null = null
         try {
@@ -108,7 +108,8 @@ Deno.serve(async (req) => {
           // Fallback: supplierName als Freitext
         }
 
-        const voucherDate = r.created_at.slice(0, 10) + 'T00:00:00+01:00'
+        const voucherDate =
+          (r.rechnungsdatum ?? r.created_at.slice(0, 10)) + 'T00:00:00+01:00'
         const paymentDeadline = r.faelligkeit ? r.faelligkeit + 'T00:00:00+01:00' : null
 
         const voucher: Record<string, unknown> = {
@@ -140,34 +141,35 @@ Deno.serve(async (req) => {
           sevClient: { id: SEV_CLIENT_ID, objectName: 'SevClient' },
         }
 
-        const saved = await sevPost('/Voucher/Factory/saveVoucher', {
-          voucher,
-          voucherPosSave: [voucherPos],
-          voucherPosDelete: null,
-          filename: null,
+        const res = await fetch(`${SEVDESK_BASE}/Voucher/Factory/saveVoucher`, {
+          method: 'POST',
+          headers: { Authorization: SEVDESK_TOKEN, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            voucher,
+            voucherPosSave: [voucherPos],
+            voucherPosDelete: null,
+            filename: tempFilename,
+          }),
         })
-
-        const sevdeskId = saved.objects?.voucher?.id
-        let pdfUploaded = false
-
-        let pdfError: string | undefined
-        if (sevdeskId && r.pdf_url && r.pdf_url !== 'demo') {
-          try {
-            await uploadPdfToVoucher(sevdeskId, r.pdf_url, r.rechnungsnr)
-            pdfUploaded = true
-          } catch (uploadErr) {
-            pdfError = uploadErr instanceof Error ? uploadErr.message : String(uploadErr)
-            console.error(`PDF upload für Voucher ${sevdeskId}:`, pdfError)
-          }
+        if (!res.ok) {
+          const text = await res.text()
+          throw new Error(`saveVoucher fehlgeschlagen: ${res.status} ${text}`)
         }
+        const saved = await res.json()
+        const sevdeskId = saved.objects?.voucher?.id
 
-        results.push({ id: rechnungId, sevdesk_id: sevdeskId, supplier: supplierName, pdf_uploaded: pdfUploaded, pdf_error: pdfError })
+        results.push({
+          id: rechnungId,
+          sevdesk_id: sevdeskId,
+          supplier: supplierName,
+          pdf_uploaded: !!tempFilename,
+        })
       } catch (err) {
         results.push({ id: rechnungId, error: err instanceof Error ? err.message : String(err) })
       }
     }
 
-    const allOk = results.every(r => !r.error)
+    const allOk = results.every(r => !('error' in r))
     return new Response(JSON.stringify({ results }), {
       status: allOk ? 200 : 207,
       headers: { ...CORS, 'Content-Type': 'application/json' },

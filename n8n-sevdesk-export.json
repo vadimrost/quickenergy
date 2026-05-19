@@ -12,10 +12,7 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [
-        240,
-        300
-      ],
+      "position": [240, 300],
       "webhookId": "quickenergy-sevdesk-export"
     },
     {
@@ -26,136 +23,139 @@
       "name": "IDs extrahieren",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        460,
-        300
-      ]
+      "position": [460, 300]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rechnungen?id=eq.{{ $json.id }}&select=*",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {
-          "headers": {
-            "values": [
-              {
-                "name": "apikey",
-                "value": "={{ $env.SUPABASE_ANON_KEY }}"
-              },
-              {
-                "name": "Authorization",
-                "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
-              }
-            ]
-          }
-        }
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/rechnungen?id=eq.{{ $json.id }}&select=*,lieferant:lieferant_id(name)",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" }
+          ]
+        },
+        "options": {}
       },
       "id": "fetch-rechnung",
       "name": "Rechnung laden (Supabase)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        680,
-        300
-      ]
+      "position": [680, 300]
     },
     {
       "parameters": {
-        "jsCode": "const rows = $input.first().json;\nconst r = Array.isArray(rows) ? rows[0] : rows;\n\nif (!r) throw new Error('Rechnung nicht gefunden');\n\nconst today = new Date().toISOString().split('T')[0];\nconst voucherDate = r.created_at ? r.created_at.split('T')[0] : today;\nconst paymentDeadline = r.faelligkeit ?? null;\n\nconst payload = {\n  voucher: {\n    objectName: 'Voucher',\n    mapAll: true,\n    voucherDate: voucherDate + 'T00:00:00+00:00',\n    supplierName: r.lieferant?.name ?? r.ocr_json?.supplier_name ?? 'Unbekannter Lieferant',\n    description: r.rechnungsnr,\n    status: 50,\n    taxRate: r.ust_satz ?? 19,\n    taxText: `Umsatzsteuer ${r.ust_satz ?? 19}%`,\n    taxType: 'default',\n    creditDebit: 'D',\n    voucherType: 'VOU',\n    currency: 'EUR',\n    paymentDeadline: paymentDeadline ? paymentDeadline + 'T00:00:00+00:00' : null\n  },\n  voucherPosSave: [\n    {\n      objectName: 'VoucherPos',\n      mapAll: true,\n      accountingType: { id: '84', objectName: 'AccountingType' },\n      taxRate: r.ust_satz ?? 19,\n      net: true,\n      sumNet: r.betrag ?? 0,\n      comment: r.rechnungsnr\n    }\n  ],\n  filename: null\n};\n\nreturn [{ json: { payload, rechnung_id: r.id, rechnungsnr: r.rechnungsnr } }];"
+        "method": "GET",
+        "url": "={{ ($input.first().json[0] ?? $input.first().json).pdf_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "download-pdf",
+      "name": "PDF von Supabase laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://my.sevdesk.de/api/v1/Voucher/Factory/uploadTempFile",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $env.SEVDESK_API_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipartFormData",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "upload-pdf-sevdesk",
+      "name": "PDF zu sevDesk hochladen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $('Rechnung laden (Supabase)').first().json;\nconst r = Array.isArray(rows) ? rows[0] : rows;\nif (!r) throw new Error('Rechnung nicht gefunden');\n\nconst tempFilename = $input.first().json.filename ?? null;\n\nconst voucherDate    = (r.rechnungsdatum ?? r.created_at?.split('T')[0] ?? new Date().toISOString().split('T')[0]) + 'T00:00:00+00:00';\nconst paymentDeadline = r.faelligkeit ? r.faelligkeit + 'T00:00:00+00:00' : null;\nconst supplierName    = r.lieferant?.name ?? (r.ocr_json?.supplier_name) ?? 'Unbekannter Lieferant';\nconst ustSatz         = r.ust_satz ?? 20;\n\nconst payload = {\n  voucher: {\n    objectName: 'Voucher',\n    mapAll: true,\n    voucherDate,\n    supplierName,\n    description: r.rechnungsnr,\n    status: 50,\n    taxRate: ustSatz,\n    taxText: `Umsatzsteuer ${ustSatz}%`,\n    taxType: 'default',\n    creditDebit: 'D',\n    voucherType: 'VOU',\n    currency: 'EUR',\n    paymentDeadline\n  },\n  voucherPosSave: [\n    {\n      objectName: 'VoucherPos',\n      mapAll: true,\n      accountingType: { id: '84', objectName: 'AccountingType' },\n      taxRate: ustSatz,\n      net: true,\n      sumNet: r.betrag ?? 0,\n      comment: r.rechnungsnr\n    }\n  ],\n  filename: tempFilename\n};\n\nreturn [{ json: { payload, rechnung_id: r.id, rechnungsnr: r.rechnungsnr } }];"
       },
       "id": "transform-sevdesk",
       "name": "Zu sevDesk-Format umwandeln",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        900,
-        300
-      ]
+      "position": [1340, 300]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://my.sevdesk.de/api/v1/Voucher",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "url": "https://my.sevdesk.de/api/v1/Voucher/Factory/saveVoucher",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $env.SEVDESK_API_TOKEN }}" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json.payload) }}",
-        "options": {
-          "headers": {
-            "values": [
-              {
-                "name": "Authorization",
-                "value": "={{ $env.SEVDESK_API_TOKEN }}"
-              },
-              {
-                "name": "Content-Type",
-                "value": "application/json"
-              }
-            ]
-          }
-        }
+        "contentType": "rawCustomBody",
+        "body": "={{ JSON.stringify($json.payload) }}",
+        "options": {}
       },
       "id": "create-voucher",
       "name": "Voucher in sevDesk erstellen",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1120,
-        300
-      ]
+      "position": [1560, 300]
     },
     {
       "parameters": {
-        "jsCode": "const sevdeskResponse = $input.first().json;\nconst voucherId = sevdeskResponse?.objects?.id ?? null;\nconst success = !!voucherId;\n\nreturn [{\n  json: {\n    rechnung_id: $('Zu sevDesk-Format umwandeln').first().json.rechnung_id,\n    rechnungsnr: $('Zu sevDesk-Format umwandeln').first().json.rechnungsnr,\n    sevdesk_voucher_id: voucherId,\n    success\n  }\n}];"
+        "jsCode": "const sevdeskResponse = $input.first().json;\nconst voucherId = sevdeskResponse?.objects?.voucher?.id ?? sevdeskResponse?.objects?.id ?? null;\nconst success = !!voucherId;\n\nreturn [{\n  json: {\n    rechnung_id: $('Zu sevDesk-Format umwandeln').first().json.rechnung_id,\n    rechnungsnr: $('Zu sevDesk-Format umwandeln').first().json.rechnungsnr,\n    sevdesk_voucher_id: voucherId,\n    success\n  }\n}];"
       },
       "id": "check-result",
       "name": "Ergebnis prüfen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1340,
-        300
-      ]
+      "position": [1780, 300]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.SUPABASE_URL }}/rest/v1/export_log",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}" },
+            { "name": "Prefer",        "value": "return=minimal" }
+          ]
+        },
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"rechnung_ids_json\": [\"{{ $json.rechnung_id }}\"],\n  \"ziel\": \"sevdesk\",\n  \"exported_at\": \"{{ new Date().toISOString() }}\",\n  \"success\": {{ $json.success }}\n}",
-        "options": {
-          "headers": {
-            "values": [
-              {
-                "name": "apikey",
-                "value": "={{ $env.SUPABASE_ANON_KEY }}"
-              },
-              {
-                "name": "Authorization",
-                "value": "=Bearer {{ $env.SUPABASE_ANON_KEY }}"
-              },
-              {
-                "name": "Prefer",
-                "value": "return=minimal"
-              }
-            ]
-          }
-        }
+        "contentType": "rawCustomBody",
+        "body": "={\n  \"rechnung_ids_json\": [\"{{ $json.rechnung_id }}\"],\n  \"ziel\": \"sevdesk\",\n  \"exported_at\": \"{{ new Date().toISOString() }}\",\n  \"success\": {{ $json.success }}\n}",
+        "options": {}
       },
       "id": "log-export",
       "name": "Export loggen (Supabase)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1560,
-        300
-      ]
+      "position": [2000, 300]
     },
     {
       "parameters": {
@@ -165,10 +165,7 @@
       "name": "Zusammenfassen",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1780,
-        300
-      ]
+      "position": [2220, 300]
     },
     {
       "parameters": {
@@ -180,100 +177,39 @@
       "name": "Antwort senden",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [
-        2000,
-        300
-      ]
+      "position": [2440, 300]
     }
   ],
   "connections": {
     "Webhook": {
-      "main": [
-        [
-          {
-            "node": "IDs extrahieren",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "IDs extrahieren", "type": "main", "index": 0 }]]
     },
     "IDs extrahieren": {
-      "main": [
-        [
-          {
-            "node": "Rechnung laden (Supabase)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Rechnung laden (Supabase)", "type": "main", "index": 0 }]]
     },
     "Rechnung laden (Supabase)": {
-      "main": [
-        [
-          {
-            "node": "Zu sevDesk-Format umwandeln",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "PDF von Supabase laden", "type": "main", "index": 0 }]]
+    },
+    "PDF von Supabase laden": {
+      "main": [[{ "node": "PDF zu sevDesk hochladen", "type": "main", "index": 0 }]]
+    },
+    "PDF zu sevDesk hochladen": {
+      "main": [[{ "node": "Zu sevDesk-Format umwandeln", "type": "main", "index": 0 }]]
     },
     "Zu sevDesk-Format umwandeln": {
-      "main": [
-        [
-          {
-            "node": "Voucher in sevDesk erstellen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Voucher in sevDesk erstellen", "type": "main", "index": 0 }]]
     },
     "Voucher in sevDesk erstellen": {
-      "main": [
-        [
-          {
-            "node": "Ergebnis prüfen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Ergebnis prüfen", "type": "main", "index": 0 }]]
     },
     "Ergebnis prüfen": {
-      "main": [
-        [
-          {
-            "node": "Export loggen (Supabase)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Export loggen (Supabase)", "type": "main", "index": 0 }]]
     },
     "Export loggen (Supabase)": {
-      "main": [
-        [
-          {
-            "node": "Zusammenfassen",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Zusammenfassen", "type": "main", "index": 0 }]]
     },
     "Zusammenfassen": {
-      "main": [
-        [
-          {
-            "node": "Antwort senden",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{ "node": "Antwort senden", "type": "main", "index": 0 }]]
     }
   },
   "active": false,
