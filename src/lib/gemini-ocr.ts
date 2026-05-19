@@ -6,9 +6,10 @@ export const CARD_MAP: Record<string, string> = {
 }
 
 export function effectiveNetto(ocr: Pick<GeminiOcrResult, 'net_amount' | 'net_amount_10' | 'net_amount_20' | 'net_amount_0'>): number | null {
-  if (ocr.net_amount) return ocr.net_amount
+  // Prefer breakdown sum when available — net_amount can be wrong (brutto mistaken for netto)
   const sum = (ocr.net_amount_10 ?? 0) + (ocr.net_amount_20 ?? 0) + (ocr.net_amount_0 ?? 0)
-  return sum > 0 ? Math.round(sum * 100) / 100 : null
+  if (sum > 0) return Math.round(sum * 100) / 100
+  return ocr.net_amount ?? null
 }
 
 export function resolveCard(lastFour: string | null | undefined): string | null {
@@ -98,6 +99,8 @@ const OCR_PROMPT = buildOcrPrompt(DEFAULT_KATEGORIEN) + `
 NETTOBETRAG (net_amount / net_amount_XX):
 - IMMER den Nettobetrag NACH allen Rabatten/Positionsrabatten verwenden ("Netto abzüglich Rabatt", "Nettobetrag", "Zwischensumme exkl. USt.", "Summe Positionen" + Zuschläge)
 - NIE den Brutto- oder Zahlbetrag als Netto verwenden
+- "Summe in €", "Summe €", "Summe", "Gesamtbetrag", "Total", "Zahlbetrag", "Endbetrag" → das ist IMMER BRUTTO — NIEMALS als net_amount verwenden
+- Bei Kassenbons (Restaurant, Tankstelle): die MwSt-Tabelle am Ende (Spalten Netto/Steuer/Brutto je Steuersatz) ist die einzige verlässliche Quelle für net_amount_XX und tax_amount_XX — die Gesamtsumme "Summe in €" ignorieren
 - Bei Skonto: Netto VOR Skonto nehmen (Skonto ist kein Rabatt auf den Nettobetrag)
 - "Zahlungen an Dritte" / "Zahlungen an A1 f. Dienste von Dritten" / "Drittanbieter" NICHT zum Nettobetrag dazuzählen — diese sind Durchleitungszahlungen ohne eigene MwSt-Aufschlüsselung und gehören in net_amount_0
 - Österreichische MwSt-Sätze (UID beginnt mit "ATU"): ausschließlich 0%, 10% oder 20% — NIE 19%

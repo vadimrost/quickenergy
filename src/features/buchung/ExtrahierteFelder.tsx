@@ -247,7 +247,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
           <SelectTrigger>
             <SelectValue placeholder="— Kategorie wählen" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="bg-white border border-border shadow-md">
             {kategorien.map(k => (
               <SelectItem key={k.wert} value={k.wert}>{k.name}</SelectItem>
             ))}
@@ -300,7 +300,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
               <SelectTrigger className={confidenceColor('ust_satz')}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white border border-border shadow-md">
                 <SelectItem value="0">0%</SelectItem>
                 <SelectItem value="10">10%</SelectItem>
                 <SelectItem value="19">19%</SelectItem>
@@ -465,7 +465,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-white border border-border shadow-md">
                 <SelectItem value="eingegangen">Neu</SelectItem>
                 <SelectItem value="bezahlt">Bezahlt</SelectItem>
               </SelectContent>
