@@ -100,9 +100,27 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           updated.push('Betrag')
         }
 
-        if (ocr.tax_rate && (!r.ust_satz || r.ust_satz === 0)) {
-          updates.ust_satz = Number(ocr.tax_rate)
-          updated.push('USt.')
+        if (ocr.is_proforma) {
+          updates.ust_satz = 0
+          updates.betrag_10 = null; updates.betrag_20 = null; updates.betrag_0 = null
+          updates.mwst_10 = null;   updates.mwst_20 = null
+          updated.push('Proforma (0% USt.)')
+        } else {
+          if (ocr.tax_rate && (!r.ust_satz || r.ust_satz === 0)) {
+            updates.ust_satz = Number(ocr.tax_rate)
+            updated.push('USt.')
+          }
+          if (ocr.net_amount_10 != null && (forceAll || !r.betrag_10)) {
+            updates.betrag_10 = Number(ocr.net_amount_10); updated.push('Netto 10%')
+          }
+          if (ocr.net_amount_20 != null && (forceAll || !r.betrag_20)) {
+            updates.betrag_20 = Number(ocr.net_amount_20); updated.push('Netto 20%')
+          }
+          if (ocr.net_amount_0 != null && (forceAll || !r.betrag_0)) {
+            updates.betrag_0 = Number(ocr.net_amount_0); updated.push('Trinkgeld 0%')
+          }
+          if (ocr.tax_amount_10 != null && (forceAll || !r.mwst_10)) updates.mwst_10 = Number(ocr.tax_amount_10)
+          if (ocr.tax_amount_20 != null && (forceAll || !r.mwst_20)) updates.mwst_20 = Number(ocr.tax_amount_20)
         }
 
         // Kategorie
@@ -110,26 +128,6 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
         if (ocr.invoice_type && validTypes.includes(ocr.invoice_type) && (forceAll || !r.rechnungstyp)) {
           updates.rechnungstyp = ocr.invoice_type as Rechnungstyp
           updated.push('Kategorie')
-        }
-
-        // MwSt-Aufschlüsselung für alle Kategorien (auch Dienstleistung mit gemischten Sätzen)
-        if (ocr.net_amount_10 != null && (forceAll || !r.betrag_10)) {
-          updates.betrag_10 = Number(ocr.net_amount_10)
-          updated.push('Netto 10%')
-        }
-        if (ocr.net_amount_20 != null && (forceAll || !r.betrag_20)) {
-          updates.betrag_20 = Number(ocr.net_amount_20)
-          updated.push('Netto 20%')
-        }
-        if (ocr.net_amount_0 != null && (forceAll || !r.betrag_0)) {
-          updates.betrag_0 = Number(ocr.net_amount_0)
-          updated.push('Trinkgeld 0%')
-        }
-        if (ocr.tax_amount_10 != null && (forceAll || !r.mwst_10)) {
-          updates.mwst_10 = Number(ocr.tax_amount_10)
-        }
-        if (ocr.tax_amount_20 != null && (forceAll || !r.mwst_20)) {
-          updates.mwst_20 = Number(ocr.tax_amount_20)
         }
 
         const resolvedCard = resolveCard(ocr.card_last_four)

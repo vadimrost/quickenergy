@@ -60,16 +60,26 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
         if (ocr.due_date)     { next.faelligkeit    = normalizeDate(ocr.due_date)     ?? f.faelligkeit;    updated.push('Fälligkeit') }
         if (ocr.invoice_number?.trim()) { next.rechnungsnr = ocr.invoice_number.trim(); updated.push('Rechnungs-Nr.') }
         const netto = effectiveNetto(ocr); if (netto) { next.betrag = String(netto); updated.push('Betrag') }
-        if (ocr.tax_rate)     { next.ust_satz = String(ocr.tax_rate);    updated.push('USt.') }
+
+        if (ocr.is_proforma) {
+          // Proforma: keine MwSt
+          next.ust_satz = '0'
+          next.betrag_10 = ''; next.betrag_20 = ''; next.betrag_0 = ''
+          next.mwst_10 = '';   next.mwst_20 = ''
+          updated.push('Proforma (0% USt.)')
+        } else {
+          if (ocr.tax_rate)     { next.ust_satz = String(ocr.tax_rate); updated.push('USt.') }
+          if (ocr.net_amount_10 != null) { next.betrag_10 = String(ocr.net_amount_10); updated.push('Netto 10%') }
+          if (ocr.net_amount_20 != null) { next.betrag_20 = String(ocr.net_amount_20); updated.push('Netto 20%') }
+          if (ocr.net_amount_0  != null) { next.betrag_0  = String(ocr.net_amount_0);  updated.push('Trinkgeld') }
+          if (ocr.tax_amount_10 != null) { next.mwst_10 = String(ocr.tax_amount_10) }
+          if (ocr.tax_amount_20 != null) { next.mwst_20 = String(ocr.tax_amount_20) }
+        }
+
         if (ocr.invoice_type && validTypes.includes(ocr.invoice_type)) {
           next.rechnungstyp = ocr.invoice_type as Rechnungstyp
           updated.push('Kategorie')
         }
-        if (ocr.net_amount_10 != null) { next.betrag_10 = String(ocr.net_amount_10); updated.push('Netto 10%') }
-        if (ocr.net_amount_20 != null) { next.betrag_20 = String(ocr.net_amount_20); updated.push('Netto 20%') }
-        if (ocr.net_amount_0  != null) { next.betrag_0  = String(ocr.net_amount_0);  updated.push('Trinkgeld') }
-        if (ocr.tax_amount_10 != null) { next.mwst_10 = String(ocr.tax_amount_10) }
-        if (ocr.tax_amount_20 != null) { next.mwst_20 = String(ocr.tax_amount_20) }
         const card = resolveCard(ocr.card_last_four)
         if (card) { next.karte = card; updated.push('Karte') }
         return next

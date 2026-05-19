@@ -68,6 +68,7 @@ export interface GeminiOcrResult {
   tax_amount_20:  number | null
   invoice_type:   string | null
   card_last_four: string | null
+  is_proforma:    boolean | null
 }
 
 export interface KategoriePrompt {
@@ -89,7 +90,12 @@ function buildKategorienSection(kategorien: KategoriePrompt[]): string {
 function buildOcrPrompt(kategorien: KategoriePrompt[]): string {
   return `Analysiere diese Rechnung und extrahiere alle Felder als JSON.
 
-KATEGORIEN (invoice_type):
+SCHRITT 1 — PROFORMA-CHECK (vor allem anderen prüfen):
+Steht irgendwo auf dem Dokument "Proforma", "Proforma-Rechnung", "Proformarechnung", "Keine Rechnung iSd UStG" oder "keine Vorsteuerabzugsberechtigung"?
+→ JA: is_proforma = true, tax_rate = null, tax_amount_10 = null, tax_amount_20 = null, net_amount_10 = null, net_amount_20 = null — KEINE MwSt berechnen oder schätzen, keine Ausnahmen
+→ NEIN: is_proforma = false, normal fortfahren
+
+SCHRITT 2 — KATEGORIEN (invoice_type):
 ${buildKategorienSection(kategorien)}
 - Gemischte Steuersätze allein sind KEIN Hinweis auf Tanken`
 }
@@ -103,14 +109,21 @@ NETTOBETRAG (net_amount / net_amount_XX):
 - Bei Kassenbons (Restaurant, Tankstelle): die MwSt-Tabelle am Ende (Spalten Netto/Steuer/Brutto je Steuersatz) ist die einzige verlässliche Quelle für net_amount_XX und tax_amount_XX — die Gesamtsumme "Summe in €" ignorieren
 - Bei Skonto: Netto VOR Skonto nehmen (Skonto ist kein Rabatt auf den Nettobetrag)
 - "Zahlungen an Dritte" / "Zahlungen an A1 f. Dienste von Dritten" / "Drittanbieter" NICHT zum Nettobetrag dazuzählen — diese sind Durchleitungszahlungen ohne eigene MwSt-Aufschlüsselung und gehören in net_amount_0
-- Österreichische MwSt-Sätze (UID beginnt mit "ATU"): ausschließlich 0%, 10% oder 20% — NIE 19%
+- Österreichische MwSt-Sätze (UID beginnt mit "ATU"): AUSSCHLIESSLICH 0%, 10% oder 20% — 19% ist in Österreich UNMÖGLICH und VERBOTEN
 - Deutsche MwSt-Sätze (UID beginnt mit "DE"): 19% oder 7% möglich
+- Wenn KEINE UID sichtbar: Standard-Österreich (20%) annehmen, NICHT 19%
+- Wenn kein expliziter Steuersatz sichtbar aber Nettobetrag vorhanden: tax_rate = 20 (österreichischer Standard) — NIEMALS 0 annehmen außer bei Proforma
 - 19 aus einer österreichischen Postleitzahl (z.B. "1190 Wien", "1140 Wien") oder Auftragsnummer ist KEIN Steuersatz
 - Zahlen in Adressen, Postleitzahlen oder Belegnummern sind NIEMALS Steuersätze
 
-PROFORMA / KEINE VORSTEUERABZUGSBERECHTIGUNG:
-- "Proforma-Rechnung" / "Keine Rechnung iSd UStG" / "keine Vorsteuerabzugsberechtigung" → tax_rate = null, tax_amount_10 = null, tax_amount_20 = null, net_amount_10 = null, net_amount_20 = null
-- net_amount = Nettosumme aller Positionen inkl. Zuschläge, VOR Skonto (z.B. "Summe Positionen" + "Gefahrengutzuschlag" etc.) — Skonto ist ein Zahlungsrabatt, der NICHT vom Nettobetrag abgezogen wird
+PROFORMA / KEINE VORSTEUERABZUGSBERECHTIGUNG (Wiederholung — gilt absolut):
+- "Proforma-Rechnung" erkannt → tax_rate = null, ALLE tax_amount_XX = null, ALLE net_amount_XX = null. Punkt. Keine MwSt berechnen.
+- net_amount = Summe Positionen + Zuschläge VOR Skonto (z.B. "Summe Positionen" 3851,82 + "Gefahrengutzuschlag" 109,00 = 3960,82) — Skonto ("Barskonto", "Skonto") ist ein Zahlungsrabatt und wird NICHT abgezogen
+
+MEHRSEITIGE DOKUMENTE:
+- Nur die Seite mit der Gesamtzusammenfassung ("Endbetrag", "Summe Positionen", "Gesamtbetrag") für Betragsfelder verwenden
+- Wenn das Dokument mehrere Rechnungen enthält: nur die ERSTE vollständige Rechnung extrahieren
+- Zwischensummen auf anderen Seiten ignorieren
 
 MEHRWERTSTEUER:
 - tax_amount_10 / tax_amount_20: den TATSÄCHLICHEN MwSt-Betrag direkt vom Beleg nehmen ("Steuer", "MwSt-Betrag", "Umsatzsteuer von €X") — NIEMALS selbst ausrechnen
@@ -129,10 +142,22 @@ DATUM: immer YYYY-MM-DD.
 card_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.
 supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).`
 
+function sanitizeOcr(result: GeminiOcrResult): GeminiOcrResult {
+  // Proforma → all tax fields must be null, no exceptions
+  if (result.is_proforma) {
+    return { ...result, tax_rate: null, tax_amount_10: null, tax_amount_20: null, net_amount_10: null, net_amount_20: null }
+  }
+  // Austrian UIDs → 19% is impossible, force to 20%
+  if (result.tax_rate === 19) result = { ...result, tax_rate: 20 }
+  // No tax rate found but invoice exists → Austrian default 20%
+  if (!result.tax_rate && result.net_amount) result = { ...result, tax_rate: 20 }
+  return result
+}
+
 export async function geminiOcr(base64: string, apiKey: string, kategorien?: KategoriePrompt[]): Promise<GeminiOcrResult> {
   const prompt = kategorien?.length ? buildOcrPrompt(kategorien) + OCR_PROMPT.slice(OCR_PROMPT.indexOf('\n\nNETTOBETRAG')) : OCR_PROMPT
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -159,6 +184,7 @@ export async function geminiOcr(base64: string, apiKey: string, kategorien?: Kat
               tax_amount_20:  { type: 'NUMBER',  nullable: true },
               invoice_type:   { type: 'STRING',  nullable: true },
               card_last_four: { type: 'STRING',  nullable: true },
+              is_proforma:    { type: 'BOOLEAN', nullable: true },
             },
           },
         },
@@ -171,5 +197,6 @@ export async function geminiOcr(base64: string, apiKey: string, kategorien?: Kat
   }
   const data = await res.json()
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  return typeof text === 'string' ? JSON.parse(text) : (text ?? {})
+  const raw: GeminiOcrResult = typeof text === 'string' ? JSON.parse(text) : (text ?? {})
+  return sanitizeOcr(raw)
 }
