@@ -1,22 +1,16 @@
-const KEY = 'qe_dismissed_duplikate'
+import { supabase } from './supabase'
 
-function pairKey(a: string, b: string) {
+export function pairKey(a: string, b: string) {
   return [a, b].sort().join('::')
 }
 
-export function getDismissed(): Set<string> {
-  try {
-    const raw = localStorage.getItem(KEY)
-    return new Set(raw ? JSON.parse(raw) : [])
-  } catch { return new Set() }
+export async function dismissPair(a: string, b: string): Promise<void> {
+  await supabase
+    .from('dismissed_duplikate')
+    .upsert({ pair_key: pairKey(a, b) }, { onConflict: 'pair_key' })
 }
 
-export function dismissPair(a: string, b: string) {
-  const set = getDismissed()
-  set.add(pairKey(a, b))
-  localStorage.setItem(KEY, JSON.stringify([...set]))
-}
-
-export function isPairDismissed(a: string, b: string): boolean {
-  return getDismissed().has(pairKey(a, b))
+export async function getDismissedKeys(): Promise<Set<string>> {
+  const { data } = await supabase.from('dismissed_duplikate').select('pair_key')
+  return new Set((data ?? []).map((r: any) => r.pair_key as string))
 }
