@@ -15,7 +15,8 @@ import { ErrorState } from '@/components/shared/ErrorState'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { geminiOcr, fileToBase64, normalizeDate, resolveCard, effectiveNetto } from '@/lib/gemini-ocr'
-import { isPairDismissed } from '@/lib/dismissed-duplikate'
+import { pairKey } from '@/lib/dismissed-duplikate'
+import { useDismissedKeys } from '@/features/buchung/useBuchung'
 import { supabase } from '@/lib/supabase'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
 import { BulkOcrDialog } from './BulkOcrDialog'
@@ -411,6 +412,7 @@ export function InboxPage() {
   const [bulkOcrOpen, setBulkOcrOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
+  const { data: dismissedKeys = new Set<string>() } = useDismissedKeys()
   const navigate = useNavigate()
 
   const today = isoToday()
@@ -446,11 +448,11 @@ export function InboxPage() {
         }
         if (a.betrag === b.betrag && a.betrag > 0) score += 0.30
         if (a.ust_satz === b.ust_satz) score += 0.10
-        if (score >= 0.5 && !isPairDismissed(a.id, b.id)) { ids.add(a.id); ids.add(b.id) }
+        if (score >= 0.5 && !dismissedKeys.has(pairKey(a.id, b.id))) { ids.add(a.id); ids.add(b.id) }
       }
     }
     return ids
-  }, [allRechnungen])
+  }, [allRechnungen, dismissedKeys])
 
   const baseFiltered = allRechnungen.filter(r => {
     if (kpiFilter === 'heute_faellig') {

@@ -48,6 +48,18 @@ export function useDuplikate(rechnungId: string) {
   })
 }
 
+export function useDismissedKeys() {
+  return useQuery<Set<string>>({
+    queryKey: ['dismissed_duplikate'],
+    queryFn: async () => {
+      if (DEMO) return new Set<string>()
+      const { data } = await supabase.from('dismissed_duplikate').select('pair_key')
+      return new Set((data ?? []).map((r: any) => r.pair_key as string))
+    },
+    staleTime: 60_000,
+  })
+}
+
 export function useDismissDuplikat(rechnungId: string) {
   const qc = useQueryClient()
   return async (otherId: string) => {
