@@ -1,6 +1,5 @@
 import { PageTitle } from '@/components/shared/PageTitle'
 import { SectionCard } from '@/components/shared/SectionCard'
-import { act } from 'react'
 
 export function SettingsPage() {
   return (

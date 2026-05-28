@@ -72,7 +72,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyD8VrqhVvYoSsnDdqxU8a8RfYNT1HZqpUQ",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [{ "name": "Content-Type", "value": "application/json" }]
@@ -133,11 +133,11 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/rechnungen/{{encodeURIComponent($json.fileName)}}",
+        "url": "=https://YOUR_SUPABASE_PROJECT.supabase.co/storage/v1/object/rechnungen/{{encodeURIComponent($json.fileName)}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SERVICE_ROLE_KEY" },
             { "name": "Content-Type",  "value": "application/pdf" },
             { "name": "x-upsert",      "value": "true" }
           ]
@@ -155,12 +155,12 @@
     },
     {
       "parameters": {
-        "url": "https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/kategorien?select=wert,beschreibung&aktiv=eq.true&order=reihenfolge",
+        "url": "https://YOUR_SUPABASE_PROJECT.supabase.co/rest/v1/kategorien?select=wert,beschreibung&aktiv=eq.true&order=reihenfolge",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey",        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
-            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" }
+            { "name": "apikey",        "value": "YOUR_SUPABASE_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SERVICE_ROLE_KEY" }
           ]
         },
         "options": {}
@@ -183,7 +183,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const pdfBase64  = $json.pdfBase64\nconst fileName   = $json.fileName\nconst kategorien = $json.kategorien || []\nconst pdfUrl     = `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nconst kategorienSection = kategorien.length > 0\n  ? kategorien.map(k => `- \"${k.wert}\" → ${k.beschreibung}`).join('\\n')\n  : '- \"dienstleistung\" → Alle sonstigen Belege'\n\nconst OCR_PROMPT = `Analysiere diese Rechnung und extrahiere alle Felder als JSON.\\n\\nSCHRITT 1 — PROFORMA-CHECK (vor allem anderen prüfen):\\nSteht irgendwo \"Proforma\", \"Proforma-Rechnung\", \"Keine Rechnung iSd UStG\" oder \"keine Vorsteuerabzugsberechtigung\"?\\n→ JA: is_proforma = true, tax_rate = null, alle tax_amount/net_amount_XX = null\\n→ NEIN: is_proforma = false, normal fortfahren\\n\\nSCHRITT 2 — KATEGORIEN (invoice_type):\\n${kategorienSection}\\n\\nNETTOBETRAG:\\n- IMMER Nettobetrag NACH Rabatten — NIE Brutto oder Zahlbetrag\\n- \"Summe in €\", \"Gesamtbetrag\", \"Total\", \"Zahlbetrag\" → IMMER BRUTTO, NIEMALS als net_amount\\n- Bei Kassenbons: MwSt-Tabelle am Ende verwenden, Gesamtsumme ignorieren\\n- Österreich (ATU...): nur 0%, 10%, 20% — 19% ist VERBOTEN\\n- Deutschland (DE...): 19% oder 7% möglich\\n- Kein Steuersatz sichtbar → tax_rate = 20 (österreichischer Standard)\\n\\nMEHRWERTSTEUER:\\n- tax_amount_XX: tatsächlichen Betrag vom Beleg nehmen, NIEMALS selbst ausrechnen\\n- net_amount_10/20/0: Netto je Steuersatz\\n- net_amount_0: nur Trinkgeld/Tip\\n- \"enth. MwSt\" / \"Inkl. MwSt\" → Netto = Bruttoangabe − MwSt-Betrag\\n\\nRECHNUNGSNUMMER: formale Nr. bevorzugen, bei Kassenbons Bon-Nr. — niemals null.\\nDATUM: immer YYYY-MM-DD.\\ncard_last_four: letzte 4 Ziffern der Karte, sonst null.\\nsupplier_name: oberster Firmenname auf dem Beleg.`\n\nconst body = {\n  contents: [{ parts: [\n    { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },\n    { text: OCR_PROMPT }\n  ]}],\n  generationConfig: {\n    response_mime_type: 'application/json',\n    response_schema: {\n      type: 'OBJECT',\n      properties: {\n        invoice_date:   { type: 'STRING',  nullable: true },\n        due_date:       { type: 'STRING',  nullable: true },\n        invoice_number: { type: 'STRING',  nullable: true },\n        supplier_name:  { type: 'STRING',  nullable: true },\n        net_amount:     { type: 'NUMBER',  nullable: true },\n        tax_rate:       { type: 'NUMBER',  nullable: true },\n        net_amount_10:  { type: 'NUMBER',  nullable: true },\n        net_amount_20:  { type: 'NUMBER',  nullable: true },\n        net_amount_0:   { type: 'NUMBER',  nullable: true },\n        tax_amount_10:  { type: 'NUMBER',  nullable: true },\n        tax_amount_20:  { type: 'NUMBER',  nullable: true },\n        invoice_type:   { type: 'STRING',  nullable: true },\n        card_last_four: { type: 'STRING',  nullable: true },\n        is_proforma:    { type: 'BOOLEAN', nullable: true }\n      }\n    }\n  }\n}\n\nreturn [{ json: { geminiBody: JSON.stringify(body), pdfUrl } }]"
+        "jsCode": "const pdfBase64  = $json.pdfBase64\nconst fileName   = $json.fileName\nconst kategorien = $json.kategorien || []\nconst pdfUrl     = `https://YOUR_SUPABASE_PROJECT.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nconst kategorienSection = kategorien.length > 0\n  ? kategorien.map(k => `- \"${k.wert}\" → ${k.beschreibung}`).join('\\n')\n  : '- \"dienstleistung\" → Alle sonstigen Belege'\n\nconst OCR_PROMPT = `Analysiere diese Rechnung und extrahiere alle Felder als JSON.\\n\\nSCHRITT 1 — PROFORMA-CHECK (vor allem anderen prüfen):\\nSteht irgendwo \"Proforma\", \"Proforma-Rechnung\", \"Keine Rechnung iSd UStG\" oder \"keine Vorsteuerabzugsberechtigung\"?\\n→ JA: is_proforma = true, tax_rate = null, alle tax_amount/net_amount_XX = null\\n→ NEIN: is_proforma = false, normal fortfahren\\n\\nSCHRITT 2 — KATEGORIEN (invoice_type):\\n${kategorienSection}\\n\\nNETTOBETRAG:\\n- IMMER Nettobetrag NACH Rabatten — NIE Brutto oder Zahlbetrag\\n- \"Summe in €\", \"Gesamtbetrag\", \"Total\", \"Zahlbetrag\" → IMMER BRUTTO, NIEMALS als net_amount\\n- Bei Kassenbons: MwSt-Tabelle am Ende verwenden, Gesamtsumme ignorieren\\n- Österreich (ATU...): nur 0%, 10%, 20% — 19% ist VERBOTEN\\n- Deutschland (DE...): 19% oder 7% möglich\\n- Kein Steuersatz sichtbar → tax_rate = 20 (österreichischer Standard)\\n\\nMEHRWERTSTEUER:\\n- tax_amount_XX: tatsächlichen Betrag vom Beleg nehmen, NIEMALS selbst ausrechnen\\n- net_amount_10/20/0: Netto je Steuersatz\\n- net_amount_0: nur Trinkgeld/Tip\\n- \"enth. MwSt\" / \"Inkl. MwSt\" → Netto = Bruttoangabe − MwSt-Betrag\\n\\nRECHNUNGSNUMMER: formale Nr. bevorzugen, bei Kassenbons Bon-Nr. — niemals null.\\nDATUM: immer YYYY-MM-DD.\\ncard_last_four: letzte 4 Ziffern der Karte, sonst null.\\nsupplier_name: oberster Firmenname auf dem Beleg.`\n\nconst body = {\n  contents: [{ parts: [\n    { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },\n    { text: OCR_PROMPT }\n  ]}],\n  generationConfig: {\n    response_mime_type: 'application/json',\n    response_schema: {\n      type: 'OBJECT',\n      properties: {\n        invoice_date:   { type: 'STRING',  nullable: true },\n        due_date:       { type: 'STRING',  nullable: true },\n        invoice_number: { type: 'STRING',  nullable: true },\n        supplier_name:  { type: 'STRING',  nullable: true },\n        net_amount:     { type: 'NUMBER',  nullable: true },\n        tax_rate:       { type: 'NUMBER',  nullable: true },\n        net_amount_10:  { type: 'NUMBER',  nullable: true },\n        net_amount_20:  { type: 'NUMBER',  nullable: true },\n        net_amount_0:   { type: 'NUMBER',  nullable: true },\n        tax_amount_10:  { type: 'NUMBER',  nullable: true },\n        tax_amount_20:  { type: 'NUMBER',  nullable: true },\n        invoice_type:   { type: 'STRING',  nullable: true },\n        card_last_four: { type: 'STRING',  nullable: true },\n        is_proforma:    { type: 'BOOLEAN', nullable: true }\n      }\n    }\n  }\n}\n\nreturn [{ json: { geminiBody: JSON.stringify(body), pdfUrl } }]"
       },
       "id": "48184dbc-6826-4482-b3db-cf1e77ad695c",
       "name": "Gemini Request vorbereiten",
@@ -194,7 +194,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=AIzaSyD8VrqhVvYoSsnDdqxU8a8RfYNT1HZqpUQ",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=YOUR_GEMINI_API_KEY",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [{ "name": "Content-Type", "value": "application/json" }]
@@ -212,7 +212,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const CARD_MAP = {\n  '1380': 'spesen_philipp_1380',\n  '0744': 'spesen_philipp_0744',\n  '6362': 'firmenkarte_6362',\n  '0660': 'firmenkarte_0660'\n}\n\nfunction normalizeDate(raw) {\n  if (!raw) return null\n  const s = String(raw).trim()\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s\n  if (s.includes('.')) {\n    const [d, m, y] = s.split('.')\n    if (d && m && y) return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`\n  }\n  const p = new Date(s)\n  return isNaN(p.getTime()) ? null : p.toISOString().split('T')[0]\n}\n\nconst rawText = $json.candidates?.[0]?.content?.parts?.[0]?.text\nlet ocr = typeof rawText === 'string' ? JSON.parse(rawText) : (rawText ?? {})\n\nif (ocr.is_proforma) {\n  ocr = { ...ocr, tax_rate: null, tax_amount_10: null, tax_amount_20: null, net_amount_10: null, net_amount_20: null }\n}\nif (ocr.tax_rate === 19) ocr = { ...ocr, tax_rate: 20 }\nif (!ocr.is_proforma && (ocr.tax_rate === null || ocr.tax_rate === undefined) && ocr.net_amount && !ocr.net_amount_0) ocr = { ...ocr, tax_rate: 20 }\n\nconst n10 = ocr.net_amount_10 ?? 0\nconst n20 = ocr.net_amount_20 ?? 0\nconst n0  = ocr.net_amount_0  ?? 0\nconst sum = n10 + n20 + n0\nconst netto = sum > 0 ? Math.round(sum * 100) / 100 : (ocr.net_amount ?? 0)\n\nconst digits = ocr.card_last_four ? String(ocr.card_last_four).trim() : null\nconst karte  = digits ? (CARD_MAP[digits] ?? 'sonstige') : null\n\nconst fileName = $('PDF extrahieren').first().json.fileName\nconst pdfUrl = `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nreturn [{\n  json: {\n    rechnungsnr:    ocr.invoice_number?.trim() || `EMAIL-${Date.now()}`,\n    rechnungsdatum: normalizeDate(ocr.invoice_date) || null,\n    faelligkeit:    normalizeDate(ocr.due_date)     || null,\n    betrag:         netto,\n    ust_satz:       ocr.is_proforma ? 0 : (ocr.tax_rate !== null && ocr.tax_rate !== undefined ? ocr.tax_rate : 20),\n    rechnungstyp:   ocr.invoice_type || null,\n    betrag_10:      ocr.net_amount_10 ?? null,\n    betrag_20:      ocr.net_amount_20 ?? null,\n    betrag_0:       ocr.net_amount_0  ?? null,\n    mwst_10:        ocr.tax_amount_10 ?? null,\n    mwst_20:        ocr.tax_amount_20 ?? null,\n    karte,\n    pdf_url:        pdfUrl,\n    status:         'eingegangen',\n    ocr_json:       ocr,\n    supplier_name:  ocr.supplier_name || 'Unbekannter Lieferant'\n  }\n}]"
+        "jsCode": "const CARD_MAP = {\n  '1380': 'spesen_philipp_1380',\n  '0744': 'spesen_philipp_0744',\n  '6362': 'firmenkarte_6362',\n  '0660': 'firmenkarte_0660'\n}\n\nfunction normalizeDate(raw) {\n  if (!raw) return null\n  const s = String(raw).trim()\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s\n  if (s.includes('.')) {\n    const [d, m, y] = s.split('.')\n    if (d && m && y) return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`\n  }\n  const p = new Date(s)\n  return isNaN(p.getTime()) ? null : p.toISOString().split('T')[0]\n}\n\nconst rawText = $json.candidates?.[0]?.content?.parts?.[0]?.text\nlet ocr = typeof rawText === 'string' ? JSON.parse(rawText) : (rawText ?? {})\n\nif (ocr.is_proforma) {\n  ocr = { ...ocr, tax_rate: null, tax_amount_10: null, tax_amount_20: null, net_amount_10: null, net_amount_20: null }\n}\nif (ocr.tax_rate === 19) ocr = { ...ocr, tax_rate: 20 }\nif (!ocr.is_proforma && (ocr.tax_rate === null || ocr.tax_rate === undefined) && ocr.net_amount && !ocr.net_amount_0) ocr = { ...ocr, tax_rate: 20 }\n\nconst n10 = ocr.net_amount_10 ?? 0\nconst n20 = ocr.net_amount_20 ?? 0\nconst n0  = ocr.net_amount_0  ?? 0\nconst sum = n10 + n20 + n0\nconst netto = sum > 0 ? Math.round(sum * 100) / 100 : (ocr.net_amount ?? 0)\n\nconst digits = ocr.card_last_four ? String(ocr.card_last_four).trim() : null\nconst karte  = digits ? (CARD_MAP[digits] ?? 'sonstige') : null\n\nconst fileName = $('PDF extrahieren').first().json.fileName\nconst pdfUrl = `https://YOUR_SUPABASE_PROJECT.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nreturn [{\n  json: {\n    rechnungsnr:    ocr.invoice_number?.trim() || `EMAIL-${Date.now()}`,\n    rechnungsdatum: normalizeDate(ocr.invoice_date) || null,\n    faelligkeit:    normalizeDate(ocr.due_date)     || null,\n    betrag:         netto,\n    ust_satz:       ocr.is_proforma ? 0 : (ocr.tax_rate !== null && ocr.tax_rate !== undefined ? ocr.tax_rate : 20),\n    rechnungstyp:   ocr.invoice_type || null,\n    betrag_10:      ocr.net_amount_10 ?? null,\n    betrag_20:      ocr.net_amount_20 ?? null,\n    betrag_0:       ocr.net_amount_0  ?? null,\n    mwst_10:        ocr.tax_amount_10 ?? null,\n    mwst_20:        ocr.tax_amount_20 ?? null,\n    karte,\n    pdf_url:        pdfUrl,\n    status:         'eingegangen',\n    ocr_json:       ocr,\n    supplier_name:  ocr.supplier_name || 'Unbekannter Lieferant'\n  }\n}]"
       },
       "id": "f373d8ab-8295-47a2-a189-8f7d4fe720f2",
       "name": "OCR verarbeiten",
@@ -222,12 +222,12 @@
     },
     {
       "parameters": {
-        "url": "=https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/lieferanten?name=ilike.{{encodeURIComponent($json.supplier_name)}}&select=id&limit=1",
+        "url": "=https://YOUR_SUPABASE_PROJECT.supabase.co/rest/v1/lieferanten?name=ilike.{{encodeURIComponent($json.supplier_name)}}&select=id&limit=1",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey",        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
-            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" }
+            { "name": "apikey",        "value": "YOUR_SUPABASE_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SERVICE_ROLE_KEY" }
           ]
         },
         "options": {}
@@ -264,12 +264,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/lieferanten",
+        "url": "https://YOUR_SUPABASE_PROJECT.supabase.co/rest/v1/lieferanten",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey",        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
-            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "apikey",        "value": "YOUR_SUPABASE_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SERVICE_ROLE_KEY" },
             { "name": "Content-Type",  "value": "application/json" },
             { "name": "Prefer",        "value": "return=representation" }
           ]
@@ -298,7 +298,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// $json ist entweder {id: 'x'} oder [{id: 'x'}] je nach n8n-Version\nconst lieferantId = Array.isArray($json) ? ($json[0]?.id || null) : ($json?.id || null)\nconst ocr = $('OCR verarbeiten').first().json\nconst fileName = $('PDF extrahieren').first().json.fileName\nconst pdfUrl = `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nreturn [{\n  json: {\n    rechnungsnr:    ocr.rechnungsnr,\n    rechnungsdatum: ocr.rechnungsdatum,\n    faelligkeit:    ocr.faelligkeit,\n    betrag:         ocr.betrag,\n    ust_satz:       ocr.ust_satz,\n    rechnungstyp:   ocr.rechnungstyp,\n    betrag_10:      ocr.betrag_10,\n    betrag_20:      ocr.betrag_20,\n    betrag_0:       ocr.betrag_0,\n    mwst_10:        ocr.mwst_10,\n    mwst_20:        ocr.mwst_20,\n    karte:          ocr.karte,\n    pdf_url:        pdfUrl,\n    status:         'eingegangen',\n    lieferant_id:   lieferantId,\n    ocr_json:       ocr.ocr_json\n  }\n}]"
+        "jsCode": "// $json ist entweder {id: 'x'} oder [{id: 'x'}] je nach n8n-Version\nconst lieferantId = Array.isArray($json) ? ($json[0]?.id || null) : ($json?.id || null)\nconst ocr = $('OCR verarbeiten').first().json\nconst fileName = $('PDF extrahieren').first().json.fileName\nconst pdfUrl = `https://YOUR_SUPABASE_PROJECT.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nreturn [{\n  json: {\n    rechnungsnr:    ocr.rechnungsnr,\n    rechnungsdatum: ocr.rechnungsdatum,\n    faelligkeit:    ocr.faelligkeit,\n    betrag:         ocr.betrag,\n    ust_satz:       ocr.ust_satz,\n    rechnungstyp:   ocr.rechnungstyp,\n    betrag_10:      ocr.betrag_10,\n    betrag_20:      ocr.betrag_20,\n    betrag_0:       ocr.betrag_0,\n    mwst_10:        ocr.mwst_10,\n    mwst_20:        ocr.mwst_20,\n    karte:          ocr.karte,\n    pdf_url:        pdfUrl,\n    status:         'eingegangen',\n    lieferant_id:   lieferantId,\n    ocr_json:       ocr.ocr_json\n  }\n}]"
       },
       "id": "lieferant-id-holen-01",
       "name": "lieferantId holen",
@@ -309,12 +309,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/rechnungen",
+        "url": "https://YOUR_SUPABASE_PROJECT.supabase.co/rest/v1/rechnungen",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            { "name": "apikey",        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
-            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "apikey",        "value": "YOUR_SUPABASE_SERVICE_ROLE_KEY" },
+            { "name": "Authorization", "value": "Bearer YOUR_SUPABASE_SERVICE_ROLE_KEY" },
             { "name": "Content-Type",  "value": "application/json" },
             { "name": "Prefer",        "value": "return=representation" }
           ]
