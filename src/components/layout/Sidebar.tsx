@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { ArrowUpFromLine, LogOut, ReceiptText, Users, Tag } from 'lucide-react'
+import { ArrowUpFromLine, LogOut, ReceiptText, Users, Tag, Banknote } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { useRechnungen } from '@/features/inbox/useRechnungen'
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { icon: ArrowUpFromLine, path: '/exports', label: 'Exports', end: false },
   { icon: Users, path: '/mitarbeiter', label: 'Mitarbeiter', end: false },
   { icon: Tag, path: '/kategorien', label: 'Kategorien', end: false },
+  { icon: Banknote, path: '/lohn', label: 'Lohnkosten', end: false },
 ]
 
 function getInitials(email: string): string {

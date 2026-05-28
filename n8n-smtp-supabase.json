@@ -1,0 +1,402 @@
+{
+  "name": "QuickEnergy ← SMTP/IMAP → Supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "postProcessAction": "read",
+        "format": "resolved",
+        "options": { "customEmailConfig": "[\"UNSEEN\"]" }
+      },
+      "id": "smtp-trigger-01",
+      "name": "SMTP Email Trigger",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [-3504, 300],
+      "credentials": {
+        "imap": { "id": "xoLEV7mNfjkYAMue", "name": "IMAP account 2" }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first()\nconst binaries = item.binary || {}\n\nlet pdfKey = null\nlet pdfBinary = null\nfor (const [key, bin] of Object.entries(binaries)) {\n  const isPdf = bin.mimeType === 'application/pdf' ||\n    (bin.fileName || '').toLowerCase().endsWith('.pdf')\n  if (isPdf) { pdfKey = key; pdfBinary = bin; break }\n}\n\nif (!pdfBinary || !pdfKey) {\n  return [{ json: { hasPdf: false } }]\n}\n\nconst rawName = pdfBinary.fileName || 'invoice.pdf'\nconst fileName = `${Date.now()}_${rawName.replace(/[^a-zA-Z0-9._-]/g, '_')}`\n\nconst f = item.json.from\nconst emailFrom = !f ? ''\n  : typeof f === 'string' ? f\n  : f.text ? f.text\n  : f.value?.[0]?.address ?? String(f)\n\nreturn [{\n  json: {\n    hasPdf: true,\n    fileName,\n    emailSubject: item.json.subject || '',\n    emailFrom\n  },\n  binary: { data: item.binary[pdfKey] }\n}]"
+      },
+      "id": "smtp-pdf-extract",
+      "name": "PDF extrahieren",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-3280, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-001",
+              "leftValue": "={{ $json.hasPdf }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f7e927ca-5cf6-46ae-b52f-f8f036d10afd",
+      "name": "Hat PDF?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-3056, 300]
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "options": {}
+      },
+      "id": "extract-from-file-01",
+      "name": "Extract from File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [-2832, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// $json.data = base64 string von Extract from File\n// fileName aus PDF extrahieren holen (wird von Extract from File nicht weitergegeben)\nconst pdfBase64    = $json.data\nconst pdfNode      = $('PDF extrahieren').first().json\nconst fileName     = pdfNode.fileName\nconst emailSubject = pdfNode.emailSubject\nconst emailFrom    = pdfNode.emailFrom\n\nconst body = {\n  contents: [{ parts: [\n    { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },\n    { text: 'Ist dieses Dokument eine Rechnung, ein Kassenbon oder eine Quittung? Antworte NUR mit JSON: {\"is_invoice\": true} oder {\"is_invoice\": false}. Lieferscheine, Angebote, Newsletter, Bestellbestätigungen ohne Zahlungsaufforderung, Verträge und Mahnungen sind KEINE Rechnungen.' }\n  ]}],\n  generationConfig: {\n    response_mime_type: 'application/json',\n    response_schema: {\n      type: 'OBJECT',\n      properties: { is_invoice: { type: 'BOOLEAN' } },\n      required: ['is_invoice']\n    }\n  }\n}\n\nreturn [{\n  json: { checkBody: JSON.stringify(body), pdfBase64, fileName, emailSubject, emailFrom },\n  binary: $input.first().binary\n}]"
+      },
+      "id": "222cab25-2ab6-4689-bff4-b0ea1b804406",
+      "name": "Rechnungsprüfung vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2608, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=AIzaSyD8VrqhVvYoSsnDdqxU8a8RfYNT1HZqpUQ",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "contentType": "rawCustomBody",
+        "body": "={{ $json.checkBody }}",
+        "options": {}
+      },
+      "id": "7514869f-06aa-4b3a-bf34-bc5a1a54251a",
+      "name": "Gemini: Ist Rechnung?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-2384, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawText = $json.candidates?.[0]?.content?.parts?.[0]?.text\nlet isInvoice = false\ntry {\n  const parsed = typeof rawText === 'string' ? JSON.parse(rawText) : (rawText ?? {})\n  isInvoice = parsed.is_invoice === true\n} catch {}\n\nconst prev = $('Rechnungsprüfung vorbereiten').first().json\n\nreturn [{\n  json: {\n    isInvoice,\n    pdfBase64:    prev.pdfBase64,\n    fileName:     prev.fileName,\n    emailSubject: prev.emailSubject,\n    emailFrom:    prev.emailFrom\n  },\n  binary: $('Rechnungsprüfung vorbereiten').first().binary\n}]"
+      },
+      "id": "ee42e385-e22a-4208-81fd-704b69ff935f",
+      "name": "Prüfung auswerten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-2160, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "cond-002",
+              "leftValue": "={{ $json.isInvoice }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b0c16fd8-4df5-4985-9595-5d0b9712fdca",
+      "name": "Ist es eine Rechnung?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-1936, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pdfBinary = $('PDF extrahieren').first().binary\nreturn [{ json: $input.first().json, binary: pdfBinary }]"
+      },
+      "id": "binary-restore",
+      "name": "Binary vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1712, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/rechnungen/{{encodeURIComponent($json.fileName)}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "Content-Type",  "value": "application/pdf" },
+            { "name": "x-upsert",      "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "05887573-a5e0-4212-8c30-493e31d06d98",
+      "name": "PDF zu Supabase hochladen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1488, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/kategorien?select=wert,beschreibung&aktiv=eq.true&order=reihenfolge",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6e2b0f8e-b85e-4213-9c6c-5c68ae37edab",
+      "name": "Kategorien laden",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-1264, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const all = $input.all()\nconst kategorien = all.map(item => ({ wert: item.json.wert, beschreibung: item.json.beschreibung }))\nconst prev = $('Rechnungsprüfung vorbereiten').first().json\nreturn [{ json: { kategorien, pdfBase64: prev.pdfBase64, fileName: prev.fileName } }]"
+      },
+      "id": "20eb4374-5ec0-4965-8f07-aecf7d1f977c",
+      "name": "Kategorien zusammenfassen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-1040, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pdfBase64  = $json.pdfBase64\nconst fileName   = $json.fileName\nconst kategorien = $json.kategorien || []\nconst pdfUrl     = `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nconst kategorienSection = kategorien.length > 0\n  ? kategorien.map(k => `- \"${k.wert}\" → ${k.beschreibung}`).join('\\n')\n  : '- \"dienstleistung\" → Alle sonstigen Belege'\n\nconst OCR_PROMPT = `Analysiere diese Rechnung und extrahiere alle Felder als JSON.\\n\\nSCHRITT 1 — PROFORMA-CHECK (vor allem anderen prüfen):\\nSteht irgendwo \"Proforma\", \"Proforma-Rechnung\", \"Keine Rechnung iSd UStG\" oder \"keine Vorsteuerabzugsberechtigung\"?\\n→ JA: is_proforma = true, tax_rate = null, alle tax_amount/net_amount_XX = null\\n→ NEIN: is_proforma = false, normal fortfahren\\n\\nSCHRITT 2 — KATEGORIEN (invoice_type):\\n${kategorienSection}\\n\\nNETTOBETRAG:\\n- IMMER Nettobetrag NACH Rabatten — NIE Brutto oder Zahlbetrag\\n- \"Summe in €\", \"Gesamtbetrag\", \"Total\", \"Zahlbetrag\" → IMMER BRUTTO, NIEMALS als net_amount\\n- Bei Kassenbons: MwSt-Tabelle am Ende verwenden, Gesamtsumme ignorieren\\n- Österreich (ATU...): nur 0%, 10%, 20% — 19% ist VERBOTEN\\n- Deutschland (DE...): 19% oder 7% möglich\\n- Kein Steuersatz sichtbar → tax_rate = 20 (österreichischer Standard)\\n\\nMEHRWERTSTEUER:\\n- tax_amount_XX: tatsächlichen Betrag vom Beleg nehmen, NIEMALS selbst ausrechnen\\n- net_amount_10/20/0: Netto je Steuersatz\\n- net_amount_0: nur Trinkgeld/Tip\\n- \"enth. MwSt\" / \"Inkl. MwSt\" → Netto = Bruttoangabe − MwSt-Betrag\\n\\nRECHNUNGSNUMMER: formale Nr. bevorzugen, bei Kassenbons Bon-Nr. — niemals null.\\nDATUM: immer YYYY-MM-DD.\\ncard_last_four: letzte 4 Ziffern der Karte, sonst null.\\nsupplier_name: oberster Firmenname auf dem Beleg.`\n\nconst body = {\n  contents: [{ parts: [\n    { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } },\n    { text: OCR_PROMPT }\n  ]}],\n  generationConfig: {\n    response_mime_type: 'application/json',\n    response_schema: {\n      type: 'OBJECT',\n      properties: {\n        invoice_date:   { type: 'STRING',  nullable: true },\n        due_date:       { type: 'STRING',  nullable: true },\n        invoice_number: { type: 'STRING',  nullable: true },\n        supplier_name:  { type: 'STRING',  nullable: true },\n        net_amount:     { type: 'NUMBER',  nullable: true },\n        tax_rate:       { type: 'NUMBER',  nullable: true },\n        net_amount_10:  { type: 'NUMBER',  nullable: true },\n        net_amount_20:  { type: 'NUMBER',  nullable: true },\n        net_amount_0:   { type: 'NUMBER',  nullable: true },\n        tax_amount_10:  { type: 'NUMBER',  nullable: true },\n        tax_amount_20:  { type: 'NUMBER',  nullable: true },\n        invoice_type:   { type: 'STRING',  nullable: true },\n        card_last_four: { type: 'STRING',  nullable: true },\n        is_proforma:    { type: 'BOOLEAN', nullable: true }\n      }\n    }\n  }\n}\n\nreturn [{ json: { geminiBody: JSON.stringify(body), pdfUrl } }]"
+      },
+      "id": "48184dbc-6826-4482-b3db-cf1e77ad695c",
+      "name": "Gemini Request vorbereiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-816, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=AIzaSyD8VrqhVvYoSsnDdqxU8a8RfYNT1HZqpUQ",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "contentType": "rawCustomBody",
+        "body": "={{ $json.geminiBody }}",
+        "options": {}
+      },
+      "id": "cc3c7f51-5eb6-4e89-a178-9312f2a35b2e",
+      "name": "Gemini OCR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-592, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const CARD_MAP = {\n  '1380': 'spesen_philipp_1380',\n  '0744': 'spesen_philipp_0744',\n  '6362': 'firmenkarte_6362',\n  '0660': 'firmenkarte_0660'\n}\n\nfunction normalizeDate(raw) {\n  if (!raw) return null\n  const s = String(raw).trim()\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s\n  if (s.includes('.')) {\n    const [d, m, y] = s.split('.')\n    if (d && m && y) return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`\n  }\n  const p = new Date(s)\n  return isNaN(p.getTime()) ? null : p.toISOString().split('T')[0]\n}\n\nconst rawText = $json.candidates?.[0]?.content?.parts?.[0]?.text\nlet ocr = typeof rawText === 'string' ? JSON.parse(rawText) : (rawText ?? {})\n\nif (ocr.is_proforma) {\n  ocr = { ...ocr, tax_rate: null, tax_amount_10: null, tax_amount_20: null, net_amount_10: null, net_amount_20: null }\n}\nif (ocr.tax_rate === 19) ocr = { ...ocr, tax_rate: 20 }\nif (!ocr.is_proforma && (ocr.tax_rate === null || ocr.tax_rate === undefined) && ocr.net_amount && !ocr.net_amount_0) ocr = { ...ocr, tax_rate: 20 }\n\nconst n10 = ocr.net_amount_10 ?? 0\nconst n20 = ocr.net_amount_20 ?? 0\nconst n0  = ocr.net_amount_0  ?? 0\nconst sum = n10 + n20 + n0\nconst netto = sum > 0 ? Math.round(sum * 100) / 100 : (ocr.net_amount ?? 0)\n\nconst digits = ocr.card_last_four ? String(ocr.card_last_four).trim() : null\nconst karte  = digits ? (CARD_MAP[digits] ?? 'sonstige') : null\n\nconst fileName = $('PDF extrahieren').first().json.fileName\nconst pdfUrl = `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nreturn [{\n  json: {\n    rechnungsnr:    ocr.invoice_number?.trim() || `EMAIL-${Date.now()}`,\n    rechnungsdatum: normalizeDate(ocr.invoice_date) || null,\n    faelligkeit:    normalizeDate(ocr.due_date)     || null,\n    betrag:         netto,\n    ust_satz:       ocr.is_proforma ? 0 : (ocr.tax_rate !== null && ocr.tax_rate !== undefined ? ocr.tax_rate : 20),\n    rechnungstyp:   ocr.invoice_type || null,\n    betrag_10:      ocr.net_amount_10 ?? null,\n    betrag_20:      ocr.net_amount_20 ?? null,\n    betrag_0:       ocr.net_amount_0  ?? null,\n    mwst_10:        ocr.tax_amount_10 ?? null,\n    mwst_20:        ocr.tax_amount_20 ?? null,\n    karte,\n    pdf_url:        pdfUrl,\n    status:         'eingegangen',\n    ocr_json:       ocr,\n    supplier_name:  ocr.supplier_name || 'Unbekannter Lieferant'\n  }\n}]"
+      },
+      "id": "f373d8ab-8295-47a2-a189-8f7d4fe720f2",
+      "name": "OCR verarbeiten",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-368, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/lieferanten?name=ilike.{{encodeURIComponent($json.supplier_name)}}&select=id&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "lieferant-suchen-01",
+      "name": "Lieferant suchen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-144, 300],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "cond-lief",
+              "leftValue": "={{ Array.isArray($json) ? $json[0]?.id : $json?.id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "hat-lieferant-01",
+      "name": "Hat Lieferant?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [80, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/lieferanten",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: $('OCR verarbeiten').first().json.supplier_name }) }}",
+        "options": {}
+      },
+      "id": "lieferant-anlegen-01",
+      "name": "Lieferant anlegen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [304, 500]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      },
+      "id": "merge-lieferant-01",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [528, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// $json ist entweder {id: 'x'} oder [{id: 'x'}] je nach n8n-Version\nconst lieferantId = Array.isArray($json) ? ($json[0]?.id || null) : ($json?.id || null)\nconst ocr = $('OCR verarbeiten').first().json\nconst fileName = $('PDF extrahieren').first().json.fileName\nconst pdfUrl = `https://emrjxrtxlvyrwplglkzk.supabase.co/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`\n\nreturn [{\n  json: {\n    rechnungsnr:    ocr.rechnungsnr,\n    rechnungsdatum: ocr.rechnungsdatum,\n    faelligkeit:    ocr.faelligkeit,\n    betrag:         ocr.betrag,\n    ust_satz:       ocr.ust_satz,\n    rechnungstyp:   ocr.rechnungstyp,\n    betrag_10:      ocr.betrag_10,\n    betrag_20:      ocr.betrag_20,\n    betrag_0:       ocr.betrag_0,\n    mwst_10:        ocr.mwst_10,\n    mwst_20:        ocr.mwst_20,\n    karte:          ocr.karte,\n    pdf_url:        pdfUrl,\n    status:         'eingegangen',\n    lieferant_id:   lieferantId,\n    ocr_json:       ocr.ocr_json\n  }\n}]"
+      },
+      "id": "lieferant-id-holen-01",
+      "name": "lieferantId holen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [752, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://emrjxrtxlvyrwplglkzk.supabase.co/rest/v1/rechnungen",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtcmp4cnR4bHZ5cndwbGdsa3prIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzU3Nzg4MiwiZXhwIjoyMDkzMTUzODgyfQ.Ev_fArfrm7rJqwtI7PBrXzLMLyDDpUAflaF92JpVs2w" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "return=representation" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "rawCustomBody",
+        "body": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "rechnung-einfuegen-01",
+      "name": "Rechnung einfügen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [976, 300]
+    }
+  ],
+  "connections": {
+    "SMTP Email Trigger": {
+      "main": [[{ "node": "PDF extrahieren", "type": "main", "index": 0 }]]
+    },
+    "PDF extrahieren": {
+      "main": [[{ "node": "Hat PDF?", "type": "main", "index": 0 }]]
+    },
+    "Hat PDF?": {
+      "main": [[{ "node": "Extract from File", "type": "main", "index": 0 }]]
+    },
+    "Extract from File": {
+      "main": [[{ "node": "Rechnungsprüfung vorbereiten", "type": "main", "index": 0 }]]
+    },
+    "Rechnungsprüfung vorbereiten": {
+      "main": [[{ "node": "Gemini: Ist Rechnung?", "type": "main", "index": 0 }]]
+    },
+    "Gemini: Ist Rechnung?": {
+      "main": [[{ "node": "Prüfung auswerten", "type": "main", "index": 0 }]]
+    },
+    "Prüfung auswerten": {
+      "main": [[{ "node": "Ist es eine Rechnung?", "type": "main", "index": 0 }]]
+    },
+    "Ist es eine Rechnung?": {
+      "main": [[{ "node": "Binary vorbereiten", "type": "main", "index": 0 }]]
+    },
+    "Binary vorbereiten": {
+      "main": [[{ "node": "PDF zu Supabase hochladen", "type": "main", "index": 0 }]]
+    },
+    "PDF zu Supabase hochladen": {
+      "main": [[{ "node": "Kategorien laden", "type": "main", "index": 0 }]]
+    },
+    "Kategorien laden": {
+      "main": [[{ "node": "Kategorien zusammenfassen", "type": "main", "index": 0 }]]
+    },
+    "Kategorien zusammenfassen": {
+      "main": [[{ "node": "Gemini Request vorbereiten", "type": "main", "index": 0 }]]
+    },
+    "Gemini Request vorbereiten": {
+      "main": [[{ "node": "Gemini OCR", "type": "main", "index": 0 }]]
+    },
+    "Gemini OCR": {
+      "main": [[{ "node": "OCR verarbeiten", "type": "main", "index": 0 }]]
+    },
+    "OCR verarbeiten": {
+      "main": [[{ "node": "Lieferant suchen", "type": "main", "index": 0 }]]
+    },
+    "Lieferant suchen": {
+      "main": [[{ "node": "Hat Lieferant?", "type": "main", "index": 0 }]]
+    },
+    "Hat Lieferant?": {
+      "main": [
+        [{ "node": "Merge", "type": "main", "index": 0 }],
+        [{ "node": "Lieferant anlegen", "type": "main", "index": 0 }]
+      ]
+    },
+    "Lieferant anlegen": {
+      "main": [[{ "node": "Merge", "type": "main", "index": 1 }]]
+    },
+    "Merge": {
+      "main": [[{ "node": "lieferantId holen", "type": "main", "index": 0 }]]
+    },
+    "lieferantId holen": {
+      "main": [[{ "node": "Rechnung einfügen", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "quickenergy" }
+}

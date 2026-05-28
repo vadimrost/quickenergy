@@ -92,6 +92,41 @@ export interface ExportLog {
   success: boolean
 }
 
+export interface LohnDienstnehmer {
+  id: string
+  abrechnung_id: string
+  ma_nr: number | null
+  name: string
+  iban: string | null
+  betrag: number
+  zahlungsart: string
+  created_at: string
+}
+
+export interface LohnKoerperschaft {
+  id: string
+  abrechnung_id: string
+  bezeichnung: string
+  swift_bic: string | null
+  iban: string | null
+  betrag: number
+  typ: string | null
+  created_at: string
+}
+
+export interface Lohnabrechnung {
+  id: string
+  monat: number
+  jahr: number
+  gesamt_dienstnehmer: number
+  gesamt_koerperschaften: number
+  gesamt_total: number
+  pdf_url: string | null
+  created_at: string
+  lohn_dienstnehmer?: LohnDienstnehmer[]
+  lohn_koerperschaften?: LohnKoerperschaft[]
+}
+
 export interface Database {
   public: {
     Tables: {

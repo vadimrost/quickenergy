@@ -1,0 +1,440 @@
+{
+  "name": "QuickEnergy ← E-Mail → Supabase Import",
+  "nodes": [
+    {
+      "parameters": {
+        "postProcessAction": "nothing",
+        "format": "resolved",
+        "options": {}
+      },
+      "id": "3a3704ad-0b42-487a-b1c6-42186bec63fa",
+      "name": "SMTP Email Trigger",
+      "type": "n8n-nodes-base.emailReadImap",
+      "position": [-3920, 368],
+      "typeVersion": 2.1,
+      "credentials": {
+        "imap": {
+          "id": "xoLEV7mNfjkYAMue",
+          "name": "IMAP account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const emailData = {\n    from: item.json.from || '',\n    to: item.json.to || '',\n    subject: item.json.subject || '',\n    date: item.json.date || '',\n    messageId: item.json.headers ? item.json.headers['message-id'] : '',\n    text: item.json.text || item.json.textAsHtml || item.json.html || '',\n    hasAttachment: false,\n    uid: item.json.attributes ? item.json.attributes.uid : null\n  };\n  if (item.binary && Object.keys(item.binary).length > 0) {\n    emailData.hasAttachment = true;\n  }\n  results.push({ json: emailData, binary: item.binary || {} });\n}\n\nreturn results;"
+      },
+      "id": "d0126027-f6f5-4f12-9363-93ef0db75de4",
+      "name": "Code in JavaScript",
+      "type": "n8n-nodes-base.code",
+      "position": [-3712, 368],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  if (!item.json.hasAttachment) continue;\n  const hasPDF = Object.values(item.binary || {}).some(a =>\n    a.mimeType === 'application/pdf' || a.fileName?.toLowerCase().endsWith('.pdf')\n  );\n  if (hasPDF) results.push(item);\n}\n\nreturn results;"
+      },
+      "id": "9158c328-f0c9-4d67-a654-13a64a0bc60c",
+      "name": "Code in JavaScript5",
+      "type": "n8n-nodes-base.code",
+      "position": [-3504, 368],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "inputText": "=from: {{ $json.from.address }}\nsubject: {{ $json.subject }}\n<message>\n{{ $json.text || $json.textAsHtml }}\n</message>",
+        "categories": {
+          "categories": [
+            {
+              "category": "invoice",
+              "description": "Message is an invoice being issued"
+            }
+          ]
+        },
+        "options": { "fallback": "other" }
+      },
+      "id": "05740402-4be4-44ba-922e-ab1228bd201e",
+      "name": "Message Classifier",
+      "type": "@n8n/n8n-nodes-langchain.textClassifier",
+      "position": [-3296, 400],
+      "typeVersion": 1
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "4ce9721d-82b2-4340-84c4-acfcd85f2a98",
+      "name": "OpenRouter Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "position": [-3280, 576],
+      "typeVersion": 1,
+      "credentials": {
+        "openRouterApi": {
+          "id": "kqzOuCfenEqrihNc",
+          "name": "OpenRouter account 4"
+        }
+      }
+    },
+    {
+      "parameters": { "options": {} },
+      "id": "ddffbec6-9473-4a4e-b344-81e8e3638767",
+      "name": "For Each Message",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [-2912, 352],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {},
+      "id": "af1d1b8e-2b88-4496-8490-4a47802f8230",
+      "name": "Message Ref",
+      "type": "n8n-nodes-base.noOp",
+      "position": [-2576, 496],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "jsCode": "let results = [];\n\nfor (const item of $input.all()) {\n  for (const key of Object.keys(item.binary)) {\n    results.push({\n      json: { fileName: item.binary[key].fileName },\n      binary: { data: item.binary[key] }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "b5ebd3df-6c69-40df-b149-0783bb5c00a4",
+      "name": "Split Attachments",
+      "type": "n8n-nodes-base.code",
+      "position": [-2304, 528],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  if (!item.binary?.data) continue;\n  const { fileName = '', mimeType = '' } = item.binary.data;\n  const isPDF = mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');\n  if (isPDF) results.push(item);\n}\n\nreturn results;"
+      },
+      "id": "981a7fdc-dd1b-4d0e-9297-642f14d1b8f5",
+      "name": "Code in JavaScript6",
+      "type": "n8n-nodes-base.code",
+      "position": [-2096, 528],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "binaryToPropery",
+        "options": {}
+      },
+      "id": "10dc06a2-58f8-4506-9757-a2b1fa9a231a",
+      "name": "Extract from File",
+      "type": "n8n-nodes-base.extractFromFile",
+      "position": [-1904, 560],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {},
+      "id": "7405fb86-d06e-47f6-b494-52a5aeac9df4",
+      "name": "Wait2",
+      "type": "n8n-nodes-base.wait",
+      "position": [-1712, 592],
+      "typeVersion": 1.1,
+      "webhookId": "8fd9cc65-95f3-4b21-8c54-1316593dfd29"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"contents\": [\n    {\n      \"parts\": [\n        { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $json.data } },\n        { \"text\": `CRITICAL: Look at the RECIPIENT/BUYER of this invoice.\n\nQuestion 1 - IS_INVOICE: Is this a Rechnung/Invoice that requires payment?\nQuestion 2 - IS_ISSUED_TO_COMPANY: Is the recipient a company (GmbH, AG, KG, Ltd, etc.)?` }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"is_invoice\", \"is_issued_to_company\"],\n      \"properties\": {\n        \"is_invoice\": { \"type\": \"boolean\" },\n        \"is_issued_to_company\": { \"type\": \"boolean\" }\n      }\n    }\n  }\n}\n}}",
+        "options": {}
+      },
+      "id": "c44a3400-3014-4580-ae73-9ce27130bdb8",
+      "name": "Invoice Classifier With Gemini 2.0",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [-1520, 592],
+      "typeVersion": 4.2,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CoeRtGLNaSriRv38",
+          "name": "Google Gemini(PaLM) Api account 18"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 2 },
+          "conditions": [
+            {
+              "id": "5240de52-3b02-4151-8c2b-b0522582700e",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true },
+              "leftValue": "={{ $json.candidates[0].content.parts[0].text.parseJson().is_invoice }}",
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "8260e779-7e31-4906-b7e3-db675c13dd63",
+      "name": "Filter Invoices",
+      "type": "n8n-nodes-base.filter",
+      "position": [-1280, 592],
+      "typeVersion": 2.2,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {},
+      "id": "9c68f0f5-c645-410a-b1e7-7ee7fae3ca79",
+      "name": "Wait1",
+      "type": "n8n-nodes-base.wait",
+      "position": [-1072, 592],
+      "typeVersion": 1.1,
+      "webhookId": "6ea812e3-a650-40f9-beef-e319b3c2268d"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "leftValue": "", "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "57f433cd-5861-434f-80f2-ce28d7c22c26",
+              "operator": { "type": "object", "operation": "notEmpty", "singleValue": true },
+              "leftValue": "={{ $input.first().json }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4b8542fa-c490-497d-9efd-1c3f04a85be6",
+      "name": "Has Invoice?",
+      "type": "n8n-nodes-base.if",
+      "position": [-784, 656],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n{\n  \"contents\": [\n    {\n      \"parts\": [\n        { \"inline_data\": { \"mime_type\": \"application/pdf\", \"data\": $('Extract from File').item.json.data } },\n        { \"text\": \"Extrahiere alle Felder dieser Rechnung als JSON.\\n\\nWichtig:\\n- net_amount = Nettobetrag NACH Rabatten (NICHT Brutto)\\n- Österreichische MwSt: nur 0%, 10%, 20% (nie 19%)\\n- Deutsche MwSt: 19% oder 7%\\n- invoice_date und due_date immer als YYYY-MM-DD\\n- Bei Proforma: is_proforma=true, tax_rate=null\\n- supplier_name: oberster Firmenname auf dem Beleg\" }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"response_mime_type\": \"application/json\",\n    \"response_schema\": {\n      \"type\": \"OBJECT\",\n      \"required\": [\"invoice_number\", \"invoice_date\", \"invoice_amount\", \"supplier_name\"],\n      \"properties\": {\n        \"invoice_number\":    { \"type\": \"STRING\" },\n        \"invoice_date\":      { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_amount\":    { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_currency\":  { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_due_date\":  { \"type\": \"STRING\", \"nullable\": true },\n        \"invoice_tax_rate\":  { \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_tax_amount\":{ \"type\": \"NUMBER\", \"nullable\": true },\n        \"invoice_net_amount\":{ \"type\": \"NUMBER\", \"nullable\": true },\n        \"is_storno\":         { \"type\": \"BOOLEAN\", \"nullable\": true },\n        \"is_proforma\":       { \"type\": \"BOOLEAN\", \"nullable\": true },\n        \"supplier_name\":     { \"type\": \"STRING\" },\n        \"supplier_iban\":     { \"type\": \"STRING\", \"nullable\": true },\n        \"supplier_vat_id\":   { \"type\": \"STRING\", \"nullable\": true },\n        \"payment_terms\":     { \"type\": \"STRING\", \"nullable\": true }\n      }\n    }\n  }\n}\n}}",
+        "options": {}
+      },
+      "id": "aa557744-579f-4f62-8be0-827d4501532a",
+      "name": "File-Based OCR with Gemini 2.0",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [-576, 656],
+      "typeVersion": 4.2,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "CoeRtGLNaSriRv38",
+          "name": "Google Gemini(PaLM) Api account 18"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n{\n  invoice: $json.candidates[0].content.parts[0].text.parseJson(),\n  email: {\n    ...$('Message Ref').first().json,\n    body: null\n  }\n}\n}}",
+        "options": {}
+      },
+      "id": "73dfb998-c33f-46d3-b89b-aa61104355ee",
+      "name": "Parse Output",
+      "type": "n8n-nodes-base.set",
+      "position": [-384, 656],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "jsCode": "const invoiceItems = $('Parse Output').all();\nconst binaryItems = $('Split Attachments').all();\nconst results = [];\n\nfor (let i = 0; i < invoiceItems.length; i++) {\n  const invoiceItem = invoiceItems[i];\n  const binaryItem = binaryItems[i] || { binary: {} };\n\n  let fromEmail = '';\n  const email = invoiceItem.json.email || {};\n  if (typeof email.from === 'string') fromEmail = email.from;\n  else if (email.from?.text) fromEmail = email.from.text;\n  else if (email.from?.value?.[0]?.address) fromEmail = email.from.value[0].address;\n\n  const invoice = invoiceItem.json.invoice;\n\n  results.push({\n    json: {\n      invoice,\n      email: {\n        subject: email.subject || '',\n        from: fromEmail,\n        date: email.date || ''\n      },\n      isStorno: invoice.is_storno || false\n    },\n    binary: binaryItem.binary || {}\n  });\n}\n\nreturn results;"
+      },
+      "id": "fac30d6e-f4b0-477a-8bd2-08a26b541586",
+      "name": "Code in JavaScript1",
+      "type": "n8n-nodes-base.code",
+      "position": [-176, 656],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  let fileName = 'invoice.pdf';\n  let pdfData = '';\n  if (item.binary?.data) {\n    fileName = item.binary.data.fileName || 'invoice.pdf';\n    pdfData  = item.binary.data.data || '';\n  }\n  results.push({\n    json: { ...item.json, fileName, pdfData },\n    binary: item.binary || {}\n  });\n}\n\nreturn results;"
+      },
+      "id": "bc18e713-5809-4e1f-8650-759f7edc13d3",
+      "name": "Parse & Enhance Invoice Data",
+      "type": "n8n-nodes-base.code",
+      "position": [16, 640],
+      "typeVersion": 2
+    },
+    {
+      "parameters": { "amount": 1 },
+      "id": "5320d30b-3c39-410a-ab88-082c83f51ff5",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "position": [32, 848],
+      "typeVersion": 1.1,
+      "webhookId": "6dae0a77-74f4-4d85-a58b-e55c44fbea58"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{\n{\n  invoice: null,\n  email: {\n    ...$('Message Ref').first().json,\n    body: null\n  }\n}\n}}",
+        "options": {}
+      },
+      "id": "64e4d12f-5167-4b74-ab2c-5183805ba45d",
+      "name": "Empty Response",
+      "type": "n8n-nodes-base.set",
+      "position": [-176, 848],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "jsCode": "const invoiceItems = $('Parse Output').all();\nconst binaryItems = $('Split Attachments').all();\nconst results = [];\n\nfor (let i = 0; i < invoiceItems.length; i++) {\n  const invoiceData = invoiceItems[i];\n  const binaryData = binaryItems[i];\n  if (!binaryData?.binary) continue;\n\n  const binaryKey = Object.keys(binaryData.binary)[0] || 'data';\n  const pdfBinary = binaryData.binary[binaryKey];\n  if (!pdfBinary) continue;\n\n  const fileName = pdfBinary.fileName ||\n    `${invoiceData.json.invoice?.invoice_number || 'invoice'}.pdf`;\n\n  results.push({\n    json: {\n      invoice: invoiceData.json.invoice,\n      email: invoiceData.json.email,\n      fileName\n    },\n    binary: { data: pdfBinary }\n  });\n}\n\nreturn results;"
+      },
+      "id": "3844097d-7878-45d0-9fa7-d0968e773985",
+      "name": "Code in JavaScript2",
+      "type": "n8n-nodes-base.code",
+      "position": [-1776, 128],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  if (!item.binary?.data) continue;\n  const { fileName = '', mimeType = '' } = item.binary.data;\n  const isPDF = mimeType === 'application/pdf' || fileName.toLowerCase().endsWith('.pdf');\n  if (isPDF) results.push(item);\n}\n\nreturn results;"
+      },
+      "id": "2ad7eb0f-0c04-4580-8e49-393b069dd73d",
+      "name": "Code in JavaScript4",
+      "type": "n8n-nodes-base.code",
+      "position": [-1600, 128],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dateiname: YYMMDD_LIEFERANT_RECHNUNGSNR.pdf\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const invoice = item.json.invoice || {};\n  const binaryData = item.binary?.data;\n  if (!binaryData) continue;\n\n  // Datum\n  let shortDate = '';\n  if (invoice.invoice_date) {\n    const s = invoice.invoice_date;\n    if (s.includes('.')) {\n      const [d, m, y] = s.split('.');\n      shortDate = y.slice(-2) + m.padStart(2,'0') + d.padStart(2,'0');\n    } else {\n      const dt = new Date(s);\n      shortDate = String(dt.getFullYear()).slice(-2)\n        + String(dt.getMonth()+1).padStart(2,'0')\n        + String(dt.getDate()).padStart(2,'0');\n    }\n  } else {\n    const now = new Date();\n    shortDate = String(now.getFullYear()).slice(-2)\n      + String(now.getMonth()+1).padStart(2,'0')\n      + String(now.getDate()).padStart(2,'0');\n  }\n\n  const firma = (invoice.supplier_name || 'Lieferant')\n    .replace(/GmbH|AG|KG|UG|mbH|Co\\./gi, '')\n    .trim().substring(0, 25)\n    .replace(/[^a-zA-Z0-9äöüÄÖÜß -]/g, '')\n    .replace(/\\s+/g, '_');\n\n  const rechnungsnr = (invoice.invoice_number || 'unbekannt')\n    .replace(/[^a-zA-Z0-9-]/g, '_').substring(0, 20);\n\n  const newFileName = `${shortDate}_${firma}_${rechnungsnr}.pdf`;\n\n  results.push({\n    json: { ...item.json, fileName: newFileName },\n    binary: { data: { ...binaryData, fileName: newFileName } }\n  });\n}\n\nreturn results;"
+      },
+      "id": "53743b49-2974-4b51-a367-816581518607",
+      "name": "Code in JavaScript7",
+      "type": "n8n-nodes-base.code",
+      "position": [-1392, 128],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/storage/v1/object/rechnungen/={{ encodeURIComponent($json.fileName) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}" },
+            { "name": "Content-Type",  "value": "application/pdf" },
+            { "name": "x-upsert",      "value": "true" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "supabase-pdf-upload",
+      "name": "Supabase PDF hochladen",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [-1168, 128],
+      "typeVersion": 4.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lieferant lookup/create + Rechnung in Supabase eintragen\nconst uploadItems = $input.all();\nconst invoiceItems = $('Code in JavaScript7').all();\n\nconst SUPABASE_URL  = $env.SUPABASE_URL;\nconst SUPABASE_KEY  = $env.SUPABASE_SERVICE_ROLE_KEY;\n\nconst headers = {\n  'apikey':        SUPABASE_KEY,\n  'Authorization': `Bearer ${SUPABASE_KEY}`,\n  'Content-Type':  'application/json',\n  'Prefer':        'return=representation'\n};\n\nconst normalizeDate = (s) => {\n  if (!s) return null;\n  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(s)) return s;\n  if (s.includes('.')) {\n    const [d, m, y] = s.split('.');\n    if (d && m && y) return `${y.trim()}-${m.trim().padStart(2,'0')}-${d.trim().padStart(2,'0')}`;\n  }\n  try {\n    const dt = new Date(s);\n    return isNaN(dt.getTime()) ? null : dt.toISOString().split('T')[0];\n  } catch { return null; }\n};\n\nconst results = [];\n\nfor (let i = 0; i < invoiceItems.length; i++) {\n  const item    = invoiceItems[i];\n  const invoice = item.json.invoice || {};\n  const fileName = item.json.fileName || `invoice_${i}.pdf`;\n\n  const pdfUrl = `${SUPABASE_URL}/storage/v1/object/public/rechnungen/${encodeURIComponent(fileName)}`;\n  const supplierName = (invoice.supplier_name || '').trim() || 'Unbekannter Lieferant';\n\n  // 1. Lieferant suchen oder anlegen\n  let lieferantId = null;\n  try {\n    const found = await $helpers.httpRequest({\n      method: 'GET',\n      url: `${SUPABASE_URL}/rest/v1/lieferanten?name=ilike.${encodeURIComponent(supplierName)}&select=id&limit=1`,\n      headers\n    });\n    if (found.length > 0) {\n      lieferantId = found[0].id;\n    } else {\n      const created = await $helpers.httpRequest({\n        method: 'POST',\n        url: `${SUPABASE_URL}/rest/v1/lieferanten`,\n        headers,\n        body: JSON.stringify({ name: supplierName })\n      });\n      lieferantId = created[0]?.id || null;\n    }\n  } catch (e) {\n    console.error('Lieferant Fehler:', e.message);\n  }\n\n  // 2. Rechnungsnummer (Platzhalter wenn leer)\n  const rechnungsnr = invoice.invoice_number ||\n    `EMAIL-${new Date().getTime()}-${i}`;\n\n  // 3. Betrag: netto bevorzugen\n  const betrag = invoice.invoice_net_amount ?? invoice.invoice_amount ?? 0;\n  const ustSatz = invoice.is_proforma ? 0 : (invoice.invoice_tax_rate ?? 20);\n\n  // 4. Rechnung einfügen\n  const rechnung = {\n    rechnungsnr,\n    rechnungsdatum: normalizeDate(invoice.invoice_date),\n    faelligkeit:    normalizeDate(invoice.invoice_due_date),\n    betrag,\n    ust_satz:       ustSatz,\n    pdf_url:        pdfUrl,\n    status:         'eingegangen',\n    lieferant_id:   lieferantId,\n    ocr_json: {\n      supplier_name:  supplierName,\n      invoice_number: invoice.invoice_number,\n      invoice_date:   invoice.invoice_date,\n      net_amount:     invoice.invoice_net_amount,\n      tax_rate:       invoice.invoice_tax_rate,\n      iban:           invoice.supplier_iban\n    }\n  };\n\n  try {\n    const inserted = await $helpers.httpRequest({\n      method: 'POST',\n      url: `${SUPABASE_URL}/rest/v1/rechnungen`,\n      headers,\n      body: JSON.stringify(rechnung)\n    });\n    results.push({\n      json: {\n        success:      true,\n        rechnung_id:  inserted[0]?.id,\n        rechnungsnr,\n        supplier:     supplierName,\n        betrag,\n        pdf_url:      pdfUrl\n      }\n    });\n  } catch (e) {\n    results.push({\n      json: { success: false, error: e.message, rechnungsnr, supplier: supplierName }\n    });\n  }\n}\n\nreturn results;"
+      },
+      "id": "rechnung-in-supabase",
+      "name": "Rechnung in Supabase speichern",
+      "type": "n8n-nodes-base.code",
+      "position": [-900, 128],
+      "typeVersion": 2
+    }
+  ],
+  "connections": {
+    "SMTP Email Trigger": {
+      "main": [[{ "node": "Code in JavaScript",  "type": "main", "index": 0 }]]
+    },
+    "Code in JavaScript": {
+      "main": [[{ "node": "Code in JavaScript5", "type": "main", "index": 0 }]]
+    },
+    "Code in JavaScript5": {
+      "main": [[{ "node": "Message Classifier",  "type": "main", "index": 0 }]]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [[{ "node": "Message Classifier", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Message Classifier": {
+      "main": [[{ "node": "For Each Message", "type": "main", "index": 0 }]]
+    },
+    "For Each Message": {
+      "main": [
+        [{ "node": "Code in JavaScript2", "type": "main", "index": 0 }],
+        [{ "node": "Message Ref",         "type": "main", "index": 0 }]
+      ]
+    },
+    "Message Ref": {
+      "main": [[{ "node": "Split Attachments", "type": "main", "index": 0 }]]
+    },
+    "Split Attachments": {
+      "main": [[{ "node": "Code in JavaScript6", "type": "main", "index": 0 }]]
+    },
+    "Code in JavaScript6": {
+      "main": [[{ "node": "Extract from File", "type": "main", "index": 0 }]]
+    },
+    "Extract from File": {
+      "main": [[{ "node": "Wait2", "type": "main", "index": 0 }]]
+    },
+    "Wait2": {
+      "main": [[{ "node": "Invoice Classifier With Gemini 2.0", "type": "main", "index": 0 }]]
+    },
+    "Invoice Classifier With Gemini 2.0": {
+      "main": [[{ "node": "Filter Invoices", "type": "main", "index": 0 }]]
+    },
+    "Filter Invoices": {
+      "main": [[{ "node": "Wait1", "type": "main", "index": 0 }]]
+    },
+    "Wait1": {
+      "main": [[{ "node": "Has Invoice?", "type": "main", "index": 0 }]]
+    },
+    "Has Invoice?": {
+      "main": [
+        [{ "node": "File-Based OCR with Gemini 2.0", "type": "main", "index": 0 }],
+        [{ "node": "Empty Response",                 "type": "main", "index": 0 }]
+      ]
+    },
+    "File-Based OCR with Gemini 2.0": {
+      "main": [
+        [{ "node": "Parse Output",   "type": "main", "index": 0 }],
+        [{ "node": "Empty Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Output": {
+      "main": [[{ "node": "Code in JavaScript1", "type": "main", "index": 0 }]]
+    },
+    "Code in JavaScript1": {
+      "main": [[{ "node": "Parse & Enhance Invoice Data", "type": "main", "index": 0 }]]
+    },
+    "Parse & Enhance Invoice Data": {
+      "main": [[{ "node": "Wait", "type": "main", "index": 0 }]]
+    },
+    "Empty Response": {
+      "main": [[{ "node": "Wait", "type": "main", "index": 0 }]]
+    },
+    "Wait": {
+      "main": [[{ "node": "For Each Message", "type": "main", "index": 0 }]]
+    },
+    "Code in JavaScript2": {
+      "main": [[{ "node": "Code in JavaScript4", "type": "main", "index": 0 }]]
+    },
+    "Code in JavaScript4": {
+      "main": [[{ "node": "Code in JavaScript7", "type": "main", "index": 0 }]]
+    },
+    "Code in JavaScript7": {
+      "main": [[{ "node": "Supabase PDF hochladen", "type": "main", "index": 0 }]]
+    },
+    "Supabase PDF hochladen": {
+      "main": [[{ "node": "Rechnung in Supabase speichern", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "quickenergy" }
+}
