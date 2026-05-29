@@ -9,6 +9,7 @@ import { ExportsPage } from '@/features/exports/ExportsPage'
 import { MitarbeiterPage } from '@/features/mitarbeiter/MitarbeiterPage'
 import { KategorienPage } from '@/features/kategorien/KategorienPage'
 import { LohnPage } from '@/features/lohn/LohnPage'
+import { KontoauszugPage } from '@/features/kontoauszug/KontoauszugPage'
 import { useAuth } from '@/hooks/useAuth'
 
 const queryClient = new QueryClient({
@@ -52,6 +53,7 @@ function AppRoutes() {
       <Route path="/mitarbeiter" element={<ProtectedRoute><MitarbeiterPage /></ProtectedRoute>} />
       <Route path="/kategorien" element={<ProtectedRoute><KategorienPage /></ProtectedRoute>} />
       <Route path="/lohn" element={<ProtectedRoute><LohnPage /></ProtectedRoute>} />
+      <Route path="/kontoauszuege" element={<ProtectedRoute><KontoauszugPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

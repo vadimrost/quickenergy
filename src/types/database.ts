@@ -72,6 +72,9 @@ export interface Rechnung {
   mwst_10: number | null
   mwst_20: number | null
   flag: RechnungFlag | null
+  bank_transaktion_id: string | null
+  bezahlt_am: string | null
+  bezahlt_konto: string | null
   created_at: string
   lieferant?: Lieferant | null
 }
@@ -100,7 +103,41 @@ export interface LohnDienstnehmer {
   iban: string | null
   betrag: number
   zahlungsart: string
+  bank_transaktion_id: string | null
   created_at: string
+}
+
+export interface BankTransaktion {
+  id: string
+  auszug_id: string
+  datum: string
+  betrag: number
+  buchungstext: string
+  empfaenger: string | null
+  referenz: string | null
+  typ: string
+  status: string  // 'offen' | 'zugewiesen'
+  rechnung_id: string | null
+  lohn_id: string | null
+  match_score: number | null
+  created_at: string
+  // embedded via PostgREST joins (populated when queried with select)
+  rechnungen?: Array<{ id: string; rechnungsnr: string; lieferant: { name: string } | null }>
+  lohn_dienstnehmer?: Array<{ id: string; name: string }>
+}
+
+export interface Kontoauszug {
+  id: string
+  pdf_url: string | null
+  konto_iban: string | null
+  konto_name: string | null
+  auszug_nr: string | null
+  von_datum: string | null
+  bis_datum: string | null
+  alter_kontostand: number | null
+  neuer_kontostand: number | null
+  created_at: string
+  bank_transaktionen?: BankTransaktion[]
 }
 
 export interface LohnKoerperschaft {

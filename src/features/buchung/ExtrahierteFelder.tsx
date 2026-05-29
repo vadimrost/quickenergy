@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { CreditCard, X, AlertTriangle, ArrowUpFromLine, Sparkles, Loader2 } from 'lucide-react'
+import { CreditCard, X, AlertTriangle, ArrowUpFromLine, Sparkles, Loader2, Landmark } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -503,6 +503,30 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
           </div>
         </div>
       </div>
+
+      {/* Payment via Kontoauszug */}
+      {(rechnung.bezahlt_am || rechnung.bezahlt_konto) && (
+        <div className="card-base p-5 border-l-2 border-status-active">
+          <div className="flex items-center gap-2 mb-3">
+            <Landmark size={14} className="text-status-active" />
+            <p className="label-caps text-status-active">Zahlung zugewiesen</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {rechnung.bezahlt_am && (
+              <div>
+                <p className="text-xs text-ink-muted mb-0.5">Bezahlt am</p>
+                <p className="font-medium text-ink">{formatDate(rechnung.bezahlt_am)}</p>
+              </div>
+            )}
+            {rechnung.bezahlt_konto && (
+              <div>
+                <p className="text-xs text-ink-muted mb-0.5">Konto</p>
+                <p className="font-medium text-ink font-mono text-xs">···{rechnung.bezahlt_konto.slice(-4)}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Export */}
       <div className="card-base p-5">
