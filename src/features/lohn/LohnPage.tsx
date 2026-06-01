@@ -414,6 +414,7 @@ export function LohnPage() {
                                 <th className="text-left px-4 py-2 font-medium">Nr.</th>
                                 <th className="text-left px-4 py-2 font-medium">Name</th>
                                 <th className="text-left px-4 py-2 font-medium hidden md:table-cell">Zahlung</th>
+                                <th className="text-left px-4 py-2 font-medium">Status</th>
                                 <th className="text-right px-4 py-2 font-medium">Betrag</th>
                               </tr>
                             </thead>
@@ -423,13 +424,25 @@ export function LohnPage() {
                                   <td className="px-4 py-2.5 text-ink-muted tabular-nums">{d.ma_nr ?? '—'}</td>
                                   <td className="px-4 py-2.5 font-medium text-ink">{d.name}</td>
                                   <td className="px-4 py-2.5 text-ink-muted capitalize hidden md:table-cell">{d.zahlungsart}</td>
+                                  <td className="px-4 py-2.5">
+                                    {d.bank_transaktion_id
+                                      ? <span className="inline-flex items-center gap-1 text-xs font-medium text-status-active bg-green-50 px-2 py-0.5 rounded-full">✓ Bezahlt</span>
+                                      : <span className="inline-flex items-center gap-1 text-xs font-medium text-ink-muted bg-bg-muted px-2 py-0.5 rounded-full">Offen</span>
+                                    }
+                                  </td>
                                   <td className="px-4 py-2.5 text-right font-semibold text-ink tabular-nums">{formatEuro(d.betrag)}</td>
                                 </tr>
                               ))}
                             </tbody>
                             <tfoot>
                               <tr className="border-t-2 border-border bg-bg-muted">
-                                <td colSpan={3} className="px-4 py-2.5 text-xs font-medium text-ink-muted">Summe Dienstnehmer</td>
+                                <td colSpan={4} className="px-4 py-2.5 text-xs font-medium text-ink-muted">
+                                  Summe Dienstnehmer
+                                  {' · '}
+                                  <span className="text-status-active">
+                                    {dienstnehmer.filter(d => d.bank_transaktion_id).length}/{dienstnehmer.length} bezahlt
+                                  </span>
+                                </td>
                                 <td className="px-4 py-2.5 text-right font-bold text-ink tabular-nums">{formatEuro(abr.gesamt_dienstnehmer)}</td>
                               </tr>
                             </tfoot>
