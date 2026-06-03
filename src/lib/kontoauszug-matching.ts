@@ -15,10 +15,17 @@ export interface MatchCandidate {
 // - Sonderzeichen + Leerzeichen normalisieren
 function normName(s: string | null | undefined): string {
   if (!s) return ''
-  return s
-    .toLowerCase()
+  let n = s.toLowerCase()
     .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
     .replace(/\boesterreich\b/g, 'osterreich')
+
+  // "NACHNAME, Vorname" → "vorname nachname" (Auszahlungsjournal-Format)
+  if (n.includes(',')) {
+    const [last, ...rest] = n.split(',').map(p => p.trim())
+    n = [...rest, last].join(' ')
+  }
+
+  return n
     .replace(/\b(gmbh\s*&\s*co\.?\s*kg|gmbh\s*co\s*kg|gmbh|ag|og|kg|eg|keg|inc|ltd|bv|nv|sa|srl|sro|spol)\b/g, '')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
@@ -58,16 +65,23 @@ function scoreForAmount(txAbs: number, target: number): number {
   return 0
 }
 
-// Betrag-Score: prüft Brutto UND Skonto-reduzierten Betrag
+// Betrag-Score: prüft Brutto, direktes r.betrag (falls schon Brutto in DB) und Skonto
 function amountScore(txAbs: number, r: Rechnung): number {
   const b = brutto(r)
   let best = scoreForAmount(txAbs, b)
 
-  // Auch Skonto-Zahlung prüfen
+  // Auch r.betrag direkt prüfen — manche Rechnungen werden als Brutto gespeichert
+  const directScore = scoreForAmount(txAbs, r.betrag)
+  if (directScore > best) best = directScore
+
+  // Skonto-Varianten prüfen
   if (r.skonto_prozent && r.skonto_prozent > 0) {
-    const skontoAmt = Math.round(b * (1 - r.skonto_prozent / 100) * 100) / 100
-    const sScore = scoreForAmount(txAbs, skontoAmt)
-    if (sScore > best) best = sScore
+    const skontoB = Math.round(b * (1 - r.skonto_prozent / 100) * 100) / 100
+    const sD = Math.round(r.betrag * (1 - r.skonto_prozent / 100) * 100) / 100
+    const s1 = scoreForAmount(txAbs, skontoB)
+    const s2 = scoreForAmount(txAbs, sD)
+    if (s1 > best) best = s1
+    if (s2 > best) best = s2
   }
 
   return best
@@ -157,7 +171,8 @@ export function matchTransaktion(
 
   for (const l of lohnDienstnehmer) {
     if (l.bank_transaktion_id) continue
-    if (l.zahlungsart === 'barzahlung') continue
+    // zahlungsart nicht filtern — OCR liest aus Auszahlungsjournal oft "Barzahlung"
+    // obwohl tatsächlich per Überweisung gezahlt wird
 
     const aScore = scoreForAmount(abs, l.betrag)
     if (aScore === 0) continue

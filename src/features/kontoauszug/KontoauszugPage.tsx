@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from 'react'
-import { Upload, Loader2, ChevronDown, ChevronUp, CheckCircle2, CircleDot, ArrowRight, X, FileText, Search, TrendingDown, TrendingUp, Link2, Trash2 } from 'lucide-react'
+import { Upload, Loader2, ChevronDown, ChevronUp, CheckCircle2, CircleDot, ArrowRight, X, FileText, Search, TrendingDown, TrendingUp, Link2, Trash2, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { StatCard } from '@/components/shared/StatCard'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -15,6 +15,7 @@ import {
   useAssignTransaktion,
   useRejectMatch,
   useDeleteKontoauszug,
+  useRerunAutoMatch,
   useOffeneLohnDienstnehmer,
 } from './useKontoauszug'
 import type { BankTransaktion, Kontoauszug, Rechnung, LohnDienstnehmer } from '@/types/database'
@@ -272,6 +273,7 @@ function KontoauszugCard({
   const assignMutation = useAssignTransaktion()
   const rejectMutation = useRejectMatch()
   const deleteMutation = useDeleteKontoauszug()
+  const rerunMutation = useRerunAutoMatch()
 
   const txAll = konto.bank_transaktionen ?? []
   const outgoing = txAll.filter(t => t.betrag < 0)
@@ -342,6 +344,19 @@ function KontoauszugCard({
             </p>
             <p className="text-xs text-ink-muted">{fmtKontostand(konto.neuer_kontostand)}</p>
           </div>
+          <button
+            onClick={async e => {
+              e.stopPropagation()
+              const n = await rerunMutation.mutateAsync(konto)
+              if (n > 0) toast.success(`${n} neue Transaktion${n !== 1 ? 'en' : ''} automatisch zugewiesen`)
+              else toast.info('Keine neuen Matches gefunden')
+            }}
+            disabled={rerunMutation.isPending}
+            title="Auto-Match erneut ausführen"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-subtle hover:text-accent-600 hover:bg-accent-50 transition-colors"
+          >
+            {rerunMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          </button>
           <button
             onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
             disabled={deleteMutation.isPending}

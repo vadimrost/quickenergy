@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { fileToBase64 } from '@/lib/gemini-ocr'
 import { lohnOcr } from '@/lib/lohn-ocr'
 import { useLohnabrechnungen, useDeleteLohnabrechnung } from './useLohn'
+import { runAutoMatchAllOpen } from '@/features/kontoauszug/useKontoauszug'
 import { formatEuro, cn } from '@/lib/utils'
 import type { Lohnabrechnung } from '@/types/database'
 
@@ -255,7 +256,14 @@ export function LohnPage() {
       }
 
       await qc.invalidateQueries({ queryKey: ['lohnabrechnungen'] })
-      toast.success(`${MONAT_NAMEN[ocr.monat]} ${ocr.jahr} erfolgreich importiert`)
+      // Trigger auto-match against existing open bank transactions
+      const matched = await runAutoMatchAllOpen()
+      await qc.invalidateQueries({ queryKey: ['kontoauszuege'] })
+      await qc.invalidateQueries({ queryKey: ['rechnungen'] })
+      toast.success(
+        `${MONAT_NAMEN[ocr.monat]} ${ocr.jahr} erfolgreich importiert` +
+        (matched > 0 ? ` · ${matched} Kontoauszug-Transaktionen automatisch zugewiesen` : '')
+      )
       setExpandedId(abrechnung.id)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Fehler beim Importieren')

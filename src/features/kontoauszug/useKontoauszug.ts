@@ -5,6 +5,78 @@ import { matchTransaktion, AUTO_MATCH_THRESHOLD } from '@/lib/kontoauszug-matchi
 import { fileToBase64 } from '@/lib/gemini-ocr'
 import type { Kontoauszug, BankTransaktion, Rechnung, LohnDienstnehmer } from '@/types/database'
 
+// Shared auto-match logic — runs against all open transactions of a given kontoauszug
+// Can be called on upload OR later (e.g. after new lohn import)
+export async function runAutoMatch(
+  transactions: BankTransaktion[],
+  kontoIban: string | null,
+): Promise<number> {
+  const openTx = transactions.filter(t => t.betrag < 0 && t.status !== 'zugewiesen')
+  if (openTx.length === 0) return 0
+
+  const [{ data: rechnungen }, { data: lohnDienstnehmer }] = await Promise.all([
+    supabase.from('rechnungen').select('*, lieferant:lieferanten(*)').neq('status', 'bezahlt'),
+    supabase.from('lohn_dienstnehmer').select('*').is('bank_transaktion_id', null),
+  ])
+
+  let matched = 0
+  const usedLohnIds = new Set<string>()
+
+  for (const tx of openTx) {
+    const candidates = matchTransaktion(
+      tx,
+      (rechnungen ?? []) as Rechnung[],
+      ((lohnDienstnehmer ?? []) as LohnDienstnehmer[]).filter(l => !usedLohnIds.has(l.id)),
+    )
+    const best = candidates[0]
+    if (!best || best.score < AUTO_MATCH_THRESHOLD) continue
+
+    if (best.type === 'rechnung') {
+      await supabase.from('rechnungen').update({
+        status: 'bezahlt',
+        bank_transaktion_id: tx.id,
+        bezahlt_am: tx.datum,
+        bezahlt_konto: kontoIban,
+      }).eq('id', best.id)
+      await supabase.from('bank_transaktionen').update({
+        status: 'zugewiesen',
+        rechnung_id: best.id,
+        match_score: best.score,
+      }).eq('id', tx.id)
+    } else {
+      usedLohnIds.add(best.id)
+      await supabase.from('lohn_dienstnehmer').update({
+        bank_transaktion_id: tx.id,
+      }).eq('id', best.id)
+      await supabase.from('bank_transaktionen').update({
+        status: 'zugewiesen',
+        lohn_id: best.id,
+        match_score: best.score,
+      }).eq('id', tx.id)
+    }
+    matched++
+  }
+  return matched
+}
+
+// Re-runs auto-match on ALL open transactions across all kontoauszuege
+// Used after a new lohnabrechnung is imported
+export async function runAutoMatchAllOpen(): Promise<number> {
+  const { data: kontoauszuege } = await supabase
+    .from('kontoauszuege')
+    .select('id, konto_iban, bank_transaktionen!auszug_id(*)')
+
+  let total = 0
+  for (const k of kontoauszuege ?? []) {
+    const n = await runAutoMatch(
+      (k.bank_transaktionen ?? []) as BankTransaktion[],
+      k.konto_iban,
+    )
+    total += n
+  }
+  return total
+}
+
 export function useDeleteKontoauszug() {
   const qc = useQueryClient()
 
@@ -139,47 +211,10 @@ export function useUploadKontoauszug() {
         .select()
       if (txError) throw new Error(`Transaktionen: ${txError.message}`)
 
-      const [{ data: rechnungen }, { data: lohnDienstnehmer }] = await Promise.all([
-        supabase.from('rechnungen').select('*, lieferant:lieferanten(*)').neq('status', 'bezahlt'),
-        supabase.from('lohn_dienstnehmer').select('*').is('bank_transaktion_id', null),
-      ])
-
-      let autoMatched = 0
-      for (const tx of insertedTx ?? []) {
-        if (tx.betrag >= 0) continue
-        const candidates = matchTransaktion(
-          tx as BankTransaktion,
-          (rechnungen ?? []) as Rechnung[],
-          (lohnDienstnehmer ?? []) as LohnDienstnehmer[],
-        )
-        const best = candidates[0]
-        if (!best || best.score < AUTO_MATCH_THRESHOLD) continue
-
-        if (best.type === 'rechnung') {
-          await supabase.from('rechnungen').update({
-            status: 'bezahlt',
-            bank_transaktion_id: tx.id,
-            bezahlt_am: tx.datum,
-            bezahlt_konto: ocr.konto_iban,
-          }).eq('id', best.id)
-          await supabase.from('bank_transaktionen').update({
-            status: 'zugewiesen',
-            rechnung_id: best.id,
-            match_score: best.score,
-          }).eq('id', tx.id)
-        } else {
-          await supabase.from('lohn_dienstnehmer').update({
-            bank_transaktion_id: tx.id,
-          }).eq('id', best.id)
-          await supabase.from('bank_transaktionen').update({
-            status: 'zugewiesen',
-            lohn_id: best.id,
-            match_score: best.score,
-          }).eq('id', tx.id)
-        }
-
-        autoMatched++
-      }
+      const autoMatched = await runAutoMatch(
+        (insertedTx ?? []) as BankTransaktion[],
+        ocr.konto_iban,
+      )
 
       return { konto, autoMatched, total: insertedTx?.length ?? 0 }
     },
@@ -271,6 +306,24 @@ export function useRejectMatch() {
         match_score: null,
       }).eq('id', tx.id)
       if (error) throw error
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['kontoauszuege'] })
+      qc.invalidateQueries({ queryKey: ['rechnungen'] })
+      qc.invalidateQueries({ queryKey: ['lohnabrechnungen'] })
+      qc.invalidateQueries({ queryKey: ['lohn_dienstnehmer', 'offen'] })
+    },
+  })
+}
+
+// Re-runs auto-match for a single kontoauszug (e.g. after new lohn was imported)
+export function useRerunAutoMatch() {
+  const qc = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (konto: Kontoauszug) => {
+      const txAll = (konto.bank_transaktionen ?? []) as BankTransaktion[]
+      return runAutoMatch(txAll, konto.konto_iban)
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kontoauszuege'] })
