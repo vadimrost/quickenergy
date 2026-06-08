@@ -69,6 +69,9 @@ export interface GeminiOcrResult {
   invoice_type:   string | null
   card_last_four: string | null
   is_proforma:    boolean | null
+  skonto_prozent: number | null
+  skonto_tage:    number | null
+  skonto_datum:   string | null
 }
 
 export interface KategoriePrompt {
@@ -137,20 +140,35 @@ MEHRWERTSTEUER:
 - Wenn KEINE MwSt auf dem Beleg steht: tax_rate = null, tax_amount_10 = null, tax_amount_20 = null, net_amount_XX = null
 - Bei Dienstleistung mit einem Satz: net_amount + tax_rate + tax_amount_20 (oder tax_amount_10) füllen, net_amount_XX = null
 
+SKONTO:
+- Steht auf dem Beleg "Skonto", "Barskonto", "2% Skonto bei Zahlung binnen X Tagen" o.ä.?
+- skonto_prozent: der Prozentsatz als Zahl (z.B. 2 für 2%), sonst null
+- skonto_tage: Anzahl der Tage für die Skontofrist (z.B. 14), sonst null
+- skonto_datum: das berechnete Skonto-Fälligkeitsdatum falls explizit angegeben (YYYY-MM-DD), sonst null
+- Der Nettobetrag (net_amount) bleibt IMMER der Betrag VOR Skonto — Skonto nie abziehen
+
 RECHNUNGSNUMMER: Formale Rechnungs-Nr. bevorzugen. Bei Kassenbons (Tankstelle, Restaurant) alternativ Bon-Nr., Beleg-Nr. oder Kassen-ID verwenden — niemals null lassen wenn irgendeine Belegnummer sichtbar ist.
 DATUM: immer YYYY-MM-DD.
 card_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.
 supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).`
 
 function sanitizeOcr(result: GeminiOcrResult): GeminiOcrResult {
-  // Proforma → all tax fields must be null, no exceptions
   if (result.is_proforma) {
     return { ...result, tax_rate: null, tax_amount_10: null, tax_amount_20: null, net_amount_10: null, net_amount_20: null }
   }
-  // Austrian UIDs → 19% is impossible, force to 20%
   if (result.tax_rate === 19) result = { ...result, tax_rate: 20 }
-  // No tax rate found but invoice exists → Austrian default 20%
-  if (!result.tax_rate && result.net_amount) result = { ...result, tax_rate: 20 }
+  // Only default to 20% when there's actual taxable net — not if only Trinkgeld (net_amount_0)
+  if ((result.tax_rate === null || result.tax_rate === undefined) && result.net_amount && !result.net_amount_0) {
+    result = { ...result, tax_rate: 20 }
+  }
+  // Compute skonto_datum from invoice_date + skonto_tage if not already set
+  if (!result.skonto_datum && result.skonto_tage && result.invoice_date) {
+    const d = new Date(normalizeDate(result.invoice_date) ?? '')
+    if (!isNaN(d.getTime())) {
+      d.setDate(d.getDate() + result.skonto_tage)
+      result = { ...result, skonto_datum: d.toISOString().split('T')[0] }
+    }
+  }
   return result
 }
 
@@ -185,6 +203,9 @@ export async function geminiOcr(base64: string, apiKey: string, kategorien?: Kat
               invoice_type:   { type: 'STRING',  nullable: true },
               card_last_four: { type: 'STRING',  nullable: true },
               is_proforma:    { type: 'BOOLEAN', nullable: true },
+              skonto_prozent: { type: 'NUMBER',  nullable: true },
+              skonto_tage:    { type: 'NUMBER',  nullable: true },
+              skonto_datum:   { type: 'STRING',  nullable: true },
             },
           },
         },

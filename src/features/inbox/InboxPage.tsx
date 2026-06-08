@@ -232,8 +232,8 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
         status:        'eingegangen',
         lieferant_id:  lieferantId,
         mitarbeiter:   null,
-        skonto_datum:  null,
-        skonto_prozent: null,
+        skonto_datum:   normalizeDate(ocr?.skonto_datum) ?? null,
+        skonto_prozent: ocr?.skonto_prozent ?? null,
         ocr_json:      ocr as any ?? null,
       })
 
