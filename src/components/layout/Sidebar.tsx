@@ -18,11 +18,11 @@ const TOP_ITEMS = [
 ]
 
 const BOTTOM_ITEMS = [
-  { icon: Users,    path: '/mitarbeiter',   label: 'Mitarbeiter',  end: false },
-  { icon: Tag,      path: '/kategorien',    label: 'Kategorien',   end: false },
-  { icon: Banknote, path: '/lohn',          label: 'Lohnkosten',   end: false },
-  { icon: Landmark, path: '/kontoauszuege', label: 'Kontoauszüge', end: false },
-  { icon: Settings, path: '/einstellungen', label: 'Einstellungen', end: false },
+  { icon: Users,    path: '/mitarbeiter',   label: 'Mitarbeiter',  end: false, badge: false },
+  { icon: Tag,      path: '/kategorien',    label: 'Kategorien',   end: false, badge: false },
+  { icon: Banknote, path: '/lohn',          label: 'Lohnkosten',   end: false, badge: false },
+  { icon: Landmark, path: '/kontoauszuege', label: 'Kontoauszüge', end: false, badge: false },
+  { icon: Settings, path: '/einstellungen', label: 'Einstellungen', end: false, badge: false },
 ]
 
 // The grouped "Aufträge" sub-items

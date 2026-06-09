@@ -249,7 +249,7 @@ export function HomePage() {
                 tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)}
               />
               <Tooltip
-                formatter={(value: number, name: string) => [formatEuro(value), name === 'einnahmen' ? 'Einnahmen' : 'Aufwand']}
+                formatter={(value, name) => [formatEuro(Number(value)), name === 'einnahmen' ? 'Einnahmen' : 'Aufwand']}
                 contentStyle={{ fontSize: 12, border: '1px solid #E2E8F0', borderRadius: 8, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.08)', padding: '8px 12px' }}
                 cursor={{ fill: '#F8FAFC' }}
               />
