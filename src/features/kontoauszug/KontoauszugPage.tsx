@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from 'react'
-import { Upload, Loader2, ChevronDown, ChevronUp, CheckCircle2, CircleDot, ArrowRight, X, FileText, Search, TrendingDown, TrendingUp, Link2, Trash2, RefreshCw } from 'lucide-react'
+import { Upload, Loader2, ChevronDown, ChevronUp, CheckCircle2, CircleDot, ArrowRight, X, FileText, Search, TrendingDown, TrendingUp, Link2, Trash2, RefreshCw, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { StatCard } from '@/components/shared/StatCard'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -17,6 +17,7 @@ import {
   useDeleteKontoauszug,
   useRerunAutoMatch,
   useOffeneLohnDienstnehmer,
+  type UploadStep,
 } from './useKontoauszug'
 import type { BankTransaktion, Kontoauszug, Rechnung, LohnDienstnehmer } from '@/types/database'
 
@@ -251,6 +252,175 @@ function AssignDialog({
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ── Import Modal (Datei-Auswahl + Progress) ───────────────────────────────────
+
+const UPLOAD_STEPS: { key: UploadStep; label: string; note?: string }[] = [
+  { key: 'uploading', label: 'PDF hochladen' },
+  { key: 'ocr',       label: 'Transaktionen erkennen', note: 'Gemini OCR — kann bis zu 30 Sekunden dauern' },
+  { key: 'saving',    label: 'In Datenbank speichern' },
+  { key: 'matching',  label: 'Automatischer Abgleich' },
+]
+const STEP_ORDER: UploadStep[] = ['uploading', 'ocr', 'saving', 'matching', 'done']
+
+function KontoauszugImportModal({ open, uploadStep, fileName, result, error, onFileSelect, onClose }: {
+  open: boolean
+  uploadStep: UploadStep | null
+  fileName: string
+  result?: { total: number; autoMatched: number }
+  error?: string
+  onFileSelect: (file: File) => void
+  onClose: () => void
+}) {
+  const [dragover, setDragover] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  if (!open) return null
+
+  const isSelecting  = uploadStep === null
+  const isDone       = uploadStep === 'done'
+  const isError      = uploadStep === 'error'
+  const currentIdx   = uploadStep ? STEP_ORDER.indexOf(uploadStep) : -1
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragover(false)
+    const f = e.dataTransfer.files[0]
+    if (!f) return
+    if (f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) {
+      toast.error('Nur PDF-Dateien erlaubt')
+      return
+    }
+    onFileSelect(f)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl border border-border p-7 w-full max-w-sm mx-4">
+
+        {/* ── Phase 1: Datei auswählen ── */}
+        {isSelecting && (
+          <>
+            <p className="text-base font-semibold text-ink mb-5">Kontoauszug importieren</p>
+
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0]
+                if (f) onFileSelect(f)
+                e.target.value = ''
+              }}
+            />
+
+            <div
+              onDragOver={e => { e.preventDefault(); setDragover(true) }}
+              onDragLeave={() => setDragover(false)}
+              onDrop={handleDrop}
+              onClick={() => inputRef.current?.click()}
+              className={cn(
+                'flex flex-col items-center justify-center gap-3 h-44 rounded-xl border-2 border-dashed cursor-pointer transition-all mb-3',
+                dragover
+                  ? 'border-accent-400 bg-accent-50'
+                  : 'border-slate-200 bg-slate-50 hover:border-accent-400 hover:bg-accent-50'
+              )}
+            >
+              <div className={cn(
+                'w-12 h-12 rounded-xl flex items-center justify-center transition-colors',
+                dragover ? 'bg-accent-100' : 'bg-white border border-border'
+              )}>
+                <FileText size={22} className={dragover ? 'text-accent-500' : 'text-ink-muted'} />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium text-ink">PDF hier ablegen</p>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  oder <span className="text-accent-500 font-semibold underline underline-offset-2">Datei auswählen</span>
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-ink-muted text-center mb-4">Nur PDF-Dateien · Kontoauszug der Bank</p>
+
+            <button
+              onClick={onClose}
+              className="w-full h-9 rounded-xl border border-border text-sm text-ink-muted hover:bg-bg-muted transition-colors"
+            >
+              Abbrechen
+            </button>
+          </>
+        )}
+
+        {/* ── Phase 2: Verarbeitung ── */}
+        {!isSelecting && (
+          <>
+            <div className="text-center mb-6">
+              <p className="text-base font-semibold text-ink">Kontoauszug wird verarbeitet</p>
+              <p className="text-xs text-ink-muted mt-1 truncate px-4">{fileName}</p>
+            </div>
+
+            <div className="space-y-3.5">
+              {UPLOAD_STEPS.map(s => {
+                const idx   = STEP_ORDER.indexOf(s.key)
+                const done  = !isError && currentIdx > idx
+                const active = s.key === uploadStep && !isDone && !isError
+                const pending = !done && !active
+                return (
+                  <div key={s.key} className="flex items-start gap-3">
+                    <div className="w-5 h-5 flex items-center justify-center shrink-0 mt-0.5">
+                      {done    && <CheckCircle2 size={17} className="text-green-500" />}
+                      {active  && <Loader2 size={17} className="text-accent-500 animate-spin" />}
+                      {pending && <div className="w-4 h-4 rounded-full border-2 border-border/60" />}
+                    </div>
+                    <div>
+                      <p className={cn('text-sm',
+                        active  ? 'text-ink font-medium' :
+                        done    ? 'text-ink-muted' : 'text-ink-subtle'
+                      )}>
+                        {s.label}
+                      </p>
+                      {active && s.note && (
+                        <p className="text-xs text-ink-muted mt-0.5">{s.note}</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {isDone && result && (
+              <div className="mt-5 p-4 rounded-xl bg-green-50 border border-green-100 text-center">
+                <CheckCircle2 size={22} className="mx-auto text-green-500 mb-2" />
+                <p className="text-sm font-semibold text-green-700">{result.total} Transaktionen importiert</p>
+                <p className="text-xs text-green-600 mt-0.5">{result.autoMatched} automatisch zugewiesen</p>
+              </div>
+            )}
+
+            {isError && error && (
+              <div className="mt-5 p-4 rounded-xl bg-red-50 border border-red-100">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <AlertCircle size={15} className="text-red-500 shrink-0" />
+                  <p className="text-sm font-semibold text-red-700">Import fehlgeschlagen</p>
+                </div>
+                <p className="text-xs text-red-600">{error}</p>
+              </div>
+            )}
+
+            {(isDone || isError) && (
+              <button
+                onClick={onClose}
+                className="mt-4 w-full h-9 rounded-xl border border-border text-sm text-ink-muted hover:bg-bg-muted transition-colors"
+              >
+                Schließen
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -560,8 +730,11 @@ function KontoauszugCard({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function KontoauszugPage() {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [processing, setProcessing] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [uploadStep, setUploadStep] = useState<UploadStep | null>(null)
+  const [uploadFileName, setUploadFileName] = useState('')
+  const [uploadResult, setUploadResult] = useState<{ total: number; autoMatched: number } | undefined>()
+  const [uploadError, setUploadError] = useState<string | undefined>()
 
   const { data: kontoauszuege = [], isLoading } = useKontoauszuege()
   const { data: rechnungen = [] } = useRechnungen()
@@ -576,24 +749,28 @@ export function KontoauszugPage() {
   const totalOpen = totalOutgoing.filter(t => t.status !== 'zugewiesen').length
   const totalMatchedEuro = totalOutgoing.filter(t => t.status === 'zugewiesen').reduce((s, t) => s + Math.abs(t.betrag), 0)
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-
-    setProcessing(true)
+  const handleFileSelect = async (file: File) => {
+    setUploadFileName(file.name)
+    setUploadResult(undefined)
+    setUploadError(undefined)
+    setUploadStep('uploading')
     try {
-      toast.info('PDF wird hochgeladen…')
-      const result = await uploadMutation.mutateAsync(file)
+      const result = await uploadMutation.mutateAsync({ file, onStep: setUploadStep })
       const { autoMatched, total } = result as any
-      toast.success(
-        `${total} Transaktionen importiert · ${autoMatched} automatisch zugewiesen`
-      )
+      setUploadResult({ total, autoMatched })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Fehler beim Importieren')
-    } finally {
-      setProcessing(false)
+      setUploadStep('error')
+      setUploadError(err instanceof Error ? err.message : 'Unbekannter Fehler')
     }
+  }
+
+  const handleCloseModal = () => {
+    const isProcessing = uploadStep !== null && uploadStep !== 'done' && uploadStep !== 'error'
+    if (isProcessing) return
+    setImportOpen(false)
+    setUploadStep(null)
+    setUploadResult(undefined)
+    setUploadError(undefined)
   }
 
   if (isLoading) {
@@ -609,6 +786,16 @@ export function KontoauszugPage() {
 
   return (
     <div>
+      <KontoauszugImportModal
+        open={importOpen}
+        uploadStep={uploadStep}
+        fileName={uploadFileName}
+        result={uploadResult}
+        error={uploadError}
+        onFileSelect={handleFileSelect}
+        onClose={handleCloseModal}
+      />
+
       {/* Header */}
       <div className="flex items-start justify-between mb-5 md:mb-8">
         <div>
@@ -619,23 +806,13 @@ export function KontoauszugPage() {
             </p>
           )}
         </div>
-        <div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={processing}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-500 text-white text-sm font-medium hover:bg-accent-600 disabled:opacity-50 transition-colors"
-          >
-            {processing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-            {processing ? 'Wird verarbeitet…' : 'Importieren'}
-          </button>
-        </div>
+        <button
+          onClick={() => setImportOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-accent-500 text-white text-sm font-medium hover:bg-accent-600 transition-colors"
+        >
+          <Upload size={16} />
+          Importieren
+        </button>
       </div>
 
       {/* KPIs */}

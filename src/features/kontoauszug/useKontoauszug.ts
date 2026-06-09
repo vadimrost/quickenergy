@@ -155,24 +155,42 @@ export function useOffeneLohnDienstnehmer() {
   })
 }
 
+export type UploadStep = 'uploading' | 'ocr' | 'saving' | 'matching' | 'done' | 'error'
+
 export function useUploadKontoauszug() {
   const qc = useQueryClient()
 
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({
+      file,
+      onStep,
+    }: {
+      file: File
+      onStep: (step: UploadStep) => void
+    }) => {
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
       if (!apiKey) throw new Error('Kein Gemini API Key konfiguriert')
 
+      // Step 1: Upload to storage
+      onStep('uploading')
       const storagePath = `kontoauszug_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
       const { error: uploadError } = await supabase.storage
         .from('rechnungen')
         .upload(storagePath, file, { contentType: 'application/pdf', upsert: false })
-      if (uploadError) throw new Error(`Storage: ${uploadError.message}`)
+      if (uploadError) throw new Error(`Upload fehlgeschlagen: ${uploadError.message}`)
       const { data: { publicUrl } } = supabase.storage.from('rechnungen').getPublicUrl(storagePath)
 
+      // Step 2: Gemini OCR
+      onStep('ocr')
       const base64 = await fileToBase64(file)
       const ocr = await kontoauszugOcr(base64, apiKey)
 
+      if (ocr.transaktionen.length === 0) {
+        throw new Error('Keine Transaktionen erkannt. Bitte prüfe ob das PDF ein lesbarer Kontoauszug ist und versuche es erneut.')
+      }
+
+      // Step 3: Save to DB
+      onStep('saving')
       const { data: konto, error: kontoError } = await supabase
         .from('kontoauszuege')
         .insert({
@@ -187,9 +205,7 @@ export function useUploadKontoauszug() {
         })
         .select()
         .single()
-      if (kontoError) throw new Error(`DB: ${kontoError.message}`)
-
-      if (ocr.transaktionen.length === 0) return { konto, autoMatched: 0, total: 0 }
+      if (kontoError) throw new Error(`Speichern fehlgeschlagen: ${kontoError.message}`)
 
       const { data: insertedTx, error: txError } = await supabase
         .from('bank_transaktionen')
@@ -211,11 +227,14 @@ export function useUploadKontoauszug() {
         .select()
       if (txError) throw new Error(`Transaktionen: ${txError.message}`)
 
+      // Step 4: Auto-match
+      onStep('matching')
       const autoMatched = await runAutoMatch(
         (insertedTx ?? []) as BankTransaktion[],
         ocr.konto_iban,
       )
 
+      onStep('done')
       return { konto, autoMatched, total: insertedTx?.length ?? 0 }
     },
     onSuccess: () => {

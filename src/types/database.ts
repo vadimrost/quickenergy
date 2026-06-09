@@ -164,6 +164,163 @@ export interface Lohnabrechnung {
   lohn_koerperschaften?: LohnKoerperschaft[]
 }
 
+// ─── Ausgehende Dokumente ────────────────────────────────────────────────────
+
+export interface Kunde {
+  id: string
+  kundennummer: string
+  firmenname: string | null
+  anrede: string | null
+  vorname: string | null
+  nachname: string | null
+  adresse: string | null
+  plz: string | null
+  ort: string | null
+  land: string
+  uid_nr: string | null
+  email: string | null
+  telefon: string | null
+  notiz: string | null
+  created_at: string
+}
+
+export type DokumentTyp = 'angebot' | 'auftragsbestaetigung' | 'rechnung'
+
+export interface DokumentPosition {
+  id: string
+  dokument_typ: DokumentTyp
+  dokument_id: string
+  reihenfolge: number
+  bezeichnung: string
+  beschreibung: string | null
+  menge: number
+  einheit: string
+  einzelpreis_netto: number
+  ust_satz: 0 | 10 | 20
+  rabatt_prozent: number
+  zeilenbetrag_netto: number
+  created_at: string
+}
+
+export type AngebotStatus = 'entwurf' | 'offen' | 'berechnet' | 'teilberechnet' | 'abgelehnt'
+
+export interface Angebot {
+  id: string
+  angebotsnummer: string
+  status: AngebotStatus
+  kunde_id: string | null
+  betreff: string | null
+  angebotsdatum: string
+  gueltig_bis: string | null
+  referenz_bestellnr: string | null
+  kopftext: string | null
+  fusstext: string | null
+  rabatt_gesamt_prozent: number
+  summe_netto_20: number
+  summe_netto_10: number
+  summe_netto_0: number
+  ust_20: number
+  ust_10: number
+  summe_brutto: number
+  auftragsbestaetigung_id: string | null
+  created_at: string
+  kunde?: Kunde | null
+  positionen?: DokumentPosition[]
+}
+
+export type AuftragsbestaetigungStatus = 'entwurf' | 'erhalten' | 'teilberechnet' | 'berechnet' | 'abgelehnt' | 'archiv'
+
+export interface Auftragsbestaetigung {
+  id: string
+  ab_nummer: string
+  status: AuftragsbestaetigungStatus
+  kunde_id: string | null
+  angebot_id: string | null
+  betreff: string | null
+  ab_datum: string
+  lieferdatum: string | null
+  zahlungsziel_tage: number
+  kopftext: string | null
+  fusstext: string | null
+  rabatt_gesamt_prozent: number
+  summe_netto_20: number
+  summe_netto_10: number
+  summe_netto_0: number
+  ust_20: number
+  ust_10: number
+  summe_brutto: number
+  created_at: string
+  kunde?: Kunde | null
+  positionen?: DokumentPosition[]
+}
+
+export type AusgangsrechnungStatus = 'entwurf' | 'offen' | 'teilbezahlt' | 'bezahlt' | 'storniert'
+export type AusgangsrechnungTyp = 'rechnung' | 'teilrechnung' | 'schlussrechnung' | 'stornorechnung'
+
+export interface Ausgangsrechnung {
+  id: string
+  rechnungsnummer: string
+  status: AusgangsrechnungStatus
+  typ: AusgangsrechnungTyp
+  kunde_id: string | null
+  auftragsbestaetigung_id: string | null
+  storno_zu_rechnung_id: string | null
+  betreff: string | null
+  rechnungsdatum: string
+  leistungsdatum: string | null
+  leistungszeitraum_von: string | null
+  leistungszeitraum_bis: string | null
+  zahlungsziel_tage: number
+  faelligkeitsdatum: string | null
+  teilrechnungs_prozent: number | null
+  kopftext: string | null
+  fusstext: string | null
+  rabatt_gesamt_prozent: number
+  summe_netto_20: number
+  summe_netto_10: number
+  summe_netto_0: number
+  ust_20: number
+  ust_10: number
+  summe_brutto: number
+  bezahlt_am: string | null
+  bezahlt_betrag: number | null
+  datev_exportiert_am: string | null
+  mahnstufe: number
+  gemahnt_am_1: string | null
+  gemahnt_am_2: string | null
+  gemahnt_am_3: string | null
+  mahngebuehr: number
+  created_at: string
+  kunde?: Kunde | null
+  positionen?: DokumentPosition[]
+  storno_zu_rechnung?: Pick<Ausgangsrechnung, 'id' | 'rechnungsnummer'> | null
+}
+
+export interface FirmaStammdaten {
+  id: string
+  name: string
+  strasse: string
+  plz_ort: string
+  land: string
+  tel: string
+  email: string
+  web: string
+  uid: string
+  fn_nr: string
+  steuer_nr: string
+  gericht: string
+  gf: string
+  bank: string
+  iban: string
+  bic: string
+  konto: string
+  blz: string
+  logo_url: string | null
+  updated_at: string
+}
+
+// ─── Database registry ────────────────────────────────────────────────────────
+
 export interface Database {
   public: {
     Tables: {
@@ -172,6 +329,12 @@ export interface Database {
       mitarbeiter: { Row: Mitarbeiter; Insert: Omit<Mitarbeiter, 'id' | 'created_at'>; Update: Partial<Mitarbeiter> }
       duplikate: { Row: Duplikat; Insert: Omit<Duplikat, 'id'>; Update: Partial<Duplikat> }
       export_log: { Row: ExportLog; Insert: Omit<ExportLog, 'id'>; Update: Partial<ExportLog> }
+      kunden: { Row: Kunde; Insert: Omit<Kunde, 'id' | 'created_at' | 'kundennummer'>; Update: Partial<Kunde> }
+      dokument_positionen: { Row: DokumentPosition; Insert: Omit<DokumentPosition, 'id' | 'created_at'>; Update: Partial<DokumentPosition> }
+      angebote: { Row: Angebot; Insert: Omit<Angebot, 'id' | 'created_at' | 'angebotsnummer'>; Update: Partial<Angebot> }
+      auftragsbestatigungen: { Row: Auftragsbestaetigung; Insert: Omit<Auftragsbestaetigung, 'id' | 'created_at' | 'ab_nummer'>; Update: Partial<Auftragsbestaetigung> }
+      ausgangsrechnungen: { Row: Ausgangsrechnung; Insert: Omit<Ausgangsrechnung, 'id' | 'created_at' | 'rechnungsnummer'>; Update: Partial<Ausgangsrechnung> }
+      firma_einstellungen: { Row: FirmaStammdaten; Insert: Omit<FirmaStammdaten, 'id' | 'updated_at'>; Update: Partial<FirmaStammdaten> }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
