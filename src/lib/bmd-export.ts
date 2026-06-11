@@ -144,8 +144,8 @@ export function buildErRows(rechnungen: Rechnung[]): BmdRow[] {
         buchsymbol: 'ER',
         steuercode: steuercode(20),
         prozent:    20,
-        betrag:     Math.round(r.betrag_20 * 100) / 100,
-        steuer:     Math.round((r.mwst_20 ?? r.betrag_20 * 0.2) * 100) / 100,
+        betrag:     Math.round((r.betrag_20 ?? 0) * 100) / 100,
+        steuer:     Math.round((r.mwst_20 ?? (r.betrag_20 ?? 0) * 0.2) * 100) / 100,
         text,
       })
     }
@@ -160,8 +160,8 @@ export function buildErRows(rechnungen: Rechnung[]): BmdRow[] {
         buchsymbol: 'ER',
         steuercode: steuercode(10),
         prozent:    10,
-        betrag:     Math.round(r.betrag_10 * 100) / 100,
-        steuer:     Math.round((r.mwst_10 ?? r.betrag_10 * 0.1) * 100) / 100,
+        betrag:     Math.round((r.betrag_10 ?? 0) * 100) / 100,
+        steuer:     Math.round((r.mwst_10 ?? (r.betrag_10 ?? 0) * 0.1) * 100) / 100,
         text,
       })
     }
