@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
-import { Building2, Phone, Landmark } from 'lucide-react'
+import { Building2, Phone, Landmark, Upload, Trash2, ImageIcon } from 'lucide-react'
 import { PageTitle } from '@/components/shared/PageTitle'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { supabase } from '@/lib/supabase'
 import { useFirmaStammdaten, useUpsertFirma } from './useFirmaStammdaten'
 import type { FirmaStammdaten } from '@/types/database'
 
@@ -42,6 +43,9 @@ export function EinstellungenPage() {
   const { data: firma, isPending } = useFirmaStammdaten()
   const { mutate: upsert, isPending: saving } = useUpsertFirma()
   const [form, setForm] = useState<FormState>(EMPTY)
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [logoUploading, setLogoUploading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (firma) {
@@ -53,6 +57,7 @@ export function EinstellungenPage() {
         bank: firma.bank, iban: firma.iban, bic: firma.bic,
         konto: firma.konto, blz: firma.blz,
       })
+      setLogoUrl(firma.logo_url ?? null)
     }
   }, [firma])
 
@@ -60,9 +65,53 @@ export function EinstellungenPage() {
     setForm(f => ({ ...f, [key]: value }))
   }
 
+  async function handleLogoUpload(file: File) {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Nur Bilddateien erlaubt (PNG, JPG, SVG)')
+      return
+    }
+    setLogoUploading(true)
+    try {
+      const ext = file.name.split('.').pop() ?? 'png'
+      const path = `firma/logo.${ext}`
+      const { error: upErr } = await supabase.storage
+        .from('rechnungen')
+        .upload(path, file, { upsert: true, contentType: file.type })
+      if (upErr) throw new Error(upErr.message)
+
+      const { data: { publicUrl } } = supabase.storage.from('rechnungen').getPublicUrl(path)
+      // Cache-buster so the browser reloads the image
+      const url = `${publicUrl}?t=${Date.now()}`
+      setLogoUrl(url)
+
+      upsert(
+        { ...form, logo_url: url, id: firma?.id },
+        {
+          onSuccess: () => toast.success('Logo hochgeladen'),
+          onError: e => toast.error(String(e)),
+        }
+      )
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setLogoUploading(false)
+    }
+  }
+
+  function handleLogoRemove() {
+    setLogoUrl(null)
+    upsert(
+      { ...form, logo_url: null, id: firma?.id },
+      {
+        onSuccess: () => toast.success('Logo entfernt'),
+        onError: e => toast.error(String(e)),
+      }
+    )
+  }
+
   function handleSave() {
     upsert(
-      { ...form, logo_url: firma?.logo_url ?? null, id: firma?.id },
+      { ...form, logo_url: logoUrl, id: firma?.id },
       {
         onSuccess: () => toast.success('Firmendaten gespeichert'),
         onError: e => toast.error(String(e)),
@@ -81,6 +130,62 @@ export function EinstellungenPage() {
   return (
     <div className="max-w-3xl space-y-5">
       <PageTitle title="Einstellungen" subtitle="Firmenstammdaten für PDF-Dokumente" />
+
+      {/* Logo */}
+      <SectionCard title={<span className="flex items-center gap-2"><ImageIcon size={14} /> Firmenlogo</span>}>
+        <div className="flex items-center gap-6">
+          {/* Preview */}
+          <div className="w-40 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center bg-bg-muted overflow-hidden shrink-0">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="max-w-full max-h-full object-contain p-2" />
+            ) : (
+              <div className="text-center">
+                <ImageIcon size={24} className="text-ink-subtle mx-auto mb-1" />
+                <span className="text-xs text-ink-subtle">Kein Logo</span>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="space-y-2">
+            <p className="text-xs text-ink-muted">
+              PNG, JPG oder SVG · wird oben rechts auf allen PDFs angezeigt
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) handleLogoUpload(file)
+                  e.target.value = ''
+                }}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={logoUploading}
+              >
+                <Upload size={13} className="mr-1.5" />
+                {logoUploading ? 'Wird hochgeladen…' : logoUrl ? 'Logo ersetzen' : 'Logo hochladen'}
+              </Button>
+              {logoUrl && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogoRemove}
+                  className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2"
+                >
+                  <Trash2 size={13} />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </SectionCard>
 
       {/* Firmendaten */}
       <SectionCard title={<span className="flex items-center gap-2"><Building2 size={14} /> Firmendaten</span>}>

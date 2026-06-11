@@ -5,6 +5,7 @@ import { de } from 'date-fns/locale'
 import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, ChevronUp, Building2, FileSpreadsheet, Sparkles } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
+import { buildErRows, writeBmdExcel } from '@/lib/bmd-export'
 import { PageTitle } from '@/components/shared/PageTitle'
 import { StatCard } from '@/components/shared/StatCard'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -409,6 +410,7 @@ export function InboxPage() {
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [bmdOpen, setBmdOpen] = useState(false)
   const [bulkOcrOpen, setBulkOcrOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
@@ -523,6 +525,11 @@ export function InboxPage() {
         onClose={() => setExportOpen(false)}
         rechnungen={allRechnungen}
       />
+      <BmdErExportDialog
+        open={bmdOpen}
+        onClose={() => setBmdOpen(false)}
+        rechnungen={allRechnungen}
+      />
       <BulkOcrDialog
         open={bulkOcrOpen}
         onClose={() => { setBulkOcrOpen(false); setSelectedIds(new Set()) }}
@@ -546,6 +553,13 @@ export function InboxPage() {
             >
               <Sparkles size={13} />
               <span className="hidden sm:inline">OCR{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}</span>
+            </button>
+            <button
+              onClick={() => setBmdOpen(true)}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
+            >
+              <FileSpreadsheet size={13} />
+              <span className="hidden sm:inline">BMD</span>
             </button>
             <button
               onClick={() => setExportOpen(true)}
@@ -680,6 +694,100 @@ function getBrutto(r: Rechnung): number {
   return netto * (1 + r.ust_satz / 100)
 }
 
+
+function BmdErExportDialog({ open, onClose, rechnungen }: {
+  open: boolean
+  onClose: () => void
+  rechnungen: Rechnung[]
+}) {
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>()
+    rechnungen.forEach(r => { if (r.rechnungsdatum) months.add(r.rechnungsdatum.slice(0, 7)) })
+    return [...months].sort().reverse()
+  }, [rechnungen])
+
+  const currentMonth = format(new Date(), 'yyyy-MM')
+  const defaultMonth = availableMonths.includes(currentMonth) ? currentMonth : (availableMonths[0] ?? currentMonth)
+  const [month, setMonth] = useState(defaultMonth)
+
+  useEffect(() => {
+    if (availableMonths.length > 0 && !availableMonths.includes(month)) setMonth(availableMonths[0])
+  }, [availableMonths])
+
+  const monthData = rechnungen.filter(r => r.rechnungsdatum?.startsWith(month))
+  const monthLabel = month ? format(parseISO(`${month}-01`), 'MMMM yyyy', { locale: de }) : ''
+
+  const handleExport = () => {
+    const rows = buildErRows(monthData)
+    writeBmdExcel(rows, `BMD_ER_${month}.xlsx`)
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) onClose() }}>
+      <DialogContent className="max-w-sm bg-white border border-border shadow-xl">
+        <DialogHeader>
+          <div className="flex items-center gap-2.5 mb-1">
+            <div className="w-8 h-8 rounded-card-sm bg-bg-muted flex items-center justify-center">
+              <FileSpreadsheet size={15} className="text-ink-muted" />
+            </div>
+            <DialogTitle className="text-base font-semibold text-ink">BMD Export — Eingangsrechnungen</DialogTitle>
+          </div>
+        </DialogHeader>
+
+        <div className="pt-1 space-y-4">
+          <div>
+            <label className="label-caps block mb-1.5">Monat</label>
+            {availableMonths.length > 0 ? (
+              <select
+                value={month}
+                onChange={e => setMonth(e.target.value)}
+                className="w-full h-9 px-3 text-sm border border-border rounded-card-sm bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none cursor-pointer"
+              >
+                {availableMonths.map(m => (
+                  <option key={m} value={m}>{format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}</option>
+                ))}
+              </select>
+            ) : (
+              <div className="w-full h-9 px-3 flex items-center text-sm border border-border rounded-card-sm bg-bg-muted text-ink-subtle">
+                Keine Rechnungen mit Datum vorhanden
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-card border border-border bg-bg-muted/40 p-3.5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink-muted">Zeitraum</span>
+              <span className="text-xs font-medium text-ink">{monthLabel}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-ink-muted">Rechnungen</span>
+              <span className="text-xs font-medium text-ink">{monthData.length}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-border/50 pt-2">
+              <span className="text-xs text-ink-muted">Format</span>
+              <span className="text-xs font-medium text-ink">BMD NTCS Buchungsjournal</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button onClick={onClose} className="flex-1 h-9 rounded-card-sm border border-border text-sm text-ink-muted hover:bg-bg-muted transition-colors">
+              Abbrechen
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={monthData.length === 0}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-card-sm bg-ink hover:bg-ink/80 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+            >
+              <FileSpreadsheet size={13} />
+              Herunterladen
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
 
 function ExcelExportDialog({ open, onClose, rechnungen }: {
   open: boolean

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { DocumentHtmlPreview } from './DocumentHtmlPreview'
 import { berechneSummen } from './positionenUtils'
 import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
@@ -82,12 +83,13 @@ function buildDocInput(p: PdfLivePreviewProps) {
   return { typ: 'rechnung' as const, doc: buildRechnungDoc(p) }
 }
 
-export function PdfLivePreview(props: PdfLivePreviewProps) {
+export function PdfLivePreview(props: PdfLivePreviewProps & { className?: string }) {
   const { data: firma } = useFirmaStammdaten()
-  const propsRef = useRef(props)
-  propsRef.current = props
+  const { className, ...rest } = props as PdfLivePreviewProps & { className?: string }
+  const propsRef = useRef(rest as PdfLivePreviewProps)
+  propsRef.current = rest as PdfLivePreviewProps
 
-  const [debouncedProps, setDebouncedProps] = useState<PdfLivePreviewProps>(props)
+  const [debouncedProps, setDebouncedProps] = useState<PdfLivePreviewProps>(rest as PdfLivePreviewProps)
   const [debouncing, setDebouncing] = useState(false)
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -99,12 +101,12 @@ export function PdfLivePreview(props: PdfLivePreviewProps) {
     }, 350)
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(props)])
+  }, [JSON.stringify(rest)])
 
   const docInput = useMemo(() => buildDocInput(debouncedProps), [debouncedProps])
 
   return (
-    <div className="h-full flex flex-col rounded-card border border-border shadow-card overflow-hidden">
+    <div className={cn('h-full flex flex-col overflow-hidden', className ?? 'rounded-card border border-border shadow-card')}>
       {/* Header bar */}
       <div className="px-4 py-2.5 border-b border-border flex items-center justify-between shrink-0 bg-white">
         <span className="label-caps">Vorschau</span>

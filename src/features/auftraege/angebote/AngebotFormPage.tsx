@@ -230,13 +230,14 @@ export function AngebotFormPage() {
         />
       </div>
 
-      <div className="hidden xl:block w-[420px] shrink-0 sticky top-4" style={{ height: 'calc(100vh - 140px)' }}>
+      <div className="hidden xl:flex xl:flex-1 sticky top-0 -mt-8 -mb-8 -mr-10 h-screen">
         <PdfLivePreview
           typ="angebot"
           values={values}
           gueltigBis={gueltigBis}
           referenz={referenz}
           existingNr={existing?.angebotsnummer}
+          className="border-l border-border rounded-none shadow-none flex-1"
         />
       </div>
     </div>

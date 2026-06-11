@@ -221,3 +221,97 @@ export async function geminiOcr(base64: string, apiKey: string, kategorien?: Kat
   const raw: GeminiOcrResult = typeof text === 'string' ? JSON.parse(text) : (text ?? {})
   return sanitizeOcr(raw)
 }
+
+export interface AusgangsrechnungOcrResult {
+  invoice_number:  string | null
+  invoice_date:    string | null
+  due_date:        string | null
+  customer_name:   string | null
+  subject:         string | null
+  net_amount_20:   number | null
+  net_amount_10:   number | null
+  net_amount_0:    number | null
+  tax_amount_20:   number | null
+  tax_amount_10:   number | null
+  total_brutto:    number | null
+  zahlungsziel_tage: number | null
+}
+
+const AUSGANGSRECHNUNG_PROMPT = `Du analysierst eine AUSGANGSRECHNUNG (eine Rechnung, die wir an einen Kunden gestellt haben).
+Extrahiere alle Felder als JSON.
+
+WICHTIG — RECHNUNGSEMPFÄNGER (customer_name):
+- Das ist der KUNDE / EMPFÄNGER der Rechnung, NICHT der Aussteller
+- Suche nach "An:", "Rechnungsempfänger:", "Kunde:", "Auftraggeber:", Adressblock oben rechts oder Mitte
+- Der Aussteller (unser Unternehmen, z.B. "Quick Energy") ist NICHT der customer_name
+- customer_name = Firmenname oder Vor-/Nachname des Empfängers
+
+BETREFF / SUBJECT:
+- Suche nach "Betreff:", "Re:", "Leistungsbeschreibung:", Überschrift unter dem Datum
+- Kurze Beschreibung der Leistung (max. 1 Zeile)
+
+BETRÄGE:
+- net_amount_20: Summe aller Nettopositionen mit 20% USt.
+- net_amount_10: Summe aller Nettopositionen mit 10% USt.
+- net_amount_0:  Summe aller Nettopositionen mit 0% USt.
+- tax_amount_20: tatsächlicher USt.-Betrag bei 20% (direkt vom Beleg, nicht ausrechnen)
+- tax_amount_10: tatsächlicher USt.-Betrag bei 10%
+- total_brutto:  Gesamtbetrag inkl. USt. ("Gesamtbetrag", "Brutto", "Zahlbetrag", "Zu zahlen")
+
+ZAHLUNGSZIEL:
+- zahlungsziel_tage: Anzahl Tage Zahlungsziel (z.B. "zahlbar binnen 14 Tagen" → 14), null wenn nicht angegeben
+
+DATUM: immer YYYY-MM-DD.
+invoice_number: formale Rechnungsnummer.`
+
+async function callGemini(base64: string, apiKey: string, prompt: string, schema: object): Promise<unknown> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [
+          { inline_data: { mime_type: 'application/pdf', data: base64 } },
+          { text: prompt },
+        ]}],
+        generationConfig: {
+          response_mime_type: 'application/json',
+          response_schema: schema,
+        },
+      }),
+    }
+  )
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.error?.message ?? `Gemini Fehler ${res.status}`)
+  }
+  const data = await res.json()
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+  return typeof text === 'string' ? JSON.parse(text) : (text ?? {})
+}
+
+export async function geminiOcrAusgangsrechnung(base64: string, apiKey: string): Promise<AusgangsrechnungOcrResult> {
+  const result = await callGemini(base64, apiKey, AUSGANGSRECHNUNG_PROMPT, {
+    type: 'OBJECT',
+    properties: {
+      invoice_number:    { type: 'STRING', nullable: true },
+      invoice_date:      { type: 'STRING', nullable: true },
+      due_date:          { type: 'STRING', nullable: true },
+      customer_name:     { type: 'STRING', nullable: true },
+      subject:           { type: 'STRING', nullable: true },
+      net_amount_20:     { type: 'NUMBER', nullable: true },
+      net_amount_10:     { type: 'NUMBER', nullable: true },
+      net_amount_0:      { type: 'NUMBER', nullable: true },
+      tax_amount_20:     { type: 'NUMBER', nullable: true },
+      tax_amount_10:     { type: 'NUMBER', nullable: true },
+      total_brutto:      { type: 'NUMBER', nullable: true },
+      zahlungsziel_tage: { type: 'NUMBER', nullable: true },
+    },
+  }) as AusgangsrechnungOcrResult
+  return {
+    ...result,
+    invoice_date: normalizeDate(result.invoice_date),
+    due_date:     normalizeDate(result.due_date),
+  }
+}

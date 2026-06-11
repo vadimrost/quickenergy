@@ -3,6 +3,7 @@ import {
   Page,
   View,
   Text,
+  Image,
   StyleSheet,
 } from '@react-pdf/renderer'
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, FirmaStammdaten } from '@/types/database'
@@ -26,6 +27,7 @@ const FIRMA_DEFAULT = {
   bic: 'GIBAATWW',
   konto: '29026122005',
   blz: '20111',
+  logoUrl: null as string | null,
 }
 type FirmaConfig = typeof FIRMA_DEFAULT
 
@@ -35,6 +37,7 @@ function firmaToConfig(f: FirmaStammdaten): FirmaConfig {
     tel: f.tel, email: f.email, web: f.web, uid: f.uid,
     fn: f.fn_nr, steuerNr: f.steuer_nr, gericht: f.gericht, gf: f.gf,
     bank: f.bank, iban: f.iban, bic: f.bic, konto: f.konto, blz: f.blz,
+    logoUrl: f.logo_url ?? null,
   }
 }
 
@@ -148,8 +151,14 @@ function Kopfzeile({ firma }: { firma: FirmaConfig }) {
           {firma.name} – {firma.strasse} – {firma.plzOrt}
         </Text>
         <View style={s.logoBox}>
-          <Text style={s.logoText}>QuickEnergy</Text>
-          <Text style={s.logoTagline}>Elektrotechnik · Smart Home · Photovoltaik</Text>
+          {firma.logoUrl ? (
+            <Image src={firma.logoUrl} style={{ maxHeight: 44, maxWidth: 140, objectFit: 'contain' }} />
+          ) : (
+            <>
+              <Text style={s.logoText}>QuickEnergy</Text>
+              <Text style={s.logoTagline}>Elektrotechnik · Smart Home · Photovoltaik</Text>
+            </>
+          )}
         </View>
       </View>
       <View style={s.hrThick} />

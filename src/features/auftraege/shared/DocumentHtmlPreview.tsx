@@ -17,6 +17,7 @@ const FIRMA_DEFAULT = {
   tel: '+43 6644 614126',
   email: 'sales@quickenergy.at',
   web: 'www.quickenergy.at',
+  logoUrl: null as string | null,
 }
 type FirmaConfig = typeof FIRMA_DEFAULT
 
@@ -27,6 +28,7 @@ function firmaToConfig(f: FirmaStammdaten): FirmaConfig {
     gericht: f.gericht, gf: f.gf, bank: f.bank,
     iban: f.iban, bic: f.bic, konto: f.konto, blz: f.blz,
     tel: f.tel, email: f.email, web: f.web,
+    logoUrl: f.logo_url ?? null,
   }
 }
 
@@ -138,10 +140,16 @@ export function DocumentHtmlPreview(input: DocInput) {
           {F.name} – {F.strasse} – {F.plzOrt}
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5, lineHeight: 1 }}>QuickEnergy</div>
-          <div style={{ fontSize: 7.5, color: '#555', letterSpacing: 0.4, marginTop: 2 }}>
-            Elektrotechnik · Smart Home · Photovoltaik
-          </div>
+          {F.logoUrl ? (
+            <img src={F.logoUrl} alt="Logo" style={{ maxHeight: 44, maxWidth: 140, objectFit: 'contain' }} />
+          ) : (
+            <>
+              <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: -0.5, lineHeight: 1 }}>QuickEnergy</div>
+              <div style={{ fontSize: 7.5, color: '#555', letterSpacing: 0.4, marginTop: 2 }}>
+                Elektrotechnik · Smart Home · Photovoltaik
+              </div>
+            </>
+          )}
         </div>
       </div>
       <div style={{ borderTop: '1.5px solid #1a1a1a', margin: '6px 0' }} />

@@ -247,13 +247,14 @@ export function AuftragsbestaetigungFormPage() {
         />
       </div>
 
-      <div className="hidden xl:block w-[420px] shrink-0 sticky top-4" style={{ height: 'calc(100vh - 140px)' }}>
+      <div className="hidden xl:flex xl:flex-1 sticky top-0 -mt-8 -mb-8 -mr-10 h-screen">
         <PdfLivePreview
           typ="auftragsbestaetigung"
           values={values}
           lieferdatum={lieferdatum}
           zahlungsziel={zahlungsziel}
           existingNr={existing?.ab_nummer}
+          className="border-l border-border rounded-none shadow-none flex-1"
         />
       </div>
     </div>

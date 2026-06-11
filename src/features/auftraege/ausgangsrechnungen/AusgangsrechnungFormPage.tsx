@@ -22,15 +22,7 @@ import {
 import type { AusgangsrechnungTyp, AusgangsrechnungStatus, Kunde } from '@/types/database'
 import type { PositionDraft } from '@/features/auftraege/shared/positionenUtils'
 
-const DEFAULT_KOPF = `Sehr geehrte Damen und Herren,
-
-vielen Dank für Ihren Auftrag und das damit verbundene Vertrauen!
-Hiermit stelle ich Ihnen die folgenden Leistungen in Rechnung:`
-
-const DEFAULT_FUSS = `Bitte überweisen Sie nach Erhalt den Rechnungsbetrag unter Angabe Ihrer Rechnungsnummer auf unser Konto bei der Erste Bank:
-
-Empfänger: Quick Energy Handels GmbH
-IBAN: AT62 2011 1290 2612 2005`
+import { DEFAULT_KOPF, DEFAULT_FUSS } from '@/features/auftraege/shared/dokumentDefaults'
 
 const TYP_OPTIONS: { value: AusgangsrechnungTyp; label: string }[] = [
   { value: 'rechnung',        label: 'Rechnung'        },
@@ -296,8 +288,8 @@ export function AusgangsrechnungFormPage() {
               </Button>
             )}
 
-            {/* Löschen (nur Entwurf) */}
-            {isEdit && existing?.status === 'entwurf' && (
+            {/* Löschen */}
+            {isEdit && (
               <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deletePending}
                 className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2">
                 <Trash2 size={14} />
@@ -364,7 +356,7 @@ export function AusgangsrechnungFormPage() {
         />
       </div>
 
-      <div className="hidden xl:block w-[420px] shrink-0 sticky top-4" style={{ height: 'calc(100vh - 140px)' }}>
+      <div className="hidden xl:flex xl:flex-1 sticky top-0 -mt-8 -mb-8 -mr-10 h-screen">
         <PdfLivePreview
           typ="rechnung"
           values={values}
@@ -375,6 +367,7 @@ export function AusgangsrechnungFormPage() {
           zahlungsziel={zahlungsziel}
           teilProzent={teilProzent}
           existingNr={existing?.rechnungsnummer}
+          className="border-l border-border rounded-none shadow-none flex-1"
         />
       </div>
 
