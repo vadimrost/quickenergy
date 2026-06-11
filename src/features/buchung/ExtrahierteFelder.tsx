@@ -313,6 +313,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
               <SelectContent className="bg-white border border-border shadow-md">
                 <SelectItem value="0">0%</SelectItem>
                 <SelectItem value="10">10%</SelectItem>
+                <SelectItem value="11">11%</SelectItem>
                 <SelectItem value="19">19%</SelectItem>
                 <SelectItem value="20">20%</SelectItem>
               </SelectContent>
