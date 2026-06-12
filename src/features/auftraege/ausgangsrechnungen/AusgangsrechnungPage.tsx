@@ -182,12 +182,17 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
           })()
 
       // 5. Insert ausgangsrechnung
-      const rechnungsTyp = ocr.is_schlussrechnung ? 'schlussrechnung' : 'rechnung'
+      const rechnungsTyp = ocr.is_stornorechnung
+        ? 'stornorechnung'
+        : ocr.is_schlussrechnung
+          ? 'schlussrechnung'
+          : 'rechnung'
+      const rechnungsStatus = ocr.is_stornorechnung ? 'storniert' : 'entwurf'
       const { data: newRechnung, error: insertErr } = await supabase
         .from('ausgangsrechnungen')
         .insert({
           typ:                rechnungsTyp,
-          status:             'entwurf',
+          status:             rechnungsStatus,
           kunde_id:           kundeId,
           betreff:            ocr.subject ?? null,
           rechnungsdatum,
@@ -215,8 +220,8 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
 
       // 6. Insert one placeholder position if we have amounts
       const nettoGesamt = netto20 + netto10 + netto0
-      if (nettoGesamt > 0 && newRechnung?.id) {
-        const ustSatz = netto20 > 0 ? 20 : netto10 > 0 ? 10 : 0
+      if (nettoGesamt !== 0 && newRechnung?.id) {
+        const ustSatz = netto20 !== 0 ? 20 : netto10 !== 0 ? 10 : 0
         await supabase.from('dokument_positionen').insert({
           dokument_id:       newRechnung.id,
           dokument_typ:      'rechnung',

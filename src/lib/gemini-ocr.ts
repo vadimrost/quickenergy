@@ -223,20 +223,21 @@ export async function geminiOcr(base64: string, apiKey: string, kategorien?: Kat
 }
 
 export interface AusgangsrechnungOcrResult {
-  invoice_number:       string | null
-  invoice_date:         string | null
-  due_date:             string | null
-  customer_name:        string | null
-  subject:              string | null
-  net_amount_20:        number | null
-  net_amount_10:        number | null
-  net_amount_0:         number | null
-  tax_amount_20:        number | null
-  tax_amount_10:        number | null
-  total_brutto:         number | null
-  zahlungsziel_tage:    number | null
-  is_schlussrechnung:   boolean | null
+  invoice_number:        string | null
+  invoice_date:          string | null
+  due_date:              string | null
+  customer_name:         string | null
+  subject:               string | null
+  net_amount_20:         number | null
+  net_amount_10:         number | null
+  net_amount_0:          number | null
+  tax_amount_20:         number | null
+  tax_amount_10:         number | null
+  total_brutto:          number | null
+  zahlungsziel_tage:     number | null
+  is_schlussrechnung:    boolean | null
   teilrechnungen_brutto: number | null
+  is_stornorechnung:     boolean | null
 }
 
 const AUSGANGSRECHNUNG_PROMPT = `Du analysierst eine AUSGANGSRECHNUNG (eine Rechnung, die wir an einen Kunden gestellt haben).
@@ -252,6 +253,16 @@ BETREFF / SUBJECT:
 - Suche nach "Betreff:", "Re:", "Leistungsbeschreibung:", Überschrift unter dem Dokument
 - Bei Schlussrechnungen: Überschrift wie "Schlussrechnung Nr. RE-XXXX aus Auftragsbestätigung YYYY" verwenden
 - Kurze Beschreibung der Leistung (max. 1 Zeile)
+
+STORNORECHNUNG — PRÜFE ZUERST:
+- Erkenne ob es eine Stornorechnung ist: Schlagwörter "Stornorechnung", "Storno zur Rechnung", "Storno-Rechnung", oder wenn ALLE Beträge negativ sind
+- is_stornorechnung = true wenn solche Begriffe vorkommen oder alle Beträge negativ sind, sonst false
+- Bei einer Stornorechnung sind ALLE Beträge negativ (Netto, USt., Brutto)
+- net_amount_20 = negativer Nettobetrag (z.B. -9705.60) — negative Zahl ist KORREKT und PFLICHT
+- tax_amount_20 = negativer USt-Betrag (z.B. -1941.12)
+- total_brutto = negativer Bruttobetrag (z.B. -11646.72)
+- NIEMALS 0 oder positiv zurückgeben bei einer Stornorechnung — die negativen Zahlen MÜSSEN erhalten bleiben
+- Beispiel RE-1002639: Gesamtbetrag netto -9.705,60 → net_amount_20=-9705.60, tax_amount_20=-1941.12, total_brutto=-11646.72
 
 SCHLUSSRECHNUNG — WICHTIGSTE REGEL:
 - Erkenne ob es eine Schlussrechnung ist: Schlagwörter "Schlussrechnung", "Verrechnung der Teilrechnungen", "Verbleibende Restforderung", "Summe Teilrechnungen"
@@ -327,6 +338,7 @@ export async function geminiOcrAusgangsrechnung(base64: string, apiKey: string):
       zahlungsziel_tage:     { type: 'NUMBER',  nullable: true },
       is_schlussrechnung:    { type: 'BOOLEAN', nullable: true },
       teilrechnungen_brutto: { type: 'NUMBER',  nullable: true },
+      is_stornorechnung:     { type: 'BOOLEAN', nullable: true },
     },
   }) as AusgangsrechnungOcrResult
   return {

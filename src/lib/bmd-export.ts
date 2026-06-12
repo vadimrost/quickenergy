@@ -55,7 +55,13 @@ export function buildArRows(rechnungen: Ausgangsrechnung[]): BmdRow[] {
   const today = toYYYYMMDD(new Date().toISOString().split('T')[0])
   const rows: BmdRow[] = []
 
-  const exportierbar = rechnungen.filter(r => r.status !== 'entwurf' && r.status !== 'storniert')
+  // Entwürfe nie exportieren.
+  // Stornierte normale Rechnungen ausschließen (wurden durch Stornorechnung ersetzt).
+  // Stornorechnungen (typ='stornorechnung') immer einschließen — negative Gegenbuchung.
+  const exportierbar = rechnungen.filter(r =>
+    r.status !== 'entwurf' &&
+    !(r.status === 'storniert' && r.typ !== 'stornorechnung')
+  )
 
   exportierbar.forEach((r, idx) => {
     const text = r.kunde?.firmenname
