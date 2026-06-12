@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, subMonths, differenceInDays } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { TrendingUp, TrendingDown, AlertTriangle, ArrowRight, Building2, User, ChevronDown, Timer, Percent, Layers } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, ArrowRight, Building2, User, ChevronDown, Timer, Percent, Layers, Download } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
@@ -13,6 +13,9 @@ import { useAusgangsrechnungen } from '@/features/auftraege/ausgangsrechnungen/u
 import { useRechnungen } from '@/features/inbox/useRechnungen'
 import { useAngebote } from '@/features/auftraege/angebote/useAngebote'
 import { useAuftragsbestatigungen } from '@/features/auftraege/auftragsbestatigungen/useAuftragsbestatigungen'
+import { useLohnabrechnungen } from '@/features/lohn/useLohn'
+import { useKontoauszuege } from '@/features/kontoauszug/useKontoauszug'
+import { exportMonatsbericht, exportMonatsberichtBmd } from '@/lib/monatsbericht-export'
 
 function KpiCard({
   label, value, sub, trend, accent, warn, onClick, icon,
@@ -74,9 +77,26 @@ export function HomePage() {
   const { data: rechnungen = [] } = useRechnungen()
   const { data: angebote = [] } = useAngebote()
   const { data: auftragsbestatigungen = [] } = useAuftragsbestatigungen()
+  const { data: lohnabrechnungen = [] } = useLohnabrechnungen()
+  const { data: kontoauszuege = [] } = useKontoauszuege()
 
   const currentMonth = format(new Date(), 'yyyy-MM')
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const exportMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!exportMenuOpen) return
+    function handleClick(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [exportMenuOpen])
+
+  const exportArgs = [selectedMonth, ausgangsrechnungen, rechnungen, lohnabrechnungen, kontoauszuege] as const
 
   const availableMonths = useMemo(() => {
     const months = new Set<string>()
@@ -183,19 +203,58 @@ export function HomePage() {
         title="Übersicht"
         subtitle={monthLabel}
         actions={
-          <div className="relative">
-            <select
-              value={selectedMonth}
-              onChange={e => setSelectedMonth(e.target.value)}
-              className="h-9 pl-3 pr-8 text-sm border border-border rounded-card-sm bg-bg-surface text-ink appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent-400"
-            >
-              {availableMonths.map(m => (
-                <option key={m} value={m}>
-                  {format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-ink-muted" />
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <select
+                value={selectedMonth}
+                onChange={e => setSelectedMonth(e.target.value)}
+                className="h-9 pl-3 pr-8 text-sm border border-border rounded-card-sm bg-bg-surface text-ink appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent-400"
+              >
+                {availableMonths.map(m => (
+                  <option key={m} value={m}>
+                    {format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-ink-muted" />
+            </div>
+            <div ref={exportMenuRef} className="relative">
+              <div className="flex items-center border border-border rounded-card-sm bg-bg-surface overflow-hidden">
+                <button
+                  onClick={() => exportMonatsberichtBmd(...exportArgs)}
+                  className="h-9 pl-3 pr-2 flex items-center gap-1.5 text-sm text-ink hover:bg-bg-muted transition-colors"
+                  title="Monatsbericht BMD exportieren"
+                >
+                  <Download size={14} />
+                  <span className="hidden sm:inline">Monatsbericht</span>
+                </button>
+                <button
+                  onClick={() => setExportMenuOpen(v => !v)}
+                  className="h-9 px-1.5 border-l border-border text-ink-muted hover:bg-bg-muted transition-colors"
+                  title="Exportformat wählen"
+                >
+                  <ChevronDown size={13} />
+                </button>
+              </div>
+              {exportMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-44 bg-bg-surface border border-border rounded-card-sm shadow-card z-50 py-1">
+                  <button
+                    onClick={() => { exportMonatsberichtBmd(...exportArgs); setExportMenuOpen(false) }}
+                    className="w-full px-3 py-2 text-sm text-left text-ink hover:bg-bg-muted transition-colors flex items-center gap-2"
+                  >
+                    <Download size={13} />
+                    BMD Format
+                  </button>
+                  <button
+                    onClick={() => { exportMonatsbericht(...exportArgs); setExportMenuOpen(false) }}
+                    className="w-full px-3 py-2 text-sm text-left text-ink hover:bg-bg-muted transition-colors flex items-center gap-2"
+                  >
+                    <Download size={13} />
+                    Allgemein (Excel)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         }
       />
