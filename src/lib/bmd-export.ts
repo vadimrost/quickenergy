@@ -71,7 +71,7 @@ export function buildArRows(rechnungen: Ausgangsrechnung[]): BmdRow[] {
     const belegnr = extractBelegnr(r.rechnungsnummer, idx + 1)
     const belegdatum = toYYYYMMDD(r.rechnungsdatum)
 
-    if ((r.summe_netto_20 ?? 0) > 0) {
+    if ((r.summe_netto_20 ?? 0) !== 0) {
       rows.push({
         konto:      4000,
         buchcode:   AR_BUCHCODE,
@@ -87,7 +87,7 @@ export function buildArRows(rechnungen: Ausgangsrechnung[]): BmdRow[] {
         text,
       })
     }
-    if ((r.summe_netto_10 ?? 0) > 0) {
+    if ((r.summe_netto_10 ?? 0) !== 0) {
       rows.push({
         konto:      4100,
         buchcode:   AR_BUCHCODE,
@@ -104,8 +104,8 @@ export function buildArRows(rechnungen: Ausgangsrechnung[]): BmdRow[] {
       })
     }
     // Fallback: invoice has brutto but no detailed breakdown
-    if ((r.summe_netto_20 ?? 0) === 0 && (r.summe_netto_10 ?? 0) === 0 && r.summe_brutto > 0) {
-      const netto = Math.round((r.summe_netto_0 > 0 ? r.summe_netto_0 : r.summe_brutto / 1.2) * 100) / 100
+    if ((r.summe_netto_20 ?? 0) === 0 && (r.summe_netto_10 ?? 0) === 0 && r.summe_brutto !== 0) {
+      const netto = Math.round((r.summe_netto_0 !== 0 ? r.summe_netto_0 : r.summe_brutto / 1.2) * 100) / 100
       const ust   = Math.round((r.summe_brutto - netto) * 100) / 100
       rows.push({
         konto:      4000,

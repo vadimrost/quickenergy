@@ -367,7 +367,9 @@ function BmdExportDialog({ open, onClose, rechnungen }: {
   }, [availableMonths])
 
   const monthData = rechnungen.filter(r =>
-    r.rechnungsdatum?.startsWith(month) && r.status !== 'entwurf' && r.status !== 'storniert'
+    r.rechnungsdatum?.startsWith(month) &&
+    r.status !== 'entwurf' &&
+    !(r.status === 'storniert' && r.typ !== 'stornorechnung')
   )
   const monthLabel = month ? format(parseISO(`${month}-01`), 'MMMM yyyy', { locale: de }) : ''
 
