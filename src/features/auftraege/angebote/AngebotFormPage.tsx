@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Trash2, ArrowRightLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -13,7 +13,8 @@ import { PdfLivePreview } from '@/features/auftraege/shared/PdfLivePreview'
 import { berechneSummen, emptyPosition } from '@/features/auftraege/shared/positionenUtils'
 import { useAngebot, useUpsertAngebot, useUpdateAngebotStatus, useDeleteAngebot } from './useAngebote'
 import { useConvertAngebotToAb } from '../auftragsbestatigungen/useAuftragsbestatigungen'
-import type { AngebotStatus } from '@/types/database'
+import { supabase } from '@/lib/supabase'
+import type { AngebotStatus, Kunde } from '@/types/database'
 
 const DEFAULT_KOPF = `Sehr geehrte Damen und Herren,
 
@@ -44,7 +45,12 @@ const STATUS_CLS: Record<AngebotStatus, string> = {
 export function AngebotFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const isEdit = !!id && id !== 'neu'
+
+  // Set when navigating from CRM lead detail (1-click Angebot)
+  const leadId: string | undefined = (location.state as any)?.lead_id
+  const leadKunde: Kunde | undefined = (location.state as any)?.kunde
 
   const { data: existing } = useAngebot(isEdit ? id : undefined)
   const { mutate: upsert, isPending } = useUpsertAngebot()
@@ -53,7 +59,7 @@ export function AngebotFormPage() {
   const { mutate: convertToAb, isPending: convertPending } = useConvertAngebotToAb()
 
   const [values, setValues] = useState<DokumentFormValues>({
-    kunde: null,
+    kunde: leadKunde ?? null,
     betreff: '',
     datum: new Date().toISOString().split('T')[0],
     kopftext: DEFAULT_KOPF,
@@ -108,7 +114,11 @@ export function AngebotFormPage() {
       },
       positionen: values.positionen,
     }, {
-      onSuccess: (newId) => {
+      onSuccess: async (newId) => {
+        // If created from a CRM lead, mark the lead as 'angebot'
+        if (leadId && !isEdit) {
+          await supabase.from('leads').update({ status: 'angebot' }).eq('id', leadId)
+        }
         toast.success(isEdit ? 'Angebot gespeichert' : 'Angebot erstellt')
         navigate(`/angebote/${newId}`)
       },

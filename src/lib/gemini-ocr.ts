@@ -223,18 +223,20 @@ export async function geminiOcr(base64: string, apiKey: string, kategorien?: Kat
 }
 
 export interface AusgangsrechnungOcrResult {
-  invoice_number:  string | null
-  invoice_date:    string | null
-  due_date:        string | null
-  customer_name:   string | null
-  subject:         string | null
-  net_amount_20:   number | null
-  net_amount_10:   number | null
-  net_amount_0:    number | null
-  tax_amount_20:   number | null
-  tax_amount_10:   number | null
-  total_brutto:    number | null
-  zahlungsziel_tage: number | null
+  invoice_number:       string | null
+  invoice_date:         string | null
+  due_date:             string | null
+  customer_name:        string | null
+  subject:              string | null
+  net_amount_20:        number | null
+  net_amount_10:        number | null
+  net_amount_0:         number | null
+  tax_amount_20:        number | null
+  tax_amount_10:        number | null
+  total_brutto:         number | null
+  zahlungsziel_tage:    number | null
+  is_schlussrechnung:   boolean | null
+  teilrechnungen_brutto: number | null
 }
 
 const AUSGANGSRECHNUNG_PROMPT = `Du analysierst eine AUSGANGSRECHNUNG (eine Rechnung, die wir an einen Kunden gestellt haben).
@@ -247,10 +249,25 @@ WICHTIG — RECHNUNGSEMPFÄNGER (customer_name):
 - customer_name = Firmenname oder Vor-/Nachname des Empfängers
 
 BETREFF / SUBJECT:
-- Suche nach "Betreff:", "Re:", "Leistungsbeschreibung:", Überschrift unter dem Datum
+- Suche nach "Betreff:", "Re:", "Leistungsbeschreibung:", Überschrift unter dem Dokument
+- Bei Schlussrechnungen: Überschrift wie "Schlussrechnung Nr. RE-XXXX aus Auftragsbestätigung YYYY" verwenden
 - Kurze Beschreibung der Leistung (max. 1 Zeile)
 
-BETRÄGE:
+SCHLUSSRECHNUNG — WICHTIGSTE REGEL:
+- Erkenne ob es eine Schlussrechnung ist: Schlagwörter "Schlussrechnung", "Verrechnung der Teilrechnungen", "Verbleibende Restforderung", "Summe Teilrechnungen"
+- is_schlussrechnung = true wenn solche Begriffe vorkommen, sonst false
+- Bei einer Schlussrechnung gibt es am ENDE (letzte Seite) eine Zusammenfassung mit:
+    "Summe Schlussrechnung brutto"  → Gesamtbetrag der Anlage (NICHT verwenden für total_brutto)
+    "Summe Teilrechnungen brutto"   → bereits bezahlte Anzahlungen → teilrechnungen_brutto
+    "Gesamtbetrag netto"            → verbleibendes Netto nach Abzug der Teilrechnungen
+    "zzgl. Umsatzsteuer XX%"        → verbleibende USt.
+    "Verbleibende Restforderung brutto" → DER TATSÄCHLICH ZU ZAHLENDE BETRAG → total_brutto
+- total_brutto bei Schlussrechnung = "Verbleibende Restforderung brutto" (NICHT "Gesamtbetrag brutto" aus der Positionsliste!)
+- net_amount_20 bei Schlussrechnung = "Gesamtbetrag netto" aus der Schlussrechnung-Zusammenfassung (letzte Seite, NICHT aus der Positionstabelle)
+- tax_amount_20 bei Schlussrechnung = "zzgl. Umsatzsteuer" aus der Schlussrechnung-Zusammenfassung (letzte Seite)
+- Beispiel RE-1002625: Positionsliste ergibt 14.326,88 netto / 17.192,26 brutto — ABER Schlussrechnung-Zusammenfassung zeigt 8.596,13 netto / 1.719,23 USt. / 10.315,36 Restforderung → net_amount_20=8596.13, tax_amount_20=1719.23, total_brutto=10315.36
+
+BETRÄGE (normale Rechnung ohne Schlussrechnung-Zusammenfassung):
 - net_amount_20: Summe aller Nettopositionen mit 20% USt.
 - net_amount_10: Summe aller Nettopositionen mit 10% USt.
 - net_amount_0:  Summe aller Nettopositionen mit 0% USt.
@@ -260,6 +277,7 @@ BETRÄGE:
 
 ZAHLUNGSZIEL:
 - zahlungsziel_tage: Anzahl Tage Zahlungsziel (z.B. "zahlbar binnen 14 Tagen" → 14), null wenn nicht angegeben
+- Bei "Zahlung sofort nach Rechnungseingang" → zahlungsziel_tage = 0
 
 DATUM: immer YYYY-MM-DD.
 invoice_number: formale Rechnungsnummer.`
@@ -295,18 +313,20 @@ export async function geminiOcrAusgangsrechnung(base64: string, apiKey: string):
   const result = await callGemini(base64, apiKey, AUSGANGSRECHNUNG_PROMPT, {
     type: 'OBJECT',
     properties: {
-      invoice_number:    { type: 'STRING', nullable: true },
-      invoice_date:      { type: 'STRING', nullable: true },
-      due_date:          { type: 'STRING', nullable: true },
-      customer_name:     { type: 'STRING', nullable: true },
-      subject:           { type: 'STRING', nullable: true },
-      net_amount_20:     { type: 'NUMBER', nullable: true },
-      net_amount_10:     { type: 'NUMBER', nullable: true },
-      net_amount_0:      { type: 'NUMBER', nullable: true },
-      tax_amount_20:     { type: 'NUMBER', nullable: true },
-      tax_amount_10:     { type: 'NUMBER', nullable: true },
-      total_brutto:      { type: 'NUMBER', nullable: true },
-      zahlungsziel_tage: { type: 'NUMBER', nullable: true },
+      invoice_number:        { type: 'STRING',  nullable: true },
+      invoice_date:          { type: 'STRING',  nullable: true },
+      due_date:              { type: 'STRING',  nullable: true },
+      customer_name:         { type: 'STRING',  nullable: true },
+      subject:               { type: 'STRING',  nullable: true },
+      net_amount_20:         { type: 'NUMBER',  nullable: true },
+      net_amount_10:         { type: 'NUMBER',  nullable: true },
+      net_amount_0:          { type: 'NUMBER',  nullable: true },
+      tax_amount_20:         { type: 'NUMBER',  nullable: true },
+      tax_amount_10:         { type: 'NUMBER',  nullable: true },
+      total_brutto:          { type: 'NUMBER',  nullable: true },
+      zahlungsziel_tage:     { type: 'NUMBER',  nullable: true },
+      is_schlussrechnung:    { type: 'BOOLEAN', nullable: true },
+      teilrechnungen_brutto: { type: 'NUMBER',  nullable: true },
     },
   }) as AusgangsrechnungOcrResult
   return {

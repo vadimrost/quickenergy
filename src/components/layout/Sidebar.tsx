@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   ArrowUpFromLine, LogOut, ReceiptText, Users, Tag, Banknote,
   Landmark, MoreHorizontal, X, FileText, ClipboardCheck, Receipt,
-  UserSquare2, Briefcase, ChevronDown, LayoutDashboard, BellRing, Settings,
+  UserSquare2, Briefcase, ChevronDown, LayoutDashboard, BellRing, Settings, ContactRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -11,9 +11,12 @@ import { useRechnungen } from '@/features/inbox/useRechnungen'
 import { toast } from 'sonner'
 
 // Top-level nav items (not in the Aufträge group)
+const CRM_ENABLED = import.meta.env.VITE_CRM_ENABLED === 'true'
+
 const TOP_ITEMS = [
   { icon: LayoutDashboard, path: '/',           label: 'Übersicht',   end: true,  badge: false },
   { icon: ReceiptText,     path: '/rechnungen', label: 'Rechnungen',  end: false, badge: true  },
+  ...(CRM_ENABLED ? [{ icon: ContactRound, path: '/crm', label: 'CRM', end: false, badge: false }] : []),
   { icon: ArrowUpFromLine, path: '/exports',    label: 'Exports',     end: false, badge: false },
 ]
 

@@ -182,10 +182,11 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
           })()
 
       // 5. Insert ausgangsrechnung
+      const rechnungsTyp = ocr.is_schlussrechnung ? 'schlussrechnung' : 'rechnung'
       const { data: newRechnung, error: insertErr } = await supabase
         .from('ausgangsrechnungen')
         .insert({
-          typ:                'rechnung',
+          typ:                rechnungsTyp,
           status:             'entwurf',
           kunde_id:           kundeId,
           betreff:            ocr.subject ?? null,

@@ -296,6 +296,36 @@ export interface Ausgangsrechnung {
   storno_zu_rechnung?: Pick<Ausgangsrechnung, 'id' | 'rechnungsnummer'> | null
 }
 
+// ─── CRM ─────────────────────────────────────────────────────────────────────
+
+export type LeadStatus = 'neu' | 'kontaktiert' | 'termin' | 'angebot' | 'auftrag' | 'abgeschlossen' | 'verloren'
+
+export interface Lead {
+  id: string
+  created_at: string
+  vorname: string | null
+  nachname: string | null
+  email: string | null
+  telefon: string | null
+  plz: string | null
+  bundesland: string | null
+  anlagenort: string | null
+  anlagengroesse: string | null
+  batteriespeicher: boolean | null
+  umsetzung: string | null
+  status: LeadStatus
+  notiz: string | null
+  termin_datum: string | null
+  utm_source: string | null
+  utm_medium: string | null
+  utm_campaign: string | null
+  utm_term: string | null
+  utm_content: string | null
+  utm_id: string | null
+  kunde_id: string | null
+  kunde?: Kunde | null
+}
+
 export interface FirmaStammdaten {
   id: string
   name: string
@@ -335,6 +365,7 @@ export interface Database {
       auftragsbestatigungen: { Row: Auftragsbestaetigung; Insert: Omit<Auftragsbestaetigung, 'id' | 'created_at' | 'ab_nummer'>; Update: Partial<Auftragsbestaetigung> }
       ausgangsrechnungen: { Row: Ausgangsrechnung; Insert: Omit<Ausgangsrechnung, 'id' | 'created_at' | 'rechnungsnummer'>; Update: Partial<Ausgangsrechnung> }
       firma_einstellungen: { Row: FirmaStammdaten; Insert: Omit<FirmaStammdaten, 'id' | 'updated_at'>; Update: Partial<FirmaStammdaten> }
+      leads: { Row: Lead; Insert: Omit<Lead, 'id' | 'created_at' | 'kunde'>; Update: Partial<Omit<Lead, 'id' | 'created_at' | 'kunde'>> }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

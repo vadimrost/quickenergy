@@ -22,6 +22,10 @@ import { AusgangsrechnungPage } from '@/features/auftraege/ausgangsrechnungen/Au
 import { AusgangsrechnungFormPage } from '@/features/auftraege/ausgangsrechnungen/AusgangsrechnungFormPage'
 import { MahnwesenPage } from '@/features/auftraege/mahnwesen/MahnwesenPage'
 import { EinstellungenPage } from '@/features/einstellungen/EinstellungenPage'
+import { CrmPage } from '@/features/crm/CrmPage'
+import { LeadDetailPage } from '@/features/crm/LeadDetailPage'
+
+const CRM_ENABLED = import.meta.env.VITE_CRM_ENABLED === 'true'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -76,6 +80,8 @@ function AppRoutes() {
       <Route path="/ausgangsrechnungen/:id" element={<ProtectedRoute><AusgangsrechnungFormPage /></ProtectedRoute>} />
       <Route path="/mahnwesen" element={<ProtectedRoute><MahnwesenPage /></ProtectedRoute>} />
       <Route path="/einstellungen" element={<ProtectedRoute><EinstellungenPage /></ProtectedRoute>} />
+      {CRM_ENABLED && <Route path="/crm" element={<ProtectedRoute><CrmPage /></ProtectedRoute>} />}
+      {CRM_ENABLED && <Route path="/crm/:id" element={<ProtectedRoute><LeadDetailPage /></ProtectedRoute>} />}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
