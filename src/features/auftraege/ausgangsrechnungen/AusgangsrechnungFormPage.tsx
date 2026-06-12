@@ -102,6 +102,7 @@ export function AusgangsrechnungFormPage() {
   const [leistungBis, setLeistungBis] = useState('')
   const [zahlungsziel, setZahlungsziel] = useState('14')
   const [teilProzent, setTeilProzent] = useState('')
+  const [rechnungsnummer, setRechnungsnummer] = useState('')
 
   // Bezahlt dialog
   const [bezahltOpen, setBezahltOpen] = useState(false)
@@ -126,6 +127,7 @@ export function AusgangsrechnungFormPage() {
       setZahlungsziel(String(existing.zahlungsziel_tage))
       setTeilProzent(existing.teilrechnungs_prozent ? String(existing.teilrechnungs_prozent) : '')
       setBezahltBetrag(String(existing.summe_brutto ?? ''))
+      setRechnungsnummer(existing.rechnungsnummer ?? '')
     }
   }, [existing])
 
@@ -145,6 +147,7 @@ export function AusgangsrechnungFormPage() {
       rechnung: {
         id: isEdit ? id : undefined,
         typ,
+        ...(isEdit && rechnungsnummer ? { rechnungsnummer } : {}),
         kunde_id: values.kunde.id,
         auftragsbestaetigung_id: existing?.auftragsbestaetigung_id ?? (fromAb?.ab_id || null),
         storno_zu_rechnung_id: existing?.storno_zu_rechnung_id ?? (fromStorno?.id ?? null),
@@ -305,7 +308,8 @@ export function AusgangsrechnungFormPage() {
 
         <DokumentForm
           titel="Rechnungs"
-          nummer={existing?.rechnungsnummer}
+          nummer={isEdit ? rechnungsnummer : undefined}
+          onNummerChange={isEdit ? setRechnungsnummer : undefined}
           values={values}
           onChange={patch => setValues(v => ({ ...v, ...patch }))}
           onSave={handleSave}

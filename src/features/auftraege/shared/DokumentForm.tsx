@@ -26,10 +26,11 @@ interface Props {
   saving: boolean
   titel: string
   nummer?: string
+  onNummerChange?: (v: string) => void
   extraFelder?: ReactNode
 }
 
-export function DokumentForm({ values, onChange, onSave, onCancel, saving, titel, nummer, extraFelder }: Props) {
+export function DokumentForm({ values, onChange, onSave, onCancel, saving, titel, nummer, onNummerChange, extraFelder }: Props) {
   const summen = berechneSummen(values.positionen, values.rabattGesamt)
 
   return (
@@ -67,9 +68,15 @@ export function DokumentForm({ values, onChange, onSave, onCancel, saving, titel
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="text-xs font-medium text-ink-muted mb-1 block">
-                  {titel}nummer {nummer && <span className="text-accent-600 font-semibold">{nummer}</span>}
+                  {titel}nummer
                 </label>
-                <Input value={nummer ?? 'wird automatisch vergeben'} disabled className="text-sm bg-bg-muted" />
+                <Input
+                  value={nummer ?? ''}
+                  placeholder="wird automatisch vergeben"
+                  disabled={!onNummerChange}
+                  onChange={onNummerChange ? e => onNummerChange(e.target.value) : undefined}
+                  className={onNummerChange ? 'text-sm font-mono' : 'text-sm bg-bg-muted font-mono text-ink-muted'}
+                />
               </div>
               <div>
                 <label className="text-xs font-medium text-ink-muted mb-1 block">Datum</label>
