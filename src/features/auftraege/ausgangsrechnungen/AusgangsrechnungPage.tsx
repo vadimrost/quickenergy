@@ -448,6 +448,8 @@ export function AusgangsrechnungPage() {
   const [datumSort, setDatumSort] = useState<'asc' | 'desc' | null>(null)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [bmdOpen, setBmdOpen] = useState(false)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkUpdating, setBulkUpdating] = useState(false)
 
   const today = new Date()
 
@@ -481,6 +483,39 @@ export function AusgangsrechnungPage() {
   function handleCreated(id: string) {
     void refetch()
     setTimeout(() => navigate(`/ausgangsrechnungen/${id}`), 400)
+  }
+
+  function toggleSelect(id: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll(e: React.MouseEvent) {
+    e.stopPropagation()
+    setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(r => r.id)))
+  }
+
+  async function handleBulkBezahlt() {
+    if (selected.size === 0) return
+    setBulkUpdating(true)
+    try {
+      const { error } = await supabase
+        .from('ausgangsrechnungen')
+        .update({ status: 'bezahlt', bezahlt_am: new Date().toISOString().split('T')[0] })
+        .in('id', [...selected])
+      if (error) throw error
+      toast.success(`${selected.size} ${selected.size === 1 ? 'Rechnung' : 'Rechnungen'} auf Bezahlt gesetzt`)
+      setSelected(new Set())
+      void refetch()
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setBulkUpdating(false)
+    }
   }
 
   return (
@@ -556,6 +591,34 @@ export function AusgangsrechnungPage() {
           ))}
         </div>
 
+        {/* Bulk action bar */}
+        {selected.size > 0 && (
+          <div className="flex items-center gap-3 mb-4 px-3 py-2 bg-accent-50 border border-accent-200 rounded-lg">
+            <span className="text-sm font-medium text-accent-700">
+              {selected.size} {selected.size === 1 ? 'Rechnung' : 'Rechnungen'} ausgewählt
+            </span>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-xs text-ink-muted hover:text-ink transition-colors px-2 py-1"
+              >
+                Auswahl aufheben
+              </button>
+              <button
+                onClick={handleBulkBezahlt}
+                disabled={bulkUpdating}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-semibold transition-colors"
+              >
+                {bulkUpdating
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <CheckCircle size={12} />
+                }
+                Alle auf Bezahlt setzen
+              </button>
+            </div>
+          </div>
+        )}
+
         {isLoading && <div className="py-8 text-center text-sm text-ink-muted">Laden…</div>}
         {isError && <ErrorState description="Rechnungen konnten nicht geladen werden." onRetry={refetch} />}
         {!isLoading && !isError && filtered.length === 0 && (
@@ -604,6 +667,16 @@ export function AusgangsrechnungPage() {
               <table className="w-full">
                 <thead>
                   <tr>
+                    <th className="pb-3 border-b border-border/50 w-10 pr-2">
+                      <input
+                        type="checkbox"
+                        checked={filtered.length > 0 && selected.size === filtered.length}
+                        ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length }}
+                        onChange={() => {}}
+                        onClick={toggleSelectAll}
+                        className="w-4 h-4 rounded accent-accent-500 cursor-pointer"
+                      />
+                    </th>
                     {(['Kunde', 'Rechnungs-Nr.', 'Datum', 'Fällig', 'Netto', 'USt.', 'Brutto', 'Status'] as const).map(h => (
                       <th
                         key={h}
@@ -634,8 +707,20 @@ export function AusgangsrechnungPage() {
                     <tr
                       key={r.id}
                       onClick={() => navigate(`/ausgangsrechnungen/${r.id}`)}
-                      className="h-14 border-b border-border/50 last:border-0 hover:bg-bg-hover cursor-pointer transition-colors"
+                      className={cn(
+                        'h-14 border-b border-border/50 last:border-0 hover:bg-bg-hover cursor-pointer transition-colors',
+                        selected.has(r.id) && 'bg-accent-50 hover:bg-accent-50'
+                      )}
                     >
+                      <td className="pr-2" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(r.id)}
+                          onChange={() => {}}
+                          onClick={e => toggleSelect(r.id, e)}
+                          className="w-4 h-4 rounded accent-accent-500 cursor-pointer"
+                        />
+                      </td>
                       <td>
                         <div className="flex items-center gap-2">
                           {r.kunde?.firmenname
