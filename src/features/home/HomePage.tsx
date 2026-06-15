@@ -2,7 +2,7 @@ import { useMemo, useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { format, parseISO, subMonths, differenceInDays } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { TrendingUp, TrendingDown, AlertTriangle, ArrowRight, Building2, User, ChevronDown, Timer, Percent, Layers, Download } from 'lucide-react'
+import { TrendingUp, TrendingDown, AlertTriangle, ArrowRight, Building2, User, ChevronDown, Timer, Percent, Layers, Download, FolderArchive } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
@@ -16,6 +16,7 @@ import { useAuftragsbestatigungen } from '@/features/auftraege/auftragsbestatigu
 import { useLohnabrechnungen } from '@/features/lohn/useLohn'
 import { useKontoauszuege } from '@/features/kontoauszug/useKontoauszug'
 import { exportMonatsbericht, exportMonatsberichtBmd } from '@/lib/monatsbericht-export'
+import { downloadBelegeZip } from '@/lib/belege-zip'
 
 function KpiCard({
   label, value, sub, trend, accent, warn, onClick, icon,
@@ -204,6 +205,14 @@ export function HomePage() {
         subtitle={monthLabel}
         actions={
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => downloadBelegeZip(selectedMonth, rechnungen, ausgangsrechnungen)}
+              className="h-9 px-3 flex items-center gap-1.5 text-sm border border-border rounded-card-sm bg-bg-surface text-ink hover:bg-bg-muted transition-colors"
+              title="Belege als ZIP herunterladen"
+            >
+              <FolderArchive size={14} />
+              <span className="hidden sm:inline">Belege ZIP</span>
+            </button>
             <div className="relative">
               <select
                 value={selectedMonth}
