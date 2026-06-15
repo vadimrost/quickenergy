@@ -180,7 +180,7 @@ export function AusgangsrechnungFormPage() {
         toast.success(isEdit ? 'Rechnung gespeichert' : 'Rechnung erstellt')
         navigate(`/ausgangsrechnungen/${newId}`)
       },
-      onError: e => toast.error(String(e)),
+      onError: e => toast.error((e as any)?.message ?? String(e)),
     })
   }
 
@@ -189,7 +189,7 @@ export function AusgangsrechnungFormPage() {
     if (status === 'bezahlt') { setBezahltOpen(true); return }
     updateStatus({ id, status }, {
       onSuccess: () => toast.success(`Status: ${STATUS_OPTIONS.find(s => s.value === status)?.label}`),
-      onError: e => toast.error(String(e)),
+      onError: e => toast.error((e as any)?.message ?? String(e)),
     })
   }
 
@@ -201,7 +201,7 @@ export function AusgangsrechnungFormPage() {
       bezahlt_betrag: parseFloat(bezahltBetrag) || 0,
     }, {
       onSuccess: () => { toast.success('Rechnung als bezahlt markiert'); setBezahltOpen(false) },
-      onError: e => toast.error(String(e)),
+      onError: e => toast.error((e as any)?.message ?? String(e)),
     })
   }
 
@@ -209,7 +209,7 @@ export function AusgangsrechnungFormPage() {
     if (!id || !window.confirm('Rechnung wirklich löschen?')) return
     deleteRechnung(id, {
       onSuccess: () => { toast.success('Rechnung gelöscht'); navigate('/ausgangsrechnungen') },
-      onError: e => toast.error(String(e)),
+      onError: e => toast.error((e as any)?.message ?? String(e)),
     })
   }
 

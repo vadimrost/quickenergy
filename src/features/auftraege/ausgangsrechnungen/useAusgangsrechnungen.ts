@@ -50,15 +50,14 @@ export function useUpsertAusgangsrechnung() {
         positionen?: unknown; kunde?: unknown; storno_zu_rechnung?: unknown
       }
 
-      if (id) {
-        const { error } = await supabase.from('ausgangsrechnungen').update(fields).eq('id', id)
-        if (error) throw error
-      } else {
+      // For inserts: create the rechnung first to get the id
+      if (!id) {
         const { data, error } = await supabase.from('ausgangsrechnungen').insert(fields).select('id').single()
         if (error) throw error
         id = data.id
       }
 
+      // Positions first — if this fails, rechnung header stays unchanged
       await supabase.from('dokument_positionen').delete().eq('dokument_id', id).eq('dokument_typ', 'rechnung')
       if (positionen.length > 0) {
         const { error } = await supabase.from('dokument_positionen').insert(
@@ -66,6 +65,13 @@ export function useUpsertAusgangsrechnung() {
         )
         if (error) throw error
       }
+
+      // Header update last — only runs if positions succeeded
+      if (rechnung.id) {
+        const { error } = await supabase.from('ausgangsrechnungen').update(fields).eq('id', id)
+        if (error) throw error
+      }
+
       return id
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: [Q] }),
