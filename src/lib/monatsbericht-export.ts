@@ -135,17 +135,11 @@ export function exportMonatsberichtBmd(
   month: string,
   ausgangsrechnungen: Ausgangsrechnung[],
   eingangsrechnungen: Rechnung[],
-  lohnabrechnungen: Lohnabrechnung[],
-  kontoauszuege: Kontoauszug[],
+  _lohnabrechnungen: Lohnabrechnung[],
+  _kontoauszuege: Kontoauszug[],
 ) {
-  const [yearStr, monthStr] = month.split('-')
-  const monat = parseInt(monthStr)
-  const jahr = parseInt(yearStr)
-
   const arRows = buildArRows(ausgangsrechnungen.filter(r => r.rechnungsdatum?.startsWith(month)))
   const erRows = buildErRows(eingangsrechnungen.filter(r => r.rechnungsdatum?.startsWith(month)))
-  const lohnRows = buildLohnBmdRows(lohnabrechnungen, monat, jahr)
-  const kontoRows = buildKontoBmdRows(kontoauszuege, month)
 
   const toBmdSheet = (rows: object[]) => {
     const ws = rows.length > 0 ? XLSX.utils.json_to_sheet(rows) : emptyBmdSheet()
@@ -156,8 +150,6 @@ export function exportMonatsberichtBmd(
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, toBmdSheet(arRows), 'Ausgangsrechnungen')
   XLSX.utils.book_append_sheet(wb, toBmdSheet(erRows), 'Eingangsrechnungen')
-  XLSX.utils.book_append_sheet(wb, toBmdSheet(lohnRows), 'Lohnkosten')
-  XLSX.utils.book_append_sheet(wb, toBmdSheet(kontoRows), 'Kontoauszüge')
 
   XLSX.writeFile(wb, `Monatsbericht_BMD_${month}.xlsx`)
   toast.success(`Monatsbericht BMD ${getMonthLabel(month)} exportiert`)
@@ -169,12 +161,9 @@ export function exportMonatsbericht(
   month: string,
   ausgangsrechnungen: Ausgangsrechnung[],
   eingangsrechnungen: Rechnung[],
-  lohnabrechnungen: Lohnabrechnung[],
-  kontoauszuege: Kontoauszug[],
+  _lohnabrechnungen: Lohnabrechnung[],
+  _kontoauszuege: Kontoauszug[],
 ) {
-  const [yearStr, monthStr] = month.split('-')
-  const monat = parseInt(monthStr)
-  const jahr = parseInt(yearStr)
 
   const arRows = ausgangsrechnungen
     .filter(r => r.rechnungsdatum?.startsWith(month))
@@ -212,61 +201,6 @@ export function exportMonatsbericht(
       }
     })
 
-  const lohnRows: object[] = []
-  lohnabrechnungen
-    .filter(l => l.monat === monat && l.jahr === jahr)
-    .forEach(l => {
-      l.lohn_dienstnehmer?.forEach(d => {
-        lohnRows.push({
-          'Jahr': l.jahr,
-          'Monat': l.monat,
-          'Kategorie': 'Dienstnehmer',
-          'Bezeichnung': d.name,
-          'MA-Nr': d.ma_nr ?? '',
-          'Typ': d.zahlungsart,
-          'IBAN': d.iban ?? '',
-          'Betrag': d.betrag,
-        })
-      })
-      l.lohn_koerperschaften?.forEach(k => {
-        lohnRows.push({
-          'Jahr': l.jahr,
-          'Monat': l.monat,
-          'Kategorie': 'Körperschaft & Abgaben',
-          'Bezeichnung': k.bezeichnung,
-          'MA-Nr': '',
-          'Typ': k.typ ?? '',
-          'IBAN': k.iban ?? '',
-          'Betrag': k.betrag,
-        })
-      })
-    })
-
-  const kontoRows: object[] = []
-  kontoauszuege.forEach(k => {
-    ;(k.bank_transaktionen ?? [])
-      .filter(t => t.datum?.startsWith(month))
-      .forEach(t => {
-        const zugewiesen = (t.rechnungen as any)?.[0]?.rechnungsnr
-          ?? (t.rechnungen as any)?.rechnungsnr
-          ?? (t.lohn_dienstnehmer as any)?.[0]?.name
-          ?? (t.lohn_dienstnehmer as any)?.name
-          ?? ''
-        kontoRows.push({
-          'Konto': k.konto_name ?? k.konto_iban ?? '',
-          'IBAN': k.konto_iban ?? '',
-          'Datum': t.datum,
-          'Buchungstext': t.buchungstext,
-          'Empfänger': t.empfaenger ?? '',
-          'Referenz': t.referenz ?? '',
-          'Betrag': t.betrag,
-          'Typ': t.typ,
-          'Status': t.status,
-          'Zugewiesen zu': zugewiesen,
-        })
-      })
-  })
-
   const makeSheet = (rows: object[], fallback: string) => {
     const ws = XLSX.utils.json_to_sheet(rows.length > 0 ? rows : [{ Info: fallback }])
     return ws
@@ -281,14 +215,6 @@ export function exportMonatsbericht(
   const wsER = makeSheet(erRows, 'Keine Eingangsrechnungen in diesem Monat')
   setColWidths(wsER, [15, 12, 12, 22, 14, 12, 12, 10, 12, 10, 14])
   XLSX.utils.book_append_sheet(wb, wsER, 'Eingangsrechnungen')
-
-  const wsLohn = makeSheet(lohnRows, 'Keine Lohnkosten in diesem Monat')
-  setColWidths(wsLohn, [6, 6, 22, 26, 8, 14, 26, 12])
-  XLSX.utils.book_append_sheet(wb, wsLohn, 'Lohnkosten')
-
-  const wsKonto = makeSheet(kontoRows, 'Keine Kontoauszüge in diesem Monat')
-  setColWidths(wsKonto, [20, 22, 12, 32, 22, 22, 12, 12, 12, 22])
-  XLSX.utils.book_append_sheet(wb, wsKonto, 'Kontoauszüge')
 
   XLSX.writeFile(wb, `Monatsbericht_${month}.xlsx`)
   toast.success(`Monatsbericht ${getMonthLabel(month)} exportiert`)

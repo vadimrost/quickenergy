@@ -384,8 +384,11 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
   const nummerLabel = getNummerLabel(input)
   const datum = getDatum(input)
   const extra = getExtraInfo(input)
-  const stornoHinweis = input.typ === 'rechnung' && (input.doc as Ausgangsrechnung).storno_zu_rechnung
-    ? `Stornorechnung zur Rechnung Nr. ${(input.doc as Ausgangsrechnung).storno_zu_rechnung?.rechnungsnummer}`
+  const _ar = input.typ === 'rechnung' ? (input.doc as Ausgangsrechnung) : null
+  const _stornoRef = _ar?.storno_zu_rechnung
+  const _stornoNr = Array.isArray(_stornoRef) ? _stornoRef[0]?.rechnungsnummer : _stornoRef?.rechnungsnummer
+  const stornoHinweis = _ar?.typ === 'stornorechnung' && _stornoNr
+    ? `Stornorechnung zur Rechnung Nr. ${_stornoNr}`
     : null
 
   return (

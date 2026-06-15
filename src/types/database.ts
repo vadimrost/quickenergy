@@ -75,6 +75,7 @@ export interface Rechnung {
   bank_transaktion_id: string | null
   bezahlt_am: string | null
   bezahlt_konto: string | null
+  zahlungsart: string | null
   created_at: string
   lieferant?: Lieferant | null
 }

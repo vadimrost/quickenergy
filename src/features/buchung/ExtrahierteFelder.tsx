@@ -126,6 +126,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     betrag_0: rechnung.betrag_0?.toString() ?? '',
     mwst_10: rechnung.mwst_10?.toString() ?? '',
     mwst_20: rechnung.mwst_20?.toString() ?? '',
+    zahlungsart: rechnung.zahlungsart ?? '',
   })
 
   useEffect(() => {
@@ -146,6 +147,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
       betrag_0: rechnung.betrag_0?.toString() ?? '',
       mwst_10: rechnung.mwst_10?.toString() ?? '',
       mwst_20: rechnung.mwst_20?.toString() ?? '',
+      zahlungsart: rechnung.zahlungsart ?? '',
     })
   }, [rechnung])
 
@@ -186,6 +188,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
         status: form.status as RechnungStatus,
         karte: form.karte || null,
         rechnungstyp: (form.rechnungstyp || null) as Rechnungstyp | null,
+        zahlungsart: form.zahlungsart || null,
         betrag_10: form.betrag_10 ? parseFloat(form.betrag_10) : null,
         betrag_20: form.betrag_20 ? parseFloat(form.betrag_20) : null,
         betrag_0: form.rechnungstyp === 'bewirtung' && form.betrag_0 ? parseFloat(form.betrag_0) : null,
@@ -487,6 +490,22 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
             <div className="h-10 flex items-center px-3 bg-bg-muted rounded-card-sm text-sm text-ink-muted">
               {formatDate(rechnung.created_at)}
             </div>
+          </div>
+
+          <div className="col-span-2">
+            <Label className="label-caps text-ink-subtle mb-1.5 block">Zahlungsart</Label>
+            <select
+              value={form.zahlungsart}
+              onChange={e => setForm(f => ({ ...f, zahlungsart: e.target.value }))}
+              className="w-full h-10 pl-3 pr-8 text-sm border border-input rounded-md bg-background text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none"
+            >
+              <option value="">— Bitte wählen</option>
+              <option value="überweisung">Banküberweisung</option>
+              <option value="bankomat">Bankomat</option>
+              <option value="kreditkarte">Kreditkarte</option>
+              <option value="bar">Bar</option>
+              <option value="privat">Privatauslage</option>
+            </select>
           </div>
 
           <div className="col-span-2">
