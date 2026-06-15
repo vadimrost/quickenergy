@@ -65,7 +65,7 @@ export function RichTextEditor({ value, onChange, rows = 4 }: Props) {
     if (!editor || isInternalUpdate.current) return
     const editorJson = JSON.stringify(editor.getJSON())
     if (editorJson !== value) {
-      editor.commands.setContent(parseContent(value), false)
+      editor.commands.setContent(parseContent(value))
     }
   }, [editor, value])
 
