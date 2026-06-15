@@ -6,6 +6,7 @@ import { KundeSelector } from './KundeSelector'
 import { PositionenEditor } from './PositionenEditor'
 import { DokumentSummen } from './DokumentSummen'
 import { berechneSummen, type PositionDraft } from './positionenUtils'
+import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import type { Kunde } from '@/types/database'
 
 export interface DokumentFormValues {
@@ -95,12 +96,7 @@ export function DokumentForm({ values, onChange, onSave, onCancel, saving, titel
 
       {/* Kopftext */}
       <SectionCard title="Kopf-Text">
-        <textarea
-          value={values.kopftext}
-          onChange={e => onChange({ kopftext: e.target.value })}
-          rows={4}
-          className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-base resize-y focus:outline-none focus:ring-2 focus:ring-accent-500"
-        />
+        <RichTextEditor value={values.kopftext} onChange={v => onChange({ kopftext: v })} rows={4} />
       </SectionCard>
 
       {/* Positionen */}
@@ -132,12 +128,7 @@ export function DokumentForm({ values, onChange, onSave, onCancel, saving, titel
 
       {/* Fußtext */}
       <SectionCard title="Fuß-Text">
-        <textarea
-          value={values.fusstext}
-          onChange={e => onChange({ fusstext: e.target.value })}
-          rows={5}
-          className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-base resize-y focus:outline-none focus:ring-2 focus:ring-accent-500"
-        />
+        <RichTextEditor value={values.fusstext} onChange={v => onChange({ fusstext: v })} rows={5} />
       </SectionCard>
 
       {/* Aktionen */}

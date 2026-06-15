@@ -8,6 +8,60 @@ import {
 } from '@react-pdf/renderer'
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, FirmaStammdaten } from '@/types/database'
 
+// ─── Rich-text → react-pdf ────────────────────────────────────────────────────
+// Parses TipTap JSON (or falls back to plain text).
+// Supports: bold, italic, underline, paragraph line breaks.
+
+type TipTapMark = { type: 'bold' | 'italic' | 'underline' }
+type TipTapNode = {
+  type: string
+  text?: string
+  marks?: TipTapMark[]
+  content?: TipTapNode[]
+}
+
+function renderRichText(content: string, baseStyle: any) {
+  let nodes: TipTapNode[] = []
+  try {
+    const json = JSON.parse(content)
+    if (json?.type === 'doc' && Array.isArray(json.content)) {
+      nodes = json.content
+    }
+  } catch {}
+
+  if (nodes.length === 0) {
+    // Plain text fallback: split on newlines
+    return content.split('\n').map((line, i) =>
+      <Text key={i} style={baseStyle}>{line || ' '}</Text>
+    )
+  }
+
+  return nodes.map((para, pi) => {
+    const inlines = para.content ?? []
+    if (inlines.length === 0) {
+      return <Text key={pi} style={[baseStyle, { fontSize: 4 }]}>{' '}</Text>
+    }
+    return (
+      <Text key={pi} style={baseStyle}>
+        {inlines.map((node, ni) => {
+          const marks = node.marks ?? []
+          const isBold = marks.some((m: TipTapMark) => m.type === 'bold')
+          const isItalic = marks.some((m: TipTapMark) => m.type === 'italic')
+          const isUnderline = marks.some((m: TipTapMark) => m.type === 'underline')
+          const family = isBold
+            ? (isItalic ? 'Helvetica-BoldOblique' : 'Helvetica-Bold')
+            : (isItalic ? 'Helvetica-Oblique' : 'Helvetica')
+          return (
+            <Text key={ni} style={{ fontFamily: family, textDecoration: isUnderline ? 'underline' : 'none' }}>
+              {node.text ?? ''}
+            </Text>
+          )
+        })}
+      </Text>
+    )
+  })
+}
+
 // ─── Firmenkonstanten (Fallback) ──────────────────────────────────────────────
 const FIRMA_DEFAULT = {
   name: 'Quick Energy Handels-, Klima- und Elektrotechnik GmbH',
@@ -411,9 +465,7 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
         />
 
         {/* Kopftext + Betreff */}
-        {doc.kopftext && (
-          <Text style={s.bodyText}>{doc.kopftext}</Text>
-        )}
+        {doc.kopftext && renderRichText(doc.kopftext, s.bodyText)}
         {stornoHinweis && (
           <Text style={[s.bodyText, { fontFamily: 'Helvetica-Bold' }]}>{stornoHinweis}</Text>
         )}
@@ -436,9 +488,7 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
         />
 
         {/* Fußtext / Zahlungsinfo */}
-        {doc.fusstext && (
-          <Text style={[s.bodyText, { marginTop: 16 }]}>{doc.fusstext}</Text>
-        )}
+        {doc.fusstext && renderRichText(doc.fusstext, [s.bodyText, { marginTop: 16 }])}
 
         <Fusszeile firma={F} />
       </Page>

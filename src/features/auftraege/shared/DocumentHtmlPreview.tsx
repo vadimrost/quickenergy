@@ -1,5 +1,41 @@
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, Kunde, FirmaStammdaten } from '@/types/database'
 
+type TtMark = { type: 'bold' | 'italic' | 'underline' }
+type TtNode = { type: string; text?: string; marks?: TtMark[]; content?: TtNode[] }
+
+function renderRichHtml(content: string): React.ReactNode {
+  let nodes: TtNode[] = []
+  try {
+    const json = JSON.parse(content)
+    if (json?.type === 'doc' && Array.isArray(json.content)) nodes = json.content
+  } catch {}
+
+  if (nodes.length === 0) {
+    return <span style={{ whiteSpace: 'pre-wrap' }}>{content}</span>
+  }
+
+  return (
+    <>
+      {nodes.map((para, pi) => {
+        const inlines = para.content ?? []
+        if (inlines.length === 0) return <br key={pi} />
+        return (
+          <div key={pi}>
+            {inlines.map((node, ni) => {
+              const marks = node.marks ?? []
+              let el: React.ReactNode = node.text ?? ''
+              if (marks.some(m => m.type === 'bold')) el = <strong>{el}</strong>
+              if (marks.some(m => m.type === 'italic')) el = <em>{el}</em>
+              if (marks.some(m => m.type === 'underline')) el = <u>{el}</u>
+              return <span key={ni}>{el}</span>
+            })}
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 const FIRMA_DEFAULT = {
   name: 'Quick Energy Handels-, Klima- und Elektrotechnik GmbH',
   strasse: 'Sieveringerstraße 56A',
@@ -193,8 +229,8 @@ export function DocumentHtmlPreview(input: DocInput) {
 
       {/* ── Kopftext & Betreff ── */}
       {doc.kopftext && (
-        <div style={{ fontSize: 8.5, lineHeight: 1.55, marginBottom: 6, whiteSpace: 'pre-wrap' }}>
-          {doc.kopftext}
+        <div style={{ fontSize: 8.5, lineHeight: 1.55, marginBottom: 6 }}>
+          {renderRichHtml(doc.kopftext)}
         </div>
       )}
       {doc.betreff && (
@@ -263,8 +299,8 @@ export function DocumentHtmlPreview(input: DocInput) {
 
       {/* ── Fußtext ── */}
       {doc.fusstext && (
-        <div style={{ fontSize: 8.5, lineHeight: 1.6, marginTop: 16, whiteSpace: 'pre-wrap' }}>
-          {doc.fusstext}
+        <div style={{ fontSize: 8.5, lineHeight: 1.6, marginTop: 16 }}>
+          {renderRichHtml(doc.fusstext)}
         </div>
       )}
 
