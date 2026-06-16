@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Bot, X, Send, Loader2, ExternalLink } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -32,7 +32,11 @@ function parseReply(text: string): Array<{ type: 'text' | 'link'; value: string;
 }
 
 export function AiAgentChat() {
+  const location = useLocation()
   const [open, setOpen] = useState(false)
+
+  // On the homepage, the DashboardChat is used instead
+  if (location.pathname === '/') return null
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
