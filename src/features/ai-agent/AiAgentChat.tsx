@@ -1,103 +1,79 @@
 import { useState, useRef, useEffect } from 'react'
-import { Bot, X, Send, Loader2, ExternalLink } from 'lucide-react'
+import { Bot, X, Send, Loader2, ExternalLink, Sparkles } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
-import { cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
+import { cn, formatEuro } from '@/lib/utils'
+import { useAiChat, type ChartData } from './useAiChat'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from 'recharts'
 
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-}
+const SUGGESTIONS = [
+  { label: 'Umsatz-Entwicklung', prompt: 'Zeig mir meine Umsatz-Entwicklung der letzten 6 Monate' },
+  { label: 'Ausgaben', prompt: 'Wie sind meine Ausgaben diesen Monat aufgeteilt?' },
+  { label: 'Offene Rechnungen', prompt: 'Welche Rechnungen sind noch offen?' },
+  { label: 'Angebot erstellen', prompt: 'Erstelle ein Angebot für einen Kunden' },
+]
 
-// Extract /angebote/:id links from assistant replies
-function parseReply(text: string): Array<{ type: 'text' | 'link'; value: string; label?: string }> {
-  const parts: Array<{ type: 'text' | 'link'; value: string; label?: string }> = []
-  // Match AN-\d+ followed by optional text, find matching angebot_id in text
-  const angebotNrRegex = /\b(AN-\d+)\b/g
-  const angebotIdRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
-
-  // Check for angebot_id in the text (sometimes embedded in response)
-  const idMatch = text.match(angebotIdRegex)
-  const nrMatch = text.match(angebotNrRegex)
-
-  if (idMatch && nrMatch) {
-    const beforeId = text.replace(idMatch[0], '').trim()
-    parts.push({ type: 'text', value: beforeId })
-    parts.push({ type: 'link', value: `/angebote/${idMatch[0]}`, label: `${nrMatch[0]} öffnen` })
-    return parts
+function MiniChart({ chart }: { chart: ChartData }) {
+  if (chart.type === 'horizontal-bar') {
+    return (
+      <div className="mt-3 bg-white/60 rounded-xl p-3">
+        <p className="text-[11px] font-medium text-slate-500 mb-2">{chart.title}</p>
+        <ResponsiveContainer width="100%" height={Math.max(chart.data.length * 30, 60)}>
+          <BarChart layout="vertical" data={chart.data} margin={{ left: 0, right: 8 }}>
+            <XAxis type="number" hide />
+            <YAxis type="category" dataKey="label" width={100} tick={{ fontSize: 10, fill: '#64748B' }} axisLine={false} tickLine={false} />
+            <Tooltip formatter={(v) => [formatEuro(Number(v)), 'Betrag']} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E2E8F0', padding: '5px 10px' }} cursor={{ fill: '#F8FAFC' }} />
+            <Bar dataKey="value" fill="#FB923C" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    )
   }
-
-  parts.push({ type: 'text', value: text })
-  return parts
+  return (
+    <div className="mt-3 bg-white/60 rounded-xl p-3">
+      <p className="text-[11px] font-medium text-slate-500 mb-2">{chart.title}</p>
+      <ResponsiveContainer width="100%" height={120}>
+        <BarChart data={chart.data} barCategoryGap="40%">
+          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+          <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 10, fill: '#94A3B8' }} axisLine={false} tickLine={false} width={30} tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)} />
+          <Tooltip formatter={(v) => [formatEuro(Number(v)), 'Umsatz']} contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E2E8F0', padding: '5px 10px' }} cursor={{ fill: '#F8FAFC' }} />
+          <Bar dataKey="value" fill="#4ADE80" radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
 }
 
 export function AiAgentChat() {
   const location = useLocation()
   const [open, setOpen] = useState(false)
-
-  // On the homepage, the DashboardChat is used instead
-  if (location.pathname === '/') return null
-  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [angebotLink, setAngebotLink] = useState<{ id: string; nr: string } | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const { messages, loading, angebotLink, sendMessage } = useAiChat()
   const inputRef = useRef<HTMLInputElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Dashboard has its own ChatCommandBar
+  if (location.pathname === '/') return null
 
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 100)
-    }
+    if (open) setTimeout(() => inputRef.current?.focus(), 80)
   }, [open])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
 
-  async function send() {
-    const text = input.trim()
-    if (!text || loading) return
-
-    const newMessages: Message[] = [...messages, { role: 'user', content: text }]
-    setMessages(newMessages)
+  function send() {
+    if (!input.trim() || loading) return
+    const text = input
     setInput('')
-    setLoading(true)
-    setAngebotLink(null)
-
-    try {
-      const { data, error } = await supabase.functions.invoke('ai-agent', {
-        body: {
-          messages: newMessages.map(m => ({ role: m.role, content: m.content })),
-        },
-      })
-
-      if (error) throw error
-
-      const reply = data?.reply ?? 'Keine Antwort erhalten.'
-
-      // Detect if an Angebot was created — look for UUID + AN- pattern in reply
-      const idMatch = reply.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
-      const nrMatch = reply.match(/\b(AN-\d+)\b/)
-      if (idMatch && nrMatch) {
-        setAngebotLink({ id: idMatch[0], nr: nrMatch[0] })
-      }
-
-      setMessages([...newMessages, { role: 'assistant', content: reply }])
-    } catch (err: any) {
-      setMessages([
-        ...newMessages,
-        { role: 'assistant', content: `Fehler: ${err?.message ?? String(err)}` },
-      ])
-    } finally {
-      setLoading(false)
-    }
+    sendMessage(text)
   }
 
   function handleKey(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      send()
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
 
   return (
@@ -106,55 +82,53 @@ export function AiAgentChat() {
       <button
         onClick={() => setOpen(v => !v)}
         className={cn(
-          'fixed bottom-6 right-6 md:bottom-6 md:right-6 z-[70]',
-          'w-12 h-12 rounded-full shadow-lg flex items-center justify-center transition-colors',
-          open
-            ? 'bg-ink text-bg-base'
-            : 'bg-accent-600 text-white hover:bg-accent-700'
+          'fixed bottom-6 right-6 z-[70] w-12 h-12 rounded-full shadow-lg',
+          'flex items-center justify-center transition-all duration-200',
+          open ? 'bg-slate-800 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700 hover:scale-105'
         )}
-        // On mobile, stay above the bottom nav (h-16)
         style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 72px)' }}
         aria-label="KI-Assistent"
       >
-        {open ? <X size={20} /> : <Bot size={20} />}
+        {open ? <X size={18} /> : <Sparkles size={18} />}
       </button>
 
-      {/* Chat panel */}
+      {open && <div className="fixed inset-0 z-[65] bg-black/25 backdrop-blur-[2px]" onClick={() => setOpen(false)} />}
+
       {open && (
         <div
-          className="fixed z-[65] flex flex-col bg-bg-surface border border-border shadow-2xl rounded-2xl overflow-hidden"
-          style={{
-            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)',
-            right: '1.5rem',
-            width: 'min(96vw, 22rem)',
-            height: 'min(70vh, 520px)',
-          }}
+          className="fixed z-[70] flex flex-col bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden"
+          style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 'min(92vw, 640px)', height: 'min(85vh, 720px)' }}
+          onClick={e => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-muted shrink-0">
-            <Bot size={16} className="text-accent-600" />
-            <span className="text-sm font-semibold text-ink">KI-Assistent</span>
-            <span className="ml-auto text-xs text-ink-muted">Angebote · Kunden · Rechnungen</span>
+          <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-slate-100 shrink-0">
+            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-sm">
+              <Bot size={13} className="text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">KI-Assistent</p>
+              <p className="text-[10px] text-slate-400">QuickEnergy</p>
+            </div>
+            <button onClick={() => setOpen(false)} className="ml-auto w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+              <X size={14} />
+            </button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-            {messages.length === 0 && (
-              <div className="text-center text-xs text-ink-muted pt-6 space-y-2">
-                <Bot size={28} className="mx-auto text-accent-200" />
-                <p>Stell mir eine Frage oder sag mir was ich tun soll.</p>
-                <div className="space-y-1 mt-3">
-                  {[
-                    'Erstelle ein Angebot für Muster GmbH',
-                    'Zeig mir offene Rechnungen',
-                    'Welche Angebote sind noch offen?',
-                  ].map(s => (
-                    <button
-                      key={s}
-                      onClick={() => { setInput(s); inputRef.current?.focus() }}
-                      className="block w-full text-left text-xs px-3 py-1.5 rounded-lg bg-bg-muted hover:bg-accent-50 text-ink-muted hover:text-accent-700 transition-colors"
-                    >
-                      {s}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            {messages.length === 0 && !loading && (
+              <div className="space-y-4 pt-4">
+                <div className="text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mx-auto mb-3 shadow-md">
+                    <Bot size={22} className="text-white" />
+                  </div>
+                  <p className="text-sm font-semibold text-slate-700">Wie kann ich helfen?</p>
+                  <p className="text-xs text-slate-400 mt-1">Angebote · Daten · Charts</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {SUGGESTIONS.map(({ label, prompt }) => (
+                    <button key={label} onClick={() => sendMessage(prompt)} className="text-left text-sm px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 transition-all leading-snug font-medium">
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -162,65 +136,67 @@ export function AiAgentChat() {
             )}
 
             {messages.map((m, i) => (
-              <div
-                key={i}
-                className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}
-              >
-                <div
-                  className={cn(
-                    'max-w-[85%] rounded-2xl px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap',
-                    m.role === 'user'
-                      ? 'bg-accent-600 text-white rounded-br-sm'
-                      : 'bg-bg-muted text-ink rounded-bl-sm'
-                  )}
-                >
+              <div key={i} className={cn('flex items-start gap-3', m.role === 'user' ? 'justify-end' : 'justify-start')}>
+                {m.role === 'assistant' && (
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                    <Bot size={14} className="text-white" />
+                  </div>
+                )}
+                <div className={cn('max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap', m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm shadow-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm')}>
                   {m.content}
+                  {m.chart && <MiniChart chart={m.chart} />}
                 </div>
               </div>
             ))}
 
             {loading && (
-              <div className="flex justify-start">
-                <div className="bg-bg-muted rounded-2xl rounded-bl-sm px-3 py-2">
-                  <Loader2 size={14} className="animate-spin text-ink-muted" />
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-sm">
+                  <Bot size={14} className="text-white" />
+                </div>
+                <div className="bg-slate-100 rounded-2xl rounded-tl-sm px-4 py-3.5 flex items-center gap-1.5">
+                  {[0, 150, 300].map(d => <span key={d} className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
                 </div>
               </div>
             )}
 
-            {angebotLink && (
-              <div className="flex justify-start">
-                <Link
-                  to={`/angebote/${angebotLink.id}`}
-                  onClick={() => setOpen(false)}
-                  className="flex items-center gap-1.5 text-xs font-medium text-accent-600 bg-accent-50 border border-accent-200 rounded-lg px-3 py-2 hover:bg-accent-100 transition-colors"
-                >
-                  <ExternalLink size={12} />
-                  {angebotLink.nr} öffnen
+            {angebotLink && !loading && (
+              <div className="pl-11">
+                <Link to={`/angebote/${angebotLink.id}`} onClick={() => setOpen(false)} className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2 hover:bg-indigo-100 transition-colors">
+                  <ExternalLink size={13} /> {angebotLink.nr} öffnen
                 </Link>
               </div>
             )}
 
-            <div ref={bottomRef} />
+            <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
-          <div className="shrink-0 border-t border-border px-3 py-2 flex items-center gap-2">
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKey}
-              placeholder="Nachricht schreiben…"
-              disabled={loading}
-              className="flex-1 text-sm bg-transparent outline-none placeholder:text-ink-subtle text-ink"
-            />
-            <button
-              onClick={send}
-              disabled={!input.trim() || loading}
-              className="w-7 h-7 rounded-full bg-accent-600 text-white flex items-center justify-center hover:bg-accent-700 disabled:opacity-30 transition-colors shrink-0"
+          {/* Input — BOTTOM */}
+          <div className="shrink-0 px-6 py-4 border-t border-slate-100 bg-white">
+            <div
+              className="rounded-xl animate-gradient-shift"
+              style={{ background: 'linear-gradient(90deg, #4ADE80, #60A5FA, #818CF8, #C084FC, #F472B6, #4ADE80)', backgroundSize: '200% 200%', padding: '1.5px', boxShadow: '0 0 20px rgba(129, 140, 248, 0.18)' }}
             >
-              <Send size={12} />
-            </button>
+              <div className="bg-white rounded-[10px] flex items-center gap-3 px-4 py-3">
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKey}
+                  placeholder="Nachricht eingeben…"
+                  disabled={loading}
+                  className="flex-1 text-sm bg-transparent outline-none placeholder:text-slate-400 text-slate-800 min-w-0"
+                />
+                <button
+                  onClick={send}
+                  disabled={!input.trim() || loading}
+                  className={cn('w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0', input.trim() && !loading ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'bg-slate-100 text-slate-300')}
+                >
+                  {loading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                </button>
+              </div>
+            </div>
+            <p className="text-center text-[10px] text-slate-300 mt-2">Drücke Enter zum Senden · Esc zum Schließen</p>
           </div>
         </div>
       )}

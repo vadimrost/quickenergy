@@ -5,10 +5,9 @@ import { de } from 'date-fns/locale'
 import { TrendingUp, TrendingDown, AlertTriangle, ArrowRight, Building2, User, ChevronDown, Timer, Percent, Layers, Download, FolderArchive } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
-  ComposedChart, Line, Legend,
 } from 'recharts'
-import { DashboardChat } from '@/features/ai-agent/DashboardChat'
 import { PageTitle } from '@/components/shared/PageTitle'
+import { ChatCommandBar } from './ChatCommandBar'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
 import { useAusgangsrechnungen } from '@/features/auftraege/ausgangsrechnungen/useAusgangsrechnungen'
@@ -186,26 +185,9 @@ export function HomePage() {
         month,
         einnahmen: Math.round(einnahmen),
         ausgaben: Math.round(ausgaben),
-        gewinn: Math.round(einnahmen - ausgaben),
       }
     })
   }, [ausgangsrechnungen, rechnungen])
-
-  // ── Ausgaben nach Lieferant (aktueller Monat) ─────────────
-  const ausgabenNachLieferant = useMemo(() => {
-    const map = new Map<string, number>()
-    rechnungen
-      .filter(r => r.rechnungsdatum?.startsWith(selectedMonth))
-      .forEach(r => {
-        const name = r.lieferant?.name ?? 'Sonstige'
-        const brutto = ((r.ocr_json as any)?.invoice_net_amount ?? r.betrag) * (1 + r.ust_satz / 100)
-        map.set(name, (map.get(name) ?? 0) + brutto)
-      })
-    return [...map.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([name, betrag]) => ({ name, betrag: Math.round(betrag) }))
-  }, [rechnungen, selectedMonth])
 
   const openArList = [...offeneForderungen]
     .sort((a, b) => {
@@ -287,6 +269,9 @@ export function HomePage() {
         }
       />
 
+      {/* AI Command Bar */}
+      <ChatCommandBar />
+
       {/* Finanz-KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <KpiCard
@@ -326,27 +311,23 @@ export function HomePage() {
 
       {/* Chart + Offene Forderungen */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <SectionCard title="Umsatz-Entwicklung — letzte 12 Monate" className="lg:col-span-2">
+        <SectionCard title="Ertrag / Aufwand — letzte 12 Monate" className="lg:col-span-2">
           <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={chartData} barCategoryGap="35%" barGap={2}>
+            <BarChart data={chartData} barCategoryGap="35%" barGap={2}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
               <YAxis
-                tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} width={38}
+                tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} width={36}
                 tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)}
               />
               <Tooltip
-                formatter={(value, name) => [
-                  formatEuro(Number(value)),
-                  name === 'einnahmen' ? 'Einnahmen' : name === 'ausgaben' ? 'Aufwand' : 'Gewinn',
-                ]}
+                formatter={(value, name) => [formatEuro(Number(value)), name === 'einnahmen' ? 'Einnahmen' : 'Aufwand']}
                 contentStyle={{ fontSize: 12, border: '1px solid #E2E8F0', borderRadius: 8, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.08)', padding: '8px 12px' }}
                 cursor={{ fill: '#F8FAFC' }}
               />
               <Bar dataKey="einnahmen" name="einnahmen" fill="#4ADE80" radius={[3, 3, 0, 0]} />
               <Bar dataKey="ausgaben" name="ausgaben" fill="#FB923C" radius={[3, 3, 0, 0]} />
-              <Line dataKey="gewinn" name="gewinn" stroke="#818CF8" strokeWidth={2} dot={false} type="monotone" />
-            </ComposedChart>
+            </BarChart>
           </ResponsiveContainer>
           <div className="flex items-center gap-5 mt-3 pl-9">
             <div className="flex items-center gap-1.5 text-xs text-ink-muted">
@@ -354,9 +335,6 @@ export function HomePage() {
             </div>
             <div className="flex items-center gap-1.5 text-xs text-ink-muted">
               <div className="w-2.5 h-2.5 rounded-sm" style={{ background: '#FB923C' }} /> Aufwand
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-ink-muted">
-              <div className="w-8 h-0.5 rounded-full" style={{ background: '#818CF8' }} /> Gewinn
             </div>
           </div>
         </SectionCard>
@@ -409,65 +387,6 @@ export function HomePage() {
                   </div>
                 )
               })}
-            </div>
-          )}
-        </SectionCard>
-      </div>
-
-      {/* Ausgaben nach Lieferant */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <SectionCard title={`Ausgaben nach Lieferant — ${monthLabel}`} className="lg:col-span-2">
-          {ausgabenNachLieferant.length === 0 ? (
-            <div className="py-8 text-center text-sm text-ink-muted">Keine Eingangsrechnungen im gewählten Monat</div>
-          ) : (
-            <ResponsiveContainer width="100%" height={ausgabenNachLieferant.length * 38 + 12}>
-              <BarChart layout="vertical" data={ausgabenNachLieferant} margin={{ left: 0, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
-                <XAxis
-                  type="number" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false}
-                  tickFormatter={v => v >= 1000 ? `${Math.round(v / 1000)}k` : String(v)}
-                />
-                <YAxis
-                  type="category" dataKey="name" width={120}
-                  tick={{ fontSize: 11, fill: '#64748B' }} axisLine={false} tickLine={false}
-                />
-                <Tooltip
-                  formatter={(value) => [formatEuro(Number(value)), 'Betrag']}
-                  contentStyle={{ fontSize: 12, border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px' }}
-                  cursor={{ fill: '#F8FAFC' }}
-                />
-                <Bar dataKey="betrag" fill="#FB923C" radius={[0, 3, 3, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </SectionCard>
-
-        <SectionCard title="Kostenstruktur">
-          <div className="space-y-2.5">
-            {ausgabenNachLieferant.length === 0 ? (
-              <div className="py-6 text-center text-sm text-ink-muted">Keine Daten</div>
-            ) : ausgabenNachLieferant.map(({ name, betrag }) => {
-              const total = ausgabenNachLieferant.reduce((s, x) => s + x.betrag, 0)
-              const pct = total > 0 ? Math.round((betrag / total) * 100) : 0
-              return (
-                <div key={name}>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-ink truncate max-w-[160px]" title={name}>{name}</span>
-                    <span className="text-ink-muted shrink-0 ml-2">{pct}%</span>
-                  </div>
-                  <div className="h-1.5 bg-bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-orange-400 transition-all" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          {ausgabenNachLieferant.length > 0 && (
-            <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
-              <span className="text-xs text-ink-muted">Gesamt</span>
-              <span className="text-sm font-semibold text-ink">
-                {formatEuro(ausgabenNachLieferant.reduce((s, x) => s + x.betrag, 0))}
-              </span>
             </div>
           )}
         </SectionCard>
@@ -605,11 +524,6 @@ export function HomePage() {
         </SectionCard>
 
       </div>
-
-      {/* KI-Assistent */}
-      <SectionCard title="KI-Assistent">
-        <DashboardChat />
-      </SectionCard>
     </div>
   )
 }

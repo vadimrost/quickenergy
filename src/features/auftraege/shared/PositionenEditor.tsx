@@ -39,7 +39,7 @@ export function PositionenEditor({ positionen, onChange }: Props) {
   return (
     <div>
       {/* Header */}
-      <div className="grid grid-cols-[2fr_80px_80px_120px_60px_60px_110px_32px] gap-2 mb-2 px-1">
+      <div className="grid grid-cols-[2fr_65px_72px_90px_52px_48px_105px_28px] gap-2 mb-2 px-1">
         {(['Bezeichnung', 'Menge', 'Einheit', 'EP netto', 'USt%', 'Rab%', 'Betrag netto', ''] as const).map(h => (
           <span key={h} className="text-xs font-medium text-ink-muted uppercase tracking-wide">{h}</span>
         ))}
@@ -47,7 +47,7 @@ export function PositionenEditor({ positionen, onChange }: Props) {
 
       <div className="space-y-1.5">
         {positionen.map((p, i) => (
-          <div key={i} className="grid grid-cols-[2fr_80px_80px_120px_60px_60px_110px_32px] gap-2 items-center group">
+          <div key={i} className="grid grid-cols-[2fr_65px_72px_90px_52px_48px_105px_28px] gap-2 items-center group">
             {/* Bezeichnung */}
             <Input
               value={p.bezeichnung}
