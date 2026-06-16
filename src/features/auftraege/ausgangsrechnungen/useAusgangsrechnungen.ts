@@ -61,7 +61,10 @@ export function useUpsertAusgangsrechnung() {
       await supabase.from('dokument_positionen').delete().eq('dokument_id', id).eq('dokument_typ', 'rechnung')
       if (positionen.length > 0) {
         const { error } = await supabase.from('dokument_positionen').insert(
-          positionen.map((p, i) => ({ ...p, dokument_id: id, dokument_typ: 'rechnung', reihenfolge: i }))
+          positionen.map((p, i) => {
+            const { id: _id, created_at: _ca, ...rest } = p as any
+            return { ...rest, dokument_id: id, dokument_typ: 'rechnung', reihenfolge: i }
+          })
         )
         if (error) throw error
       }
