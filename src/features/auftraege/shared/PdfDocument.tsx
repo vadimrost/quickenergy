@@ -39,7 +39,7 @@ function renderRichText(content: string, baseStyle: any) {
   return nodes.map((para, pi) => {
     const inlines = para.content ?? []
     if (inlines.length === 0) {
-      return <Text key={pi} style={[baseStyle, { fontSize: 4 }]}>{' '}</Text>
+      return <Text key={pi} style={{ fontSize: 2, lineHeight: 1 }}>{' '}</Text>
     }
     return (
       <Text key={pi} style={baseStyle}>
@@ -102,7 +102,7 @@ const s = StyleSheet.create({
     fontSize: 9,
     color: '#1a1a1a',
     paddingTop: 36,
-    paddingBottom: 52,
+    paddingBottom: 90,
     paddingHorizontal: 44,
   },
 
@@ -488,7 +488,11 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
         />
 
         {/* Fußtext / Zahlungsinfo */}
-        {doc.fusstext && renderRichText(doc.fusstext, [s.bodyText, { marginTop: 16 }])}
+        {doc.fusstext && (
+          <View style={{ marginTop: 16 }} wrap={false}>
+            {renderRichText(doc.fusstext, s.bodyText)}
+          </View>
+        )}
 
         <Fusszeile firma={F} />
       </Page>
