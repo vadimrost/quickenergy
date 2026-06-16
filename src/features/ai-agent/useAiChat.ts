@@ -7,10 +7,18 @@ export interface ChartData {
   data: Array<{ label: string; value: number }>
 }
 
+export interface EntityRef {
+  type: 'kunde' | 'angebot' | 'rechnung' | 'eingangsrechnung' | 'auftragsbestaetigung' | 'lieferant' | 'mitarbeiter' | 'pdf'
+  id: string   // UUID for entities, direct URL for type='pdf'
+  label: string
+  sublabel?: string
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   chart?: ChartData
+  entities?: EntityRef[]
 }
 
 export function useAiChat() {
@@ -36,13 +44,16 @@ export function useAiChat() {
 
       const reply: string = data?.reply ?? 'Keine Antwort erhalten.'
       const chart: ChartData | undefined = data?.chart ?? undefined
+      const rawEntities: EntityRef[] | undefined = data?.entities ?? undefined
+      // Only show chips for entities the assistant actually mentioned in its reply
+      const mentioned = rawEntities?.filter(e => reply.includes(e.label))
+      const entities: EntityRef[] | undefined = (mentioned?.length ? mentioned : rawEntities?.slice(0, 5)) ?? undefined
 
       const idMatch = reply.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)
       const nrMatch = reply.match(/\b(AN-\d+)\b/)
       if (idMatch && nrMatch) setAngebotLink({ id: idMatch[0], nr: nrMatch[0] })
 
-      const final = [...next, { role: 'assistant' as const, content: reply, chart }]
-      setMessages(final)
+      setMessages([...next, { role: 'assistant', content: reply, chart, entities }])
     } catch (err: any) {
       setMessages([...next, { role: 'assistant', content: `Fehler: ${err?.message ?? String(err)}` }])
     } finally {

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Building2, User, AlertTriangle, Search, ChevronUp, ChevronDown, Upload, CheckCircle, Loader2, FileText, FileSpreadsheet } from 'lucide-react'
+import { Plus, Building2, User, AlertTriangle, Search, ChevronUp, ChevronDown, Upload, CheckCircle, Loader2, FileText, FileSpreadsheet, Copy } from 'lucide-react'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -16,7 +16,7 @@ import { fileToBase64, normalizeDate, geminiOcrAusgangsrechnung } from '@/lib/ge
 import { buildArRows, writeBmdExcel } from '@/lib/bmd-export'
 import { DEFAULT_KOPF, DEFAULT_FUSS } from '@/features/auftraege/shared/dokumentDefaults'
 import { supabase } from '@/lib/supabase'
-import { useAusgangsrechnungen } from './useAusgangsrechnungen'
+import { useAusgangsrechnungen, useDuplicateAusgangsrechnung } from './useAusgangsrechnungen'
 import type { Ausgangsrechnung, AusgangsrechnungStatus } from '@/types/database'
 
 type Tab = 'alle' | AusgangsrechnungStatus
@@ -457,8 +457,20 @@ export function AusgangsrechnungPage() {
   const [bmdOpen, setBmdOpen] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkUpdating, setBulkUpdating] = useState(false)
+  const duplicate = useDuplicateAusgangsrechnung()
 
   const today = new Date()
+
+  async function handleDuplicate(e: React.MouseEvent, id: string) {
+    e.stopPropagation()
+    try {
+      const newId = await duplicate.mutateAsync(id)
+      toast.success('Rechnung dupliziert')
+      navigate(`/ausgangsrechnungen/${newId}`)
+    } catch (err: any) {
+      toast.error('Fehler beim Duplizieren: ' + err.message)
+    }
+  }
 
   const byTab = tab === 'alle' ? rechnungen : rechnungen.filter(r => r.status === tab)
   const bySearch = search
@@ -765,6 +777,17 @@ export function AusgangsrechnungPage() {
                       </td>
                       <td>
                         <StatusBadge variant={STATUS_VARIANT[r.status]} label={r.status.charAt(0).toUpperCase() + r.status.slice(1)} />
+                      </td>
+                      <td onClick={e => e.stopPropagation()} className="pr-3 text-right">
+                        <button
+                          onClick={e => handleDuplicate(e, r.id)}
+                          disabled={duplicate.isPending}
+                          title="Duplizieren"
+                          className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border/60 text-xs text-ink-muted hover:bg-bg-muted hover:text-ink transition-colors disabled:opacity-40"
+                        >
+                          <Copy size={11} />
+                          <span className="hidden lg:inline">Kopie</span>
+                        </button>
                       </td>
                     </tr>
                   ))}

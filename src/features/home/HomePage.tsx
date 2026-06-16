@@ -7,6 +7,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { PageTitle } from '@/components/shared/PageTitle'
+import { ChatCommandBar } from './ChatCommandBar'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
 import { useAusgangsrechnungen } from '@/features/auftraege/ausgangsrechnungen/useAusgangsrechnungen'
@@ -269,7 +270,7 @@ export function HomePage() {
       />
 
       {/* AI Command Bar */}
-      {/* <ChatCommandBar /> */}
+      <ChatCommandBar />
 
       {/* Finanz-KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">

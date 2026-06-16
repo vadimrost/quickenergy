@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { Bot, X, Send, Loader2, ExternalLink, Sparkles } from 'lucide-react'
+import { Bot, X, Send, Loader2, ExternalLink, Sparkles, Building2, FileText, Receipt, FileInput, FileDown, ClipboardList, Truck, User } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn, formatEuro } from '@/lib/utils'
-import { useAiChat, type ChartData } from './useAiChat'
+import { useAiChat, type ChartData, type EntityRef } from './useAiChat'
+import { ThinkingAnimation } from './ThinkingAnimation'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
@@ -13,6 +14,38 @@ const SUGGESTIONS = [
   { label: 'Offene Rechnungen', prompt: 'Welche Rechnungen sind noch offen?' },
   { label: 'Angebot erstellen', prompt: 'Erstelle ein Angebot für einen Kunden' },
 ]
+
+const ENTITY_CONFIG = {
+  kunde:               { icon: Building2,     bg: 'bg-blue-50 border-blue-200 hover:bg-blue-100',      text: 'text-blue-700',    external: false, href: (_id: string) => '/kunden' },
+  angebot:             { icon: FileText,       bg: 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100', text: 'text-indigo-700',  external: false, href: (id: string) => `/angebote/${id}` },
+  rechnung:            { icon: Receipt,        bg: 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100', text: 'text-emerald-700', external: false, href: (id: string) => `/ausgangsrechnungen/${id}` },
+  eingangsrechnung:    { icon: FileInput,      bg: 'bg-amber-50 border-amber-200 hover:bg-amber-100',   text: 'text-amber-700',   external: false, href: (id: string) => `/buchung/${id}` },
+  auftragsbestaetigung:{ icon: ClipboardList,  bg: 'bg-violet-50 border-violet-200 hover:bg-violet-100', text: 'text-violet-700',  external: false, href: (id: string) => `/auftraege/${id}` },
+  lieferant:           { icon: Truck,          bg: 'bg-slate-50 border-slate-200 hover:bg-slate-100',   text: 'text-slate-700',   external: false, href: (_id: string) => '/rechnungen' },
+  mitarbeiter:         { icon: User,           bg: 'bg-teal-50 border-teal-200 hover:bg-teal-100',      text: 'text-teal-700',    external: false, href: (_id: string) => '/mitarbeiter' },
+  pdf:                 { icon: FileDown,       bg: 'bg-rose-50 border-rose-200 hover:bg-rose-100',      text: 'text-rose-700',    external: true,  href: (id: string) => id },
+}
+
+function EntityChips({ entities }: { entities: EntityRef[] }) {
+  return (
+    <div className="mt-2.5 flex flex-wrap gap-1.5">
+      {entities.map((e) => {
+        const cfg = ENTITY_CONFIG[e.type]
+        const Icon = cfg.icon
+        const cls = cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-colors', cfg.bg, cfg.text)
+        return cfg.external ? (
+          <a key={e.id} href={cfg.href(e.id)} target="_blank" rel="noopener noreferrer" className={cls}>
+            <Icon size={10} /><span>{e.label}</span>{e.sublabel && <span className="opacity-50">{e.sublabel}</span>}
+          </a>
+        ) : (
+          <Link key={e.id} to={cfg.href(e.id)} className={cls}>
+            <Icon size={10} /><span>{e.label}</span>{e.sublabel && <span className="opacity-50">{e.sublabel}</span>}
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
 
 function MiniChart({ chart }: { chart: ChartData }) {
   if (chart.type === 'horizontal-bar') {
@@ -145,6 +178,7 @@ export function AiAgentChat() {
                 <div className={cn('max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap', m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm shadow-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm')}>
                   {m.content}
                   {m.chart && <MiniChart chart={m.chart} />}
+                  {m.entities && m.entities.length > 0 && <EntityChips entities={m.entities} />}
                 </div>
               </div>
             ))}
@@ -154,8 +188,8 @@ export function AiAgentChat() {
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-sm">
                   <Bot size={14} className="text-white" />
                 </div>
-                <div className="bg-slate-100 rounded-2xl rounded-tl-sm px-4 py-3.5 flex items-center gap-1.5">
-                  {[0, 150, 300].map(d => <span key={d} className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
+                <div className="bg-slate-100 rounded-2xl rounded-tl-sm px-4 py-3.5">
+                  <ThinkingAnimation />
                 </div>
               </div>
             )}

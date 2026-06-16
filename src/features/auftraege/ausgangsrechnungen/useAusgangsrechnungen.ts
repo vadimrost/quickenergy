@@ -106,6 +106,41 @@ export function useBezahltMarkieren() {
   })
 }
 
+export function useDuplicateAusgangsrechnung() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const [{ data: original, error }, { data: pos, error: posErr }] = await Promise.all([
+        supabase.from('ausgangsrechnungen').select('*').eq('id', id).single(),
+        supabase.from('dokument_positionen').select('*').eq('dokument_id', id).eq('dokument_typ', 'rechnung').order('reihenfolge'),
+      ])
+      if (error) throw error
+      if (posErr) throw posErr
+
+      const { id: _id, created_at: _c, rechnungsnummer: _nr, kunde: _k,
+              storno_zu_rechnung: _s, storno_zu_rechnung_id: _si,
+              bezahlt_am: _ba, bezahlt_betrag: _bb, ...fields } = original as any
+
+      const { data: neu, error: insertErr } = await supabase
+        .from('ausgangsrechnungen')
+        .insert({ ...fields, status: 'entwurf', rechnungsdatum: new Date().toISOString().slice(0, 10) })
+        .select('id').single()
+      if (insertErr) throw insertErr
+
+      if (pos && pos.length > 0) {
+        const { error: posInsertErr } = await supabase.from('dokument_positionen').insert(
+          pos.map(({ id: _pid, created_at: _pc, dokument_id: _di, ...p }: any) => ({
+            ...p, dokument_id: neu.id, dokument_typ: 'rechnung',
+          }))
+        )
+        if (posInsertErr) throw posInsertErr
+      }
+      return neu.id as string
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: [Q] }),
+  })
+}
+
 export function useUpdateAusgangsrechnungStatus() {
   const qc = useQueryClient()
   return useMutation({

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Trash2, RotateCcw } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Trash2, RotateCcw, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { PageTitle } from '@/components/shared/PageTitle'
@@ -238,9 +238,21 @@ export function AusgangsrechnungFormPage() {
     existing.status !== 'storniert' &&
     existing.typ !== 'stornorechnung'
 
+  const storedBrutto = existing?.summe_brutto ?? 0
+  const calcBrutto = berechneSummen(values.positionen, values.rabattGesamt).brutto
+  const hasMismatch = isEdit && storedBrutto > 0 && !(existing?.positionen?.length) && Math.abs(storedBrutto - calcBrutto) > 0.01
+
   return (
     <div className="xl:flex xl:gap-6 xl:items-start">
       <div className="flex-1 min-w-0">
+        {hasMismatch && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-500" />
+            <span>
+              Gespeicherter Betrag <strong>€{storedBrutto.toLocaleString('de-AT')}</strong> — Positionen fehlen in der Datenbank und müssen neu eingetragen werden.
+            </span>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate('/ausgangsrechnungen')} className="text-ink-muted hover:text-ink transition-colors">

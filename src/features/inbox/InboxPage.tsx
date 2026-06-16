@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, ChevronUp, Building2, FileSpreadsheet, Sparkles } from 'lucide-react'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, ChevronUp, Building2, FileSpreadsheet, Sparkles, Trash2 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { buildErRows, writeBmdExcel } from '@/lib/bmd-export'
@@ -413,7 +413,21 @@ export function InboxPage() {
   const [bmdOpen, setBmdOpen] = useState(false)
   const [bulkOcrOpen, setBulkOcrOpen] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
   const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return
+    const confirmed = window.confirm(`${selectedIds.size} Rechnung${selectedIds.size > 1 ? 'en' : ''} wirklich löschen?`)
+    if (!confirmed) return
+    setDeleting(true)
+    const { error } = await supabase.from('rechnungen').delete().in('id', [...selectedIds])
+    setDeleting(false)
+    if (error) { toast.error('Fehler beim Löschen: ' + error.message); return }
+    toast.success(`${selectedIds.size} Rechnung${selectedIds.size > 1 ? 'en' : ''} gelöscht`)
+    setSelectedIds(new Set())
+    void refetch()
+  }
   const { data: dismissedKeys = new Set<string>() } = useDismissedKeys()
   const navigate = useNavigate()
 
@@ -542,6 +556,16 @@ export function InboxPage() {
         title="Rechnungen"
         actions={
           <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={deleting}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm bg-red-500 hover:bg-red-600 text-white text-xs font-medium transition-colors disabled:opacity-50"
+              >
+                {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+                <span className="hidden sm:inline">Löschen ({selectedIds.size})</span>
+              </button>
+            )}
             <button
               onClick={() => setBulkOcrOpen(true)}
               className={cn(

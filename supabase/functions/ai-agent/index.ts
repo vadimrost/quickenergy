@@ -106,13 +106,53 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'get_eingangsrechnungen',
+      description: 'Listet EINGANGSRECHNUNGEN auf — Rechnungen die wir VON Lieferanten/Personen erhalten haben. Verwende dieses Tool wenn der Nutzer "von [Name]", "Eingangsrechnungen", "empfangene Rechnungen", "Lieferantenrechnungen" sagt.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['eingegangen', 'geprüft', 'gebucht', 'bezahlt'] },
+          lieferant_search: { type: 'string', description: 'Name des Lieferanten zum Filtern' },
+          limit: { type: 'number' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_ausgangsrechnungen',
-      description: 'Listet Ausgangsrechnungen auf, optional gefiltert nach Status.',
+      description: 'Listet AUSGANGSRECHNUNGEN auf — Rechnungen die wir AN Kunden gestellt haben. Verwende dieses Tool wenn der Nutzer "an [Kunde]", "für [Kunde]", "Ausgangsrechnungen", "gestellte Rechnungen" sagt.',
       parameters: {
         type: 'object',
         properties: {
           status: { type: 'string', enum: ['entwurf', 'offen', 'bezahlt', 'ueberfaellig', 'storniert'] },
+          kunde_search: { type: 'string', description: 'Name des Kunden zum Filtern' },
           limit: { type: 'number' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_kunde',
+      description: 'Legt einen neuen Kunden in der Datenbank an.',
+      parameters: {
+        type: 'object',
+        properties: {
+          firmenname: { type: 'string' },
+          anrede:     { type: 'string', enum: ['Herr', 'Frau', 'Divers'] },
+          vorname:    { type: 'string' },
+          nachname:   { type: 'string' },
+          email:      { type: 'string' },
+          telefon:    { type: 'string' },
+          adresse:    { type: 'string' },
+          plz:        { type: 'string' },
+          ort:        { type: 'string' },
+          land:       { type: 'string' },
+          uid_nr:     { type: 'string' },
+          notiz:      { type: 'string' },
         },
       },
     },
@@ -143,6 +183,162 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'set_ausgangsrechnung_status',
+      description: 'Ändert den Status einer Ausgangsrechnung. Verwende dieses Tool wenn der Nutzer eine Ausgangsrechnung als bezahlt markieren, stornieren oder den Status ändern möchte.',
+      parameters: {
+        type: 'object',
+        required: ['status'],
+        properties: {
+          rechnung_id:     { type: 'string', description: 'UUID der Ausgangsrechnung' },
+          rechnungsnummer: { type: 'string', description: 'Rechnungsnummer (alternativ zu rechnung_id)' },
+          status:          { type: 'string', enum: ['entwurf', 'offen', 'bezahlt', 'ueberfaellig', 'storniert'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_lieferanten',
+      description: 'Sucht Lieferanten in der Datenbank.',
+      parameters: {
+        type: 'object',
+        properties: {
+          search: { type: 'string', description: 'Name des Lieferanten' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'create_lieferant',
+      description: 'Legt einen neuen Lieferanten an.',
+      parameters: {
+        type: 'object',
+        required: ['name'],
+        properties: {
+          name:               { type: 'string' },
+          ustid:              { type: 'string' },
+          iban:               { type: 'string' },
+          auto_kostengruppe:  { type: 'string', description: 'BMD-Kostengruppe z.B. 4930' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_auftragsbestatigungen',
+      description: 'Listet Auftragsbestätigungen auf, optional gefiltert nach Status.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['entwurf', 'erhalten', 'teilberechnet', 'berechnet', 'abgelehnt', 'archiv'] },
+          limit:  { type: 'number' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'convert_angebot_zu_auftrag',
+      description: 'Wandelt ein Angebot in eine Auftragsbestätigung um und kopiert alle Positionen. Setzt Angebot-Status auf "berechnet".',
+      parameters: {
+        type: 'object',
+        required: ['angebot_id'],
+        properties: {
+          angebot_id: { type: 'string', description: 'UUID des Angebots' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_kategorien',
+      description: 'Gibt alle aktiven Buchungskategorien zurück.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_mitarbeiter',
+      description: 'Listet alle aktiven Mitarbeiter auf.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_bank_transaktionen',
+      description: 'Zeigt Bankbewegungen aus dem Kontoauszug. Verwende für Fragen zu Zahlungseingängen, Überweisungen, Kontostand oder Bankbewegungen.',
+      parameters: {
+        type: 'object',
+        properties: {
+          search: { type: 'string', description: 'Empfänger oder Buchungstext zum Filtern' },
+          typ:    { type: 'string', enum: ['eingang', 'ueberweisung', 'lastschrift', 'gebuehr'] },
+          limit:  { type: 'number' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_monats_zusammenfassung',
+      description: 'KPI-Zusammenfassung für einen Monat: Umsatz, Ausgaben, Deckungsbeitrag, offene Forderungen, offene Angebote. Verwende dieses Tool für "Zusammenfassung", "KPI", "wie läuft der Monat", "Monatsübersicht".',
+      parameters: {
+        type: 'object',
+        properties: {
+          monat: { type: 'string', description: 'Monat im Format YYYY-MM, Standard: aktueller Monat' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_heute_todo',
+      description: 'Was ist heute zu tun? Gibt fällige Eingangsrechnungen, offene Ausgangsrechnungen und Pipeline-Angebote zurück. Verwende dieses Tool für "was muss ich heute tun", "To-Do", "was ist fällig", "Tagesübersicht".',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'set_eingangsrechnung_status',
+      description: 'Ändert den Status einer Eingangsrechnung. Verwende dieses Tool wenn der Nutzer eine Eingangsrechnung buchen, als bezahlt markieren oder den Status ändern möchte.',
+      parameters: {
+        type: 'object',
+        required: ['status'],
+        properties: {
+          rechnung_id:  { type: 'string', description: 'UUID der Rechnung' },
+          rechnungsnr:  { type: 'string', description: 'Rechnungsnummer (alternativ zu rechnung_id)' },
+          status:       { type: 'string', enum: ['eingegangen', 'geprüft', 'gebucht', 'bezahlt'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_rechnung_pdf',
+      description: 'Gibt den PDF-Link einer Eingangsrechnung zurück, damit der Nutzer das Dokument ansehen kann.',
+      parameters: {
+        type: 'object',
+        properties: {
+          rechnung_id: { type: 'string', description: 'UUID der Rechnung' },
+          rechnungsnr: { type: 'string', description: 'Rechnungsnummer (alternativ zu rechnung_id)' },
+        },
+      },
+    },
+  },
 ]
 
 async function executeTool(name: string, input: any, supabase: any): Promise<any> {
@@ -155,7 +351,41 @@ async function executeTool(name: string, input: any, supabase: any): Promise<any
     }
     const { data, error } = await query
     if (error) return { error: error.message }
-    return { kunden: data }
+    return {
+      kunden: data,
+      _entities: (data ?? []).map((k: any) => ({
+        type: 'kunde', id: k.id,
+        label: k.firmenname || `${k.vorname ?? ''} ${k.nachname ?? ''}`.trim(),
+        sublabel: k.ort ?? undefined,
+      })),
+    }
+  }
+
+  if (name === 'create_kunde') {
+    const { data: kunde, error } = await supabase
+      .from('kunden')
+      .insert({
+        firmenname: input.firmenname ?? null,
+        anrede:     input.anrede ?? null,
+        vorname:    input.vorname ?? null,
+        nachname:   input.nachname ?? null,
+        email:      input.email ?? null,
+        telefon:    input.telefon ?? null,
+        adresse:    input.adresse ?? null,
+        plz:        input.plz ?? null,
+        ort:        input.ort ?? null,
+        land:       input.land ?? 'Österreich',
+        uid_nr:     input.uid_nr ?? null,
+        notiz:      input.notiz ?? null,
+      })
+      .select('id, kundennummer, firmenname, vorname, nachname')
+      .single()
+    if (error) return { error: error.message }
+    const displayName = kunde.firmenname ?? `${kunde.vorname ?? ''} ${kunde.nachname ?? ''}`.trim()
+    return {
+      success: true, kunde_id: kunde.id, kundennummer: kunde.kundennummer, name: displayName,
+      _entities: [{ type: 'kunde', id: kunde.id, label: displayName, sublabel: kunde.kundennummer }],
+    }
   }
 
   if (name === 'create_angebot') {
@@ -185,7 +415,10 @@ async function executeTool(name: string, input: any, supabase: any): Promise<any
       )
       if (posErr) return { error: posErr.message }
     }
-    return { success: true, angebot_id: angebot.id, angebotsnummer: angebot.angebotsnummer }
+    return {
+      success: true, angebot_id: angebot.id, angebotsnummer: angebot.angebotsnummer,
+      _entities: [{ type: 'angebot', id: angebot.id, label: angebot.angebotsnummer, sublabel: betreff }],
+    }
   }
 
   if (name === 'get_angebote') {
@@ -196,18 +429,61 @@ async function executeTool(name: string, input: any, supabase: any): Promise<any
     if (input.status) query = query.eq('status', input.status)
     const { data, error } = await query
     if (error) return { error: error.message }
-    return { angebote: data }
+    return {
+      angebote: data,
+      _entities: (data ?? []).map((a: any) => ({
+        type: 'angebot', id: a.id, label: a.angebotsnummer,
+        sublabel: a.betreff ?? a.kunde?.firmenname ?? undefined,
+      })),
+    }
+  }
+
+  if (name === 'get_eingangsrechnungen') {
+    let query = supabase
+      .from('rechnungen')
+      .select('id, rechnungsnr, betrag, ust_satz, status, faelligkeit, rechnungsdatum, lieferant:lieferanten(id, name)')
+      .order('created_at', { ascending: false }).limit(input.limit ?? 10)
+    if (input.status) query = query.eq('status', input.status)
+    if (input.lieferant_search) {
+      const { data: hits } = await supabase
+        .from('lieferanten').select('id')
+        .ilike('name', `%${input.lieferant_search}%`)
+      if (hits?.length) query = query.in('lieferant_id', hits.map((l: any) => l.id))
+      else return { rechnungen: [], _entities: [] }
+    }
+    const { data, error } = await query
+    if (error) return { error: error.message }
+    return {
+      rechnungen: data,
+      _entities: (data ?? []).map((r: any) => ({
+        type: 'eingangsrechnung', id: r.id, label: r.rechnungsnr,
+        sublabel: r.lieferant?.name ?? undefined,
+      })),
+    }
   }
 
   if (name === 'get_ausgangsrechnungen') {
     let query = supabase
       .from('ausgangsrechnungen')
-      .select('id, rechnungsnummer, betreff, status, summe_brutto, rechnungsdatum, kunde:kunden(firmenname, nachname)')
+      .select('id, rechnungsnummer, betreff, status, summe_brutto, rechnungsdatum, kunde:kunden(id, firmenname, vorname, nachname)')
       .order('created_at', { ascending: false }).limit(input.limit ?? 10)
     if (input.status) query = query.eq('status', input.status)
+    if (input.kunde_search) {
+      const { data: hits } = await supabase
+        .from('kunden').select('id')
+        .or(`firmenname.ilike.%${input.kunde_search}%,nachname.ilike.%${input.kunde_search}%,vorname.ilike.%${input.kunde_search}%`)
+      if (hits?.length) query = query.in('kunde_id', hits.map((k: any) => k.id))
+      else return { rechnungen: [], _entities: [] }
+    }
     const { data, error } = await query
     if (error) return { error: error.message }
-    return { rechnungen: data }
+    return {
+      rechnungen: data,
+      _entities: (data ?? []).map((r: any) => ({
+        type: 'rechnung', id: r.id, label: r.rechnungsnummer,
+        sublabel: (r.kunde?.firmenname ?? `${r.kunde?.vorname ?? ''} ${r.kunde?.nachname ?? ''}`.trim()) || r.betreff || undefined,
+      })),
+    }
   }
 
   if (name === 'get_umsatz_chart') {
@@ -263,6 +539,211 @@ async function executeTool(name: string, input: any, supabase: any): Promise<any
     }
   }
 
+  if (name === 'set_ausgangsrechnung_status') {
+    let id = input.rechnung_id
+    if (!id && input.rechnungsnummer) {
+      const { data } = await supabase.from('ausgangsrechnungen').select('id').eq('rechnungsnummer', input.rechnungsnummer).single()
+      id = data?.id
+    }
+    if (!id) return { error: 'Ausgangsrechnung nicht gefunden' }
+    const { error } = await supabase.from('ausgangsrechnungen').update({ status: input.status }).eq('id', id)
+    if (error) return { error: error.message }
+    return { success: true, id, neuer_status: input.status }
+  }
+
+  if (name === 'get_lieferanten') {
+    let query = supabase.from('lieferanten').select('id, name, ustid, auto_kostengruppe').limit(10)
+    if (input.search) query = query.ilike('name', `%${input.search}%`)
+    const { data, error } = await query
+    if (error) return { error: error.message }
+    return {
+      lieferanten: data,
+      _entities: (data ?? []).map((l: any) => ({
+        type: 'lieferant', id: l.id, label: l.name, sublabel: l.auto_kostengruppe ?? undefined,
+      })),
+    }
+  }
+
+  if (name === 'create_lieferant') {
+    const { data, error } = await supabase.from('lieferanten').insert({
+      name: input.name,
+      ustid: input.ustid ?? null,
+      iban: input.iban ?? null,
+      auto_kostengruppe: input.auto_kostengruppe ?? null,
+    }).select('id, name').single()
+    if (error) return { error: error.message }
+    return {
+      success: true, lieferant_id: data.id, name: data.name,
+      _entities: [{ type: 'lieferant', id: data.id, label: data.name }],
+    }
+  }
+
+  if (name === 'get_auftragsbestatigungen') {
+    let query = supabase
+      .from('auftragsbestatigungen')
+      .select('id, ab_nummer, betreff, status, summe_brutto, ab_datum, kunde:kunden(firmenname, nachname)')
+      .order('created_at', { ascending: false }).limit(input.limit ?? 10)
+    if (input.status) query = query.eq('status', input.status)
+    const { data, error } = await query
+    if (error) return { error: error.message }
+    return {
+      auftragsbestatigungen: data,
+      _entities: (data ?? []).map((a: any) => ({
+        type: 'auftragsbestaetigung', id: a.id, label: a.ab_nummer,
+        sublabel: (a.kunde?.firmenname ?? a.betreff) || undefined,
+      })),
+    }
+  }
+
+  if (name === 'convert_angebot_zu_auftrag') {
+    const { data: angebot, error: angebotErr } = await supabase
+      .from('angebote')
+      .select('*, positionen:dokument_positionen(*)')
+      .eq('id', input.angebot_id).single()
+    if (angebotErr || !angebot) return { error: 'Angebot nicht gefunden' }
+
+    const { data: ab, error: abErr } = await supabase
+      .from('auftragsbestatigungen')
+      .insert({
+        kunde_id: angebot.kunde_id, angebot_id: angebot.id,
+        betreff: angebot.betreff, kopftext: angebot.kopftext ?? null, fusstext: angebot.fusstext ?? null,
+        summe_netto_20: angebot.summe_netto_20, summe_netto_10: angebot.summe_netto_10,
+        summe_netto_0: angebot.summe_netto_0, ust_20: angebot.ust_20,
+        ust_10: angebot.ust_10, summe_brutto: angebot.summe_brutto,
+      })
+      .select('id, ab_nummer').single()
+    if (abErr) return { error: abErr.message }
+
+    if (angebot.positionen?.length > 0) {
+      const { error: posErr } = await supabase.from('dokument_positionen').insert(
+        angebot.positionen.map((p: any, i: number) => ({
+          dokument_id: ab.id, dokument_typ: 'auftragsbestaetigung', reihenfolge: i,
+          bezeichnung: p.bezeichnung, beschreibung: p.beschreibung ?? null,
+          menge: p.menge, einheit: p.einheit, einzelpreis_netto: p.einzelpreis_netto,
+          ust_satz: p.ust_satz, rabatt_prozent: (p.rabatt_prozent ?? 0),
+          zeilenbetrag_netto: p.zeilenbetrag_netto,
+        }))
+      )
+      if (posErr) return { error: posErr.message }
+    }
+    await supabase.from('angebote').update({ status: 'berechnet' }).eq('id', input.angebot_id)
+    return {
+      success: true, ab_id: ab.id, ab_nummer: ab.ab_nummer,
+      _entities: [{ type: 'auftragsbestaetigung', id: ab.id, label: ab.ab_nummer, sublabel: angebot.betreff }],
+    }
+  }
+
+  if (name === 'get_kategorien') {
+    const { data, error } = await supabase.from('kategorien').select('wert, name, beschreibung').eq('aktiv', true).order('name')
+    if (error) return { error: error.message }
+    return { kategorien: data }
+  }
+
+  if (name === 'get_mitarbeiter') {
+    const { data, error } = await supabase.from('mitarbeiter').select('id, name, email').eq('aktiv', true).order('name')
+    if (error) return { error: error.message }
+    return {
+      mitarbeiter: data,
+      _entities: (data ?? []).map((m: any) => ({
+        type: 'mitarbeiter', id: m.id, label: m.name, sublabel: m.email ?? undefined,
+      })),
+    }
+  }
+
+  if (name === 'get_bank_transaktionen') {
+    let query = supabase
+      .from('bank_transaktionen')
+      .select('id, datum, betrag, buchungstext, empfaenger, referenz, typ, matched')
+      .order('datum', { ascending: false }).limit(input.limit ?? 15)
+    if (input.search) query = query.or(`buchungstext.ilike.%${input.search}%,empfaenger.ilike.%${input.search}%`)
+    if (input.typ) query = query.eq('typ', input.typ)
+    const { data, error } = await query
+    if (error) return { error: error.message }
+    return { transaktionen: data }
+  }
+
+  if (name === 'get_monats_zusammenfassung') {
+    const monat = input.monat ?? new Date().toISOString().slice(0, 7)
+    const [y, m] = monat.split('-')
+    const start = `${monat}-01`
+    const nd = new Date(parseInt(y), parseInt(m), 1)
+    const end = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}-01`
+
+    const [arRes, erRes, offeneAR, offeneAngebote] = await Promise.all([
+      supabase.from('ausgangsrechnungen').select('summe_brutto, status').gte('rechnungsdatum', start).lt('rechnungsdatum', end),
+      supabase.from('rechnungen').select('betrag').gte('rechnungsdatum', start).lt('rechnungsdatum', end),
+      supabase.from('ausgangsrechnungen').select('id', { count: 'exact', head: true }).eq('status', 'offen'),
+      supabase.from('angebote').select('id', { count: 'exact', head: true }).eq('status', 'offen'),
+    ])
+
+    const umsatz = (arRes.data ?? []).reduce((s: number, r: any) => s + (r.summe_brutto ?? 0), 0)
+    const ausgaben = (erRes.data ?? []).reduce((s: number, r: any) => s + (r.betrag ?? 0), 0)
+    return {
+      monat: monthLabel(monat),
+      umsatz: Math.round(umsatz),
+      ausgaben: Math.round(ausgaben),
+      deckungsbeitrag: Math.round(umsatz - ausgaben),
+      offene_forderungen: offeneAR.count ?? 0,
+      offene_angebote: offeneAngebote.count ?? 0,
+    }
+  }
+
+  if (name === 'get_heute_todo') {
+    const today = new Date().toISOString().slice(0, 10)
+    const [faelligRes, ausgangsRes, angeboteRes] = await Promise.all([
+      supabase.from('rechnungen')
+        .select('id, rechnungsnr, betrag, faelligkeit, lieferant:lieferanten(name)')
+        .lte('faelligkeit', today)
+        .not('status', 'in', '("bezahlt","gebucht")')
+        .order('faelligkeit').limit(8),
+      supabase.from('ausgangsrechnungen')
+        .select('id, rechnungsnummer, summe_brutto, status, kunde:kunden(firmenname, nachname)')
+        .in('status', ['offen', 'ueberfaellig'])
+        .order('rechnungsdatum').limit(8),
+      supabase.from('angebote')
+        .select('id, angebotsnummer, betreff, summe_brutto, kunde:kunden(firmenname, nachname)')
+        .eq('status', 'offen')
+        .order('angebotsdatum', { ascending: false }).limit(5),
+    ])
+    return {
+      faellige_eingangsrechnungen: faelligRes.data ?? [],
+      offene_ausgangsrechnungen: ausgangsRes.data ?? [],
+      offene_angebote: angeboteRes.data ?? [],
+      _entities: [
+        ...(faelligRes.data ?? []).map((r: any) => ({ type: 'eingangsrechnung', id: r.id, label: r.rechnungsnr, sublabel: r.lieferant?.name })),
+        ...(ausgangsRes.data ?? []).map((r: any) => ({ type: 'rechnung', id: r.id, label: r.rechnungsnummer, sublabel: r.kunde?.firmenname ?? `${r.kunde?.vorname ?? ''} ${r.kunde?.nachname ?? ''}`.trim() })),
+        ...(angeboteRes.data ?? []).map((a: any) => ({ type: 'angebot', id: a.id, label: a.angebotsnummer, sublabel: a.betreff ?? a.kunde?.firmenname })),
+      ],
+    }
+  }
+
+  if (name === 'set_eingangsrechnung_status') {
+    let id = input.rechnung_id
+    if (!id && input.rechnungsnr) {
+      const { data } = await supabase.from('rechnungen').select('id').eq('rechnungsnr', input.rechnungsnr).single()
+      id = data?.id
+    }
+    if (!id) return { error: 'Rechnung nicht gefunden' }
+    const { error } = await supabase.from('rechnungen').update({ status: input.status }).eq('id', id)
+    if (error) return { error: error.message }
+    return { success: true, id, neuer_status: input.status }
+  }
+
+  if (name === 'get_rechnung_pdf') {
+    let query = supabase.from('rechnungen').select('id, rechnungsnr, pdf_url, lieferant:lieferanten(name)')
+    if (input.rechnung_id) query = query.eq('id', input.rechnung_id)
+    else if (input.rechnungsnr) query = query.eq('rechnungsnr', input.rechnungsnr)
+    const { data, error } = await query.single()
+    if (error || !data) return { error: 'Rechnung nicht gefunden' }
+    if (!data.pdf_url || data.pdf_url === 'demo') return { error: 'Kein PDF verfügbar für diese Rechnung' }
+    return {
+      rechnungsnr: data.rechnungsnr,
+      lieferant: data.lieferant?.name,
+      pdf_url: data.pdf_url,
+      _entities: [{ type: 'pdf', id: data.pdf_url, label: data.rechnungsnr, sublabel: data.lieferant?.name }],
+    }
+  }
+
   return { error: `Unbekanntes Tool: ${name}` }
 }
 
@@ -290,19 +771,39 @@ REGELN:
 3. Antworte immer auf Deutsch, kurz und direkt.
 4. Nach einem Tool-Aufruf: erkläre die Ergebnisse in 1-3 Sätzen.
 
+WICHTIG — Rechnungstypen unterscheiden:
+- "von [Name]" / "Eingangsrechnung" / "empfangen" / "Lieferant" → get_eingangsrechnungen (Tabelle: rechnungen, wir haben diese BEKOMMEN)
+- "an [Kunde]" / "Ausgangsrechnung" / "gestellt" / "Forderung" → get_ausgangsrechnungen (Tabelle: ausgangsrechnungen, wir haben diese GESTELLT)
+- Verwechsle diese NIEMALS. "von Vadim" = Eingangsrechnung.
+
 Welches Tool wann (PFLICHT — sofort aufrufen, nicht erst fragen):
 - Umsatz / Einnahmen / Entwicklung → get_umsatz_chart
 - Ausgaben / Kosten / Lieferanten → get_ausgaben_chart
-- Offene Rechnungen / Forderungen → get_ausgangsrechnungen(status="offen")
+- Rechnungen VON jemandem → get_eingangsrechnungen(lieferant_search="...")
+- Offene Forderungen / Rechnungen AN Kunden → get_ausgangsrechnungen(status="offen")
 - Angebote / Pipeline → get_angebote
 - Kunden suchen → get_kunden
+- Kunden anlegen → create_kunde
 - Angebot erstellen → get_kunden, dann create_angebot
+- Monatsübersicht / KPI / wie läuft der Monat → get_monats_zusammenfassung
+- Was heute zu tun ist / fällige Rechnungen → get_heute_todo
+- Eingangsrechnung buchen / Status setzen → set_eingangsrechnung_status
+- Ausgangsrechnung bezahlt / storniert → set_ausgangsrechnung_status
+- PDF einer Rechnung anzeigen → get_rechnung_pdf
+- Lieferanten suchen → get_lieferanten
+- Lieferanten anlegen → create_lieferant
+- Auftragsbestätigungen → get_auftragsbestatigungen
+- Angebot in Auftrag umwandeln → convert_angebot_zu_auftrag
+- Kategorien → get_kategorien
+- Mitarbeiter → get_mitarbeiter
+- Bankbewegungen / Kontoauszug → get_bank_transaktionen
 
 Heute: ${new Date().toLocaleDateString('de-AT')}`,
     }
 
     let claudeMessages = [systemMessage, ...messages]
     let pendingChart: any = null
+    const pendingEntities: any[] = []
 
     for (let i = 0; i < 5; i++) {
       const res = await fetch(OPENROUTER_URL, {
@@ -335,7 +836,11 @@ Heute: ${new Date().toLocaleDateString('de-AT')}`,
       if (finish_reason !== 'tool_calls') {
         const text = message.content ?? ''
         return new Response(
-          JSON.stringify({ reply: text, chart: pendingChart }),
+          JSON.stringify({
+            reply: text,
+            chart: pendingChart,
+            entities: pendingEntities.length ? pendingEntities : undefined,
+          }),
           { headers: { ...CORS, 'Content-Type': 'application/json' } }
         )
       }
@@ -357,10 +862,14 @@ Heute: ${new Date().toLocaleDateString('de-AT')}`,
           }
         }
 
+        // Collect entity references, strip before sending to model
+        const { _entities, ...cleanResult } = toolResult
+        if (_entities) pendingEntities.push(..._entities)
+
         toolResults.push({
           role: 'tool',
           tool_call_id: call.id,
-          content: JSON.stringify(toolResult),
+          content: JSON.stringify(cleanResult),
         })
       }
 
