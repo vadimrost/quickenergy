@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react'
 import { Sidebar } from './Sidebar'
-import { AiAgentChat } from '@/features/ai-agent/AiAgentChat'
 
 interface AppLayoutProps {
   children: ReactNode

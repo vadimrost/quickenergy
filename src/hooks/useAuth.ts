@@ -11,9 +11,13 @@ interface AuthState {
 const DEMO_MODE = import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co'
 
 async function upsertProfile(user: User) {
-  await supabase
-    .from('profiles')
-    .upsert({ id: user.id, email: user.email ?? '', updated_at: new Date().toISOString() })
+  try {
+    await supabase
+      .from('profiles')
+      .upsert({ id: user.id, email: user.email ?? '', updated_at: new Date().toISOString() })
+  } catch {
+    // Profile upsert is best-effort; the auth trigger handles initial creation
+  }
 }
 
 export function useAuth(): AuthState {

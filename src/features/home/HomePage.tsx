@@ -7,7 +7,6 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { PageTitle } from '@/components/shared/PageTitle'
-import { ChatCommandBar } from './ChatCommandBar'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
 import { useAusgangsrechnungen } from '@/features/auftraege/ausgangsrechnungen/useAusgangsrechnungen'

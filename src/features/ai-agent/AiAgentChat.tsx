@@ -54,9 +54,6 @@ export function AiAgentChat() {
   const inputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Dashboard has its own ChatCommandBar
-  if (location.pathname === '/') return null
-
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 80)
   }, [open])
@@ -64,6 +61,9 @@ export function AiAgentChat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  // Dashboard has its own ChatCommandBar — must come after all hooks
+  if (location.pathname === '/') return null
 
   function send() {
     if (!input.trim() || loading) return
