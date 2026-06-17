@@ -60,6 +60,44 @@ const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'create_ausgangsrechnung',
+      description: 'Erstellt eine neue Ausgangsrechnung mit Positionen. Frage zuerst nach Kunde (get_kunden), Positionen und Leistungsdatum. Leistungsdatum ODER Leistungszeitraum ist Pflicht (§11 UStG).',
+      parameters: {
+        type: 'object',
+        required: ['kunde_id', 'positionen'],
+        properties: {
+          kunde_id:             { type: 'string', description: 'UUID des Kunden' },
+          betreff:              { type: 'string', description: 'Betreff / Projekttitel' },
+          typ:                  { type: 'string', enum: ['rechnung', 'teilrechnung', 'schlussrechnung'], description: 'Standard: rechnung' },
+          leistungsdatum:       { type: 'string', description: 'Leistungsdatum YYYY-MM-DD (§11 UStG Pflicht, alternativ Zeitraum)' },
+          leistungszeitraum_von:{ type: 'string', description: 'Leistungszeitraum von YYYY-MM-DD' },
+          leistungszeitraum_bis:{ type: 'string', description: 'Leistungszeitraum bis YYYY-MM-DD' },
+          zahlungsziel_tage:    { type: 'number', description: 'Zahlungsziel in Tagen, Standard 14' },
+          positionen: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['bezeichnung', 'menge', 'einzelpreis_netto', 'einheit', 'ust_satz'],
+              properties: {
+                bezeichnung:        { type: 'string' },
+                beschreibung:       { type: 'string' },
+                menge:              { type: 'number' },
+                einzelpreis_netto:  { type: 'number' },
+                einheit:            { type: 'string', enum: ['Stk', 'Std', 'm²', 'lfm', 'kWp', 'kWh', 'pausch', 'Set'] },
+                ust_satz:           { type: 'number', enum: [0, 10, 20] },
+                rabatt_prozent:     { type: 'number' },
+              },
+            },
+          },
+          kopftext: { type: 'string' },
+          fusstext: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'create_angebot',
       description: 'Erstellt ein neues Angebot mit Positionen in der Datenbank.',
       parameters: {
@@ -339,6 +377,128 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'set_angebot_status',
+      description: 'Setzt den Status eines Angebots: annehmen (→ "berechnet"), ablehnen (→ "abgelehnt"), öffnen (→ "offen"). Verwende wenn Nutzer "Angebot annehmen/ablehnen/öffnen" sagt.',
+      parameters: {
+        type: 'object',
+        required: ['status'],
+        properties: {
+          angebot_id:      { type: 'string', description: 'UUID des Angebots' },
+          angebotsnummer:  { type: 'string', description: 'Angebotsnummer (alternativ zu angebot_id)' },
+          status:          { type: 'string', enum: ['entwurf', 'offen', 'berechnet', 'abgelehnt'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'duplicate_angebot',
+      description: 'Kopiert ein bestehendes Angebot mit allen Positionen. Neues Angebot erhält Status "entwurf" und das heutige Datum.',
+      parameters: {
+        type: 'object',
+        properties: {
+          angebot_id:     { type: 'string', description: 'UUID des Angebots' },
+          angebotsnummer: { type: 'string', description: 'Angebotsnummer (alternativ zu angebot_id)' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'convert_angebot_zu_rechnung',
+      description: 'Wandelt ein Angebot direkt in eine Ausgangsrechnung um und kopiert alle Positionen. Setzt Angebot-Status auf "berechnet".',
+      parameters: {
+        type: 'object',
+        required: ['angebot_id'],
+        properties: {
+          angebot_id: { type: 'string', description: 'UUID des Angebots' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_top_kunden_chart',
+      description: 'Zeigt die Top-Kunden nach Umsatz als horizontales Balkendiagramm. Verwende für "Top-Kunden", "beste Kunden", "wer zahlt am meisten", "Kunden nach Umsatz".',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit:  { type: 'number', description: 'Anzahl der Top-Kunden, Standard 8' },
+          monate: { type: 'number', description: 'Zeitraum in Monaten, Standard 12' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_jahresvergleich',
+      description: 'Vergleicht den monatlichen Umsatz des aktuellen Jahres mit dem Vorjahr. Verwende für "Jahresvergleich", "Vorjahr", "wie war letztes Jahr".',
+      parameters: {
+        type: 'object',
+        properties: {
+          jahr: { type: 'number', description: 'Vergleichsjahr (aktuelles Jahr als Basis), Standard: aktuelles Jahr' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_skonto_alarm',
+      description: 'Zeigt offene Eingangsrechnungen deren Zahlungsfrist in Kürze abläuft (Skonto-Fenster). Verwende für "Skonto", "Skonto-Alarm", "ablaufende Fristen", "bald fällige Rechnungen".',
+      parameters: {
+        type: 'object',
+        properties: {
+          tage: { type: 'number', description: 'Wie viele Tage in die Zukunft schauen, Standard 14' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_ust_vorschau',
+      description: 'USt-Vorschau für das laufende Quartal: Umsatzsteuer-Schuld minus Vorsteuer = Zahllast ans Finanzamt. Verwende für "USt-Vorschau", "Umsatzsteuer", "was schulde ich dem Finanzamt", "Vorsteuer".',
+      parameters: {
+        type: 'object',
+        properties: {
+          quartal: { type: 'string', description: 'Quartal im Format "2026-Q2", Standard: aktuelles Quartal' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_kunde',
+      description: 'Aktualisiert die Stammdaten eines bestehenden Kunden (Adresse, E-Mail, Telefon, UID etc.).',
+      parameters: {
+        type: 'object',
+        required: ['kunde_id'],
+        properties: {
+          kunde_id:   { type: 'string', description: 'UUID des Kunden' },
+          firmenname: { type: 'string' },
+          vorname:    { type: 'string' },
+          nachname:   { type: 'string' },
+          email:      { type: 'string' },
+          telefon:    { type: 'string' },
+          adresse:    { type: 'string' },
+          plz:        { type: 'string' },
+          ort:        { type: 'string' },
+          land:       { type: 'string' },
+          uid_nr:     { type: 'string' },
+          notiz:      { type: 'string' },
+        },
+      },
+    },
+  },
 ]
 
 async function executeTool(name: string, input: any, supabase: any): Promise<any> {
@@ -385,6 +545,58 @@ async function executeTool(name: string, input: any, supabase: any): Promise<any
     return {
       success: true, kunde_id: kunde.id, kundennummer: kunde.kundennummer, name: displayName,
       _entities: [{ type: 'kunde', id: kunde.id, label: displayName, sublabel: kunde.kundennummer }],
+    }
+  }
+
+  if (name === 'create_ausgangsrechnung') {
+    const { kunde_id, betreff, typ, leistungsdatum, leistungszeitraum_von, leistungszeitraum_bis,
+            zahlungsziel_tage, positionen, kopftext, fusstext } = input
+    if (!positionen?.length) return { error: 'Mindestens eine Position ist erforderlich' }
+    if (!leistungsdatum && !leistungszeitraum_von) return { error: 'Leistungsdatum oder Leistungszeitraum ist Pflicht (§11 UStG)' }
+    const summen = berechneSummen(positionen)
+    const today = new Date().toISOString().slice(0, 10)
+    const tage = zahlungsziel_tage ?? 14
+    const faellig = new Date(); faellig.setDate(faellig.getDate() + tage)
+    const { data: rechnung, error: rErr } = await supabase.from('ausgangsrechnungen').insert({
+      kunde_id,
+      betreff: betreff ?? null,
+      typ: typ ?? 'rechnung',
+      status: 'entwurf',
+      rechnungsdatum: today,
+      leistungsdatum: leistungsdatum ?? null,
+      leistungszeitraum_von: leistungszeitraum_von ?? null,
+      leistungszeitraum_bis: leistungszeitraum_bis ?? null,
+      zahlungsziel_tage: tage,
+      faelligkeitsdatum: faellig.toISOString().slice(0, 10),
+      kopftext: kopftext ?? null,
+      fusstext: fusstext ?? null,
+      rabatt_gesamt_prozent: 0,
+      summe_netto_20: summen.netto_20,
+      summe_netto_10: summen.netto_10,
+      summe_netto_0:  summen.netto_0,
+      ust_20:         summen.ust_20,
+      ust_10:         summen.ust_10,
+      summe_brutto:   summen.brutto,
+    }).select('id, rechnungsnummer').single()
+    if (rErr) return { error: rErr.message }
+    const { error: posErr } = await supabase.from('dokument_positionen').insert(
+      positionen.map((p: any, i: number) => ({
+        dokument_id: rechnung.id, dokument_typ: 'rechnung', reihenfolge: i,
+        bezeichnung: p.bezeichnung, beschreibung: p.beschreibung ?? null,
+        menge: p.menge, einheit: p.einheit,
+        einzelpreis_netto: p.einzelpreis_netto,
+        ust_satz: p.ust_satz, rabatt_prozent: p.rabatt_prozent ?? 0,
+        zeilenbetrag_netto: p.menge * p.einzelpreis_netto * (1 - (p.rabatt_prozent ?? 0) / 100),
+      }))
+    )
+    if (posErr) return { error: posErr.message }
+    return {
+      success: true,
+      rechnung_id: rechnung.id,
+      rechnungsnummer: rechnung.rechnungsnummer,
+      summe_brutto: Math.round(summen.brutto * 100) / 100,
+      status: 'entwurf',
+      _entities: [{ type: 'rechnung', id: rechnung.id, label: rechnung.rechnungsnummer, sublabel: betreff ?? undefined }],
     }
   }
 
@@ -744,6 +956,213 @@ async function executeTool(name: string, input: any, supabase: any): Promise<any
     }
   }
 
+  if (name === 'set_angebot_status') {
+    let id = input.angebot_id
+    if (!id && input.angebotsnummer) {
+      const { data } = await supabase.from('angebote').select('id').eq('angebotsnummer', input.angebotsnummer).single()
+      id = data?.id
+    }
+    if (!id) return { error: 'Angebot nicht gefunden' }
+    const { error } = await supabase.from('angebote').update({ status: input.status }).eq('id', id)
+    if (error) return { error: error.message }
+    return { success: true, id, neuer_status: input.status }
+  }
+
+  if (name === 'duplicate_angebot') {
+    let id = input.angebot_id
+    if (!id && input.angebotsnummer) {
+      const { data } = await supabase.from('angebote').select('id').eq('angebotsnummer', input.angebotsnummer).single()
+      id = data?.id
+    }
+    if (!id) return { error: 'Angebot nicht gefunden' }
+    const { data: orig, error: origErr } = await supabase.from('angebote').select('*, positionen:dokument_positionen(*)').eq('id', id).single()
+    if (origErr || !orig) return { error: 'Angebot nicht gefunden' }
+    const { id: _id, created_at: _c, angebotsnummer: _nr, ...fields } = orig as any
+    const { data: neu, error: insertErr } = await supabase.from('angebote')
+      .insert({ ...fields, status: 'entwurf', angebotsdatum: new Date().toISOString().slice(0, 10), positionen: undefined })
+      .select('id, angebotsnummer').single()
+    if (insertErr) return { error: insertErr.message }
+    if (orig.positionen?.length > 0) {
+      await supabase.from('dokument_positionen').insert(
+        orig.positionen.map(({ id: _pid, created_at: _pc, dokument_id: _di, ...p }: any) => ({
+          ...p, dokument_id: neu.id, dokument_typ: 'angebot',
+        }))
+      )
+    }
+    return {
+      success: true, angebot_id: neu.id, angebotsnummer: neu.angebotsnummer,
+      _entities: [{ type: 'angebot', id: neu.id, label: neu.angebotsnummer, sublabel: 'Kopie von ' + (orig.angebotsnummer ?? '') }],
+    }
+  }
+
+  if (name === 'convert_angebot_zu_rechnung') {
+    const { data: angebot, error: angebotErr } = await supabase
+      .from('angebote').select('*, positionen:dokument_positionen(*)')
+      .eq('id', input.angebot_id).single()
+    if (angebotErr || !angebot) return { error: 'Angebot nicht gefunden' }
+    const today = new Date().toISOString().slice(0, 10)
+    const faellig = new Date(); faellig.setDate(faellig.getDate() + 14)
+    const { data: rechnung, error: rErr } = await supabase.from('ausgangsrechnungen').insert({
+      kunde_id: angebot.kunde_id, betreff: angebot.betreff,
+      kopftext: angebot.kopftext ?? null, fusstext: angebot.fusstext ?? null,
+      rechnungsdatum: today, zahlungsziel_tage: 14,
+      faelligkeitsdatum: faellig.toISOString().slice(0, 10),
+      typ: 'rechnung', status: 'entwurf',
+      summe_netto_20: angebot.summe_netto_20, summe_netto_10: angebot.summe_netto_10,
+      summe_netto_0: angebot.summe_netto_0, ust_20: angebot.ust_20,
+      ust_10: angebot.ust_10, summe_brutto: angebot.summe_brutto,
+      rabatt_gesamt_prozent: angebot.rabatt_gesamt_prozent ?? 0,
+    }).select('id, rechnungsnummer').single()
+    if (rErr) return { error: rErr.message }
+    if (angebot.positionen?.length > 0) {
+      await supabase.from('dokument_positionen').insert(
+        angebot.positionen.map(({ id: _pid, created_at: _pc, dokument_id: _di, ...p }: any) => ({
+          ...p, dokument_id: rechnung.id, dokument_typ: 'rechnung',
+        }))
+      )
+    }
+    await supabase.from('angebote').update({ status: 'berechnet' }).eq('id', input.angebot_id)
+    return {
+      success: true, rechnung_id: rechnung.id, rechnungsnummer: rechnung.rechnungsnummer,
+      _entities: [{ type: 'rechnung', id: rechnung.id, label: rechnung.rechnungsnummer, sublabel: angebot.betreff }],
+    }
+  }
+
+  if (name === 'get_top_kunden_chart') {
+    const n = input.monate ?? 12
+    const limit = input.limit ?? 8
+    const since = new Date(); since.setMonth(since.getMonth() - n)
+    const { data, error } = await supabase
+      .from('ausgangsrechnungen')
+      .select('summe_brutto, kunde:kunden(id, firmenname, vorname, nachname)')
+      .gte('rechnungsdatum', since.toISOString().slice(0, 10))
+      .neq('status', 'storniert')
+    if (error) return { error: error.message }
+    const map = new Map<string, number>()
+    ;(data ?? []).forEach((r: any) => {
+      const name = r.kunde?.firmenname || `${r.kunde?.vorname ?? ''} ${r.kunde?.nachname ?? ''}`.trim() || 'Unbekannt'
+      map.set(name, (map.get(name) ?? 0) + (r.summe_brutto ?? 0))
+    })
+    const chartData = [...map.entries()]
+      .sort((a, b) => b[1] - a[1]).slice(0, limit)
+      .map(([label, value]) => ({ label, value: Math.round(value) }))
+    const total = chartData.reduce((s, d) => s + d.value, 0)
+    return {
+      chartData, chartType: 'horizontal-bar',
+      chartTitle: `Top ${limit} Kunden nach Umsatz (letzte ${n} Monate)`,
+      summary: `Gesamtumsatz Top-Kunden: €${total.toLocaleString('de-AT')}`,
+    }
+  }
+
+  if (name === 'get_jahresvergleich') {
+    const baseJahr = input.jahr ?? new Date().getFullYear()
+    const prevJahr = baseJahr - 1
+    const [curRes, prevRes] = await Promise.all([
+      supabase.from('ausgangsrechnungen').select('rechnungsdatum, summe_brutto')
+        .gte('rechnungsdatum', `${baseJahr}-01-01`).lt('rechnungsdatum', `${baseJahr + 1}-01-01`).neq('status', 'storniert'),
+      supabase.from('ausgangsrechnungen').select('rechnungsdatum, summe_brutto')
+        .gte('rechnungsdatum', `${prevJahr}-01-01`).lt('rechnungsdatum', `${baseJahr}-01-01`).neq('status', 'storniert'),
+    ])
+    const months = ['01','02','03','04','05','06','07','08','09','10','11','12']
+    const names = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez']
+    const byMonth = (rows: any[]) => {
+      const m = new Map(months.map(mm => [mm, 0]))
+      ;(rows ?? []).forEach((r: any) => { const mm = (r.rechnungsdatum ?? '').slice(5, 7); if (m.has(mm)) m.set(mm, (m.get(mm) ?? 0) + (r.summe_brutto ?? 0)) })
+      return m
+    }
+    const cur = byMonth(curRes.data ?? [])
+    const prev = byMonth(prevRes.data ?? [])
+    const chartData = months.map((mm, i) => ({ label: names[i], value: Math.round(cur.get(mm) ?? 0) }))
+    const curTotal = [...cur.values()].reduce((s, v) => s + v, 0)
+    const prevTotal = [...prev.values()].reduce((s, v) => s + v, 0)
+    const wachstum = prevTotal > 0 ? Math.round((curTotal - prevTotal) / prevTotal * 100) : null
+    const prevByMonth = months.map((mm, i) => `${names[i]}: €${Math.round(prev.get(mm) ?? 0).toLocaleString('de-AT')}`).join(', ')
+    return {
+      chartData, chartType: 'bar',
+      chartTitle: `Umsatz ${baseJahr} (monatlich)`,
+      aktuelles_jahr: baseJahr, gesamt_aktuell: Math.round(curTotal),
+      vorjahr: prevJahr, gesamt_vorjahr: Math.round(prevTotal),
+      wachstum_prozent: wachstum,
+      vorjahr_monatlich: prevByMonth,
+    }
+  }
+
+  if (name === 'get_skonto_alarm') {
+    const tage = input.tage ?? 14
+    const today = new Date().toISOString().slice(0, 10)
+    const future = new Date(); future.setDate(future.getDate() + tage)
+    const futureStr = future.toISOString().slice(0, 10)
+    const { data, error } = await supabase
+      .from('rechnungen')
+      .select('id, rechnungsnr, betrag, faelligkeit, rechnungsdatum, lieferant:lieferanten(name)')
+      .gte('faelligkeit', today)
+      .lte('faelligkeit', futureStr)
+      .not('status', 'in', '("bezahlt","gebucht")')
+      .order('faelligkeit')
+    if (error) return { error: error.message }
+    const gesamt = (data ?? []).reduce((s: number, r: any) => s + (r.betrag ?? 0), 0)
+    return {
+      rechnungen: data ?? [],
+      anzahl: data?.length ?? 0,
+      gesamt_betrag: Math.round(gesamt),
+      zeitraum: `Nächste ${tage} Tage`,
+      _entities: (data ?? []).map((r: any) => ({
+        type: 'eingangsrechnung', id: r.id, label: r.rechnungsnr, sublabel: r.lieferant?.name,
+      })),
+    }
+  }
+
+  if (name === 'get_ust_vorschau') {
+    const now = new Date()
+    let year = now.getFullYear()
+    let q = Math.floor(now.getMonth() / 3) + 1
+    if (input.quartal) {
+      const parts = input.quartal.split('-Q')
+      year = parseInt(parts[0]); q = parseInt(parts[1])
+    }
+    const qStart = `${year}-${String((q - 1) * 3 + 1).padStart(2, '0')}-01`
+    const nextQ = q === 4 ? `${year + 1}-01-01` : `${year}-${String(q * 3 + 1).padStart(2, '0')}-01`
+    const [arRes, erRes] = await Promise.all([
+      supabase.from('ausgangsrechnungen').select('ust_20, ust_10').gte('rechnungsdatum', qStart).lt('rechnungsdatum', nextQ).neq('status', 'storniert'),
+      supabase.from('rechnungen').select('betrag, ust_satz').gte('rechnungsdatum', qStart).lt('rechnungsdatum', nextQ),
+    ])
+    const ust_schuld = (arRes.data ?? []).reduce((s: number, r: any) => s + (r.ust_20 ?? 0) + (r.ust_10 ?? 0), 0)
+    const vorsteuer = (erRes.data ?? []).reduce((s: number, r: any) => s + (r.betrag ?? 0) * ((r.ust_satz ?? 0) / 100), 0)
+    const zahllast = ust_schuld - vorsteuer
+    return {
+      quartal: `Q${q} ${year}`,
+      zeitraum: `${qStart} bis ${nextQ}`,
+      ust_schuld: Math.round(ust_schuld),
+      vorsteuer: Math.round(vorsteuer),
+      zahllast: Math.round(zahllast),
+      hinweis: zahllast > 0 ? `Zahllast ans Finanzamt: €${Math.round(zahllast).toLocaleString('de-AT')}` : `Vorsteuerüberhang: €${Math.round(Math.abs(zahllast)).toLocaleString('de-AT')} (Erstattung möglich)`,
+    }
+  }
+
+  if (name === 'update_kunde') {
+    const { kunde_id, ...fields } = input
+    const patch: any = {}
+    if (fields.firmenname !== undefined) patch.firmenname = fields.firmenname
+    if (fields.vorname !== undefined) patch.vorname = fields.vorname
+    if (fields.nachname !== undefined) patch.nachname = fields.nachname
+    if (fields.email !== undefined) patch.email = fields.email
+    if (fields.telefon !== undefined) patch.telefon = fields.telefon
+    if (fields.adresse !== undefined) patch.adresse = fields.adresse
+    if (fields.plz !== undefined) patch.plz = fields.plz
+    if (fields.ort !== undefined) patch.ort = fields.ort
+    if (fields.land !== undefined) patch.land = fields.land
+    if (fields.uid_nr !== undefined) patch.uid_nr = fields.uid_nr
+    if (fields.notiz !== undefined) patch.notiz = fields.notiz
+    if (Object.keys(patch).length === 0) return { error: 'Keine Änderungen angegeben' }
+    const { data, error } = await supabase.from('kunden').update(patch).eq('id', kunde_id).select('id, firmenname, vorname, nachname').single()
+    if (error) return { error: error.message }
+    const name = data.firmenname ?? `${data.vorname ?? ''} ${data.nachname ?? ''}`.trim()
+    return {
+      success: true, kunde_id: data.id, name,
+      _entities: [{ type: 'kunde', id: data.id, label: name }],
+    }
+  }
+
   return { error: `Unbekanntes Tool: ${name}` }
 }
 
@@ -785,6 +1204,7 @@ Welches Tool wann (PFLICHT — sofort aufrufen, nicht erst fragen):
 - Kunden suchen → get_kunden
 - Kunden anlegen → create_kunde
 - Angebot erstellen → get_kunden, dann create_angebot
+- Rechnung erstellen → get_kunden, dann create_ausgangsrechnung (Leistungsdatum erfragen falls nicht genannt)
 - Monatsübersicht / KPI / wie läuft der Monat → get_monats_zusammenfassung
 - Was heute zu tun ist / fällige Rechnungen → get_heute_todo
 - Eingangsrechnung buchen / Status setzen → set_eingangsrechnung_status
@@ -797,6 +1217,14 @@ Welches Tool wann (PFLICHT — sofort aufrufen, nicht erst fragen):
 - Kategorien → get_kategorien
 - Mitarbeiter → get_mitarbeiter
 - Bankbewegungen / Kontoauszug → get_bank_transaktionen
+- Angebot annehmen/ablehnen → set_angebot_status
+- Angebot kopieren/duplizieren → duplicate_angebot
+- Angebot → direkt in Rechnung → convert_angebot_zu_rechnung
+- Top-Kunden / beste Kunden nach Umsatz → get_top_kunden_chart
+- Jahresvergleich / Vorjahr → get_jahresvergleich
+- Skonto / ablaufende Fristen / bald fällig → get_skonto_alarm
+- USt-Vorschau / Umsatzsteuer / Zahllast Finanzamt → get_ust_vorschau
+- Kunden bearbeiten/aktualisieren → update_kunde
 
 Heute: ${new Date().toLocaleDateString('de-AT')}`,
     }
