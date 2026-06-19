@@ -12,6 +12,7 @@ import { KategorienPage } from '@/features/kategorien/KategorienPage'
 import { LohnPage } from '@/features/lohn/LohnPage'
 import { KontoauszugPage } from '@/features/kontoauszug/KontoauszugPage'
 import { useAuth } from '@/hooks/useAuth'
+import { RoleProvider, useRole } from '@/contexts/RoleContext'
 // Ausgehende Dokumente
 import { KundenPage } from '@/features/auftraege/kunden/KundenPage'
 import { AngebotePage } from '@/features/auftraege/angebote/AngebotePage'
@@ -25,8 +26,6 @@ import { EinstellungenPage } from '@/features/einstellungen/EinstellungenPage'
 import { CrmPage } from '@/features/crm/CrmPage'
 import { LeadDetailPage } from '@/features/crm/LeadDetailPage'
 
-const CRM_ENABLED = import.meta.env.VITE_CRM_ENABLED === 'true'
-
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 1000 * 60 * 5 },
@@ -35,54 +34,84 @@ const queryClient = new QueryClient({
 
 const DEMO_MODE = import.meta.env.VITE_SUPABASE_URL === 'https://placeholder.supabase.co'
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth()
+function Spinner() {
+  return (
+    <div className="min-h-screen bg-bg-base flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
 
-  // In demo mode, skip Supabase auth entirely — check sessionStorage flag instead
+// Route that admins can access — setters get redirected to /crm
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+  const { isSetter, isLoading: roleLoading } = useRole()
+
   if (DEMO_MODE) {
     const isDemoAuthed = sessionStorage.getItem('demo_auth') === '1'
     if (!isDemoAuthed) return <Navigate to="/login" replace />
     return <AppLayout>{children}</AppLayout>
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-bg-base flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
+  if (loading || roleLoading) return <Spinner />
+  if (!user) return <Navigate to="/login" replace />
+  if (isSetter) return <Navigate to="/crm" replace />
+
+  return <AppLayout>{children}</AppLayout>
+}
+
+// Route accessible by everyone (admin + setter)
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+  const { isLoading: roleLoading } = useRole()
+
+  if (DEMO_MODE) {
+    const isDemoAuthed = sessionStorage.getItem('demo_auth') === '1'
+    if (!isDemoAuthed) return <Navigate to="/login" replace />
+    return <AppLayout>{children}</AppLayout>
   }
 
+  if (loading || roleLoading) return <Spinner />
   if (!user) return <Navigate to="/login" replace />
 
   return <AppLayout>{children}</AppLayout>
+}
+
+// Wildcard redirect depends on role
+function DefaultRedirect() {
+  const { isSetter } = useRole()
+  return <Navigate to={isSetter ? '/crm' : '/'} replace />
 }
 
 function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<ProtectedRoute><HomePage /></ProtectedRoute>} />
-      <Route path="/rechnungen" element={<ProtectedRoute><InboxPage /></ProtectedRoute>} />
-      <Route path="/buchung/:id" element={<ProtectedRoute><BuchungPage /></ProtectedRoute>} />
-      <Route path="/exports" element={<ProtectedRoute><ExportsPage /></ProtectedRoute>} />
-      <Route path="/mitarbeiter" element={<ProtectedRoute><MitarbeiterPage /></ProtectedRoute>} />
-      <Route path="/kategorien" element={<ProtectedRoute><KategorienPage /></ProtectedRoute>} />
-      <Route path="/lohn" element={<ProtectedRoute><LohnPage /></ProtectedRoute>} />
-      <Route path="/kontoauszuege" element={<ProtectedRoute><KontoauszugPage /></ProtectedRoute>} />
-      {/* Ausgehende Dokumente */}
-      <Route path="/kunden" element={<ProtectedRoute><KundenPage /></ProtectedRoute>} />
-      <Route path="/angebote" element={<ProtectedRoute><AngebotePage /></ProtectedRoute>} />
-      <Route path="/angebote/:id" element={<ProtectedRoute><AngebotFormPage /></ProtectedRoute>} />
-      <Route path="/auftraege" element={<ProtectedRoute><AuftragsbestaetigungPage /></ProtectedRoute>} />
-      <Route path="/auftraege/:id" element={<ProtectedRoute><AuftragsbestaetigungFormPage /></ProtectedRoute>} />
-      <Route path="/ausgangsrechnungen" element={<ProtectedRoute><AusgangsrechnungPage /></ProtectedRoute>} />
-      <Route path="/ausgangsrechnungen/:id" element={<ProtectedRoute><AusgangsrechnungFormPage /></ProtectedRoute>} />
-      <Route path="/mahnwesen" element={<ProtectedRoute><MahnwesenPage /></ProtectedRoute>} />
-      <Route path="/einstellungen" element={<ProtectedRoute><EinstellungenPage /></ProtectedRoute>} />
-      {CRM_ENABLED && <Route path="/crm" element={<ProtectedRoute><CrmPage /></ProtectedRoute>} />}
-      {CRM_ENABLED && <Route path="/crm/:id" element={<ProtectedRoute><LeadDetailPage /></ProtectedRoute>} />}
-      <Route path="*" element={<Navigate to="/" replace />} />
+
+      {/* Admin-only routes */}
+      <Route path="/"                    element={<AdminRoute><HomePage /></AdminRoute>} />
+      <Route path="/rechnungen"          element={<AdminRoute><InboxPage /></AdminRoute>} />
+      <Route path="/buchung/:id"         element={<AdminRoute><BuchungPage /></AdminRoute>} />
+      <Route path="/exports"             element={<AdminRoute><ExportsPage /></AdminRoute>} />
+      <Route path="/mitarbeiter"         element={<AdminRoute><MitarbeiterPage /></AdminRoute>} />
+      <Route path="/kategorien"          element={<AdminRoute><KategorienPage /></AdminRoute>} />
+      <Route path="/lohn"                element={<AdminRoute><LohnPage /></AdminRoute>} />
+      <Route path="/kontoauszuege"       element={<AdminRoute><KontoauszugPage /></AdminRoute>} />
+      <Route path="/kunden"              element={<AdminRoute><KundenPage /></AdminRoute>} />
+      <Route path="/angebote"            element={<AdminRoute><AngebotePage /></AdminRoute>} />
+      <Route path="/angebote/:id"        element={<AdminRoute><AngebotFormPage /></AdminRoute>} />
+      <Route path="/auftraege"           element={<AdminRoute><AuftragsbestaetigungPage /></AdminRoute>} />
+      <Route path="/auftraege/:id"       element={<AdminRoute><AuftragsbestaetigungFormPage /></AdminRoute>} />
+      <Route path="/ausgangsrechnungen"  element={<AdminRoute><AusgangsrechnungPage /></AdminRoute>} />
+      <Route path="/ausgangsrechnungen/:id" element={<AdminRoute><AusgangsrechnungFormPage /></AdminRoute>} />
+      <Route path="/mahnwesen"           element={<AdminRoute><MahnwesenPage /></AdminRoute>} />
+      <Route path="/einstellungen"       element={<AdminRoute><EinstellungenPage /></AdminRoute>} />
+
+      {/* CRM: accessible for everyone */}
+      <Route path="/crm"    element={<ProtectedRoute><CrmPage /></ProtectedRoute>} />
+      <Route path="/crm/:id" element={<ProtectedRoute><LeadDetailPage /></ProtectedRoute>} />
+
+      <Route path="*" element={<DefaultRedirect />} />
     </Routes>
   )
 }
@@ -91,8 +120,10 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <AppRoutes />
-        <Toaster richColors position="top-right" />
+        <RoleProvider>
+          <AppRoutes />
+          <Toaster richColors position="top-right" />
+        </RoleProvider>
       </BrowserRouter>
     </QueryClientProvider>
   )

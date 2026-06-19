@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react'
-import { Bot, X, Send, Loader2, ExternalLink, Sparkles, Building2, FileText, Receipt, FileInput, FileDown, ClipboardList, Truck, User } from 'lucide-react'
-import { Link, useLocation } from 'react-router-dom'
+import React, { useState, useRef, useEffect } from 'react'
+import { Bot, X, Send, Loader2, ExternalLink, Sparkles, Building2, FileText, Receipt, FileInput, FileDown, ClipboardList, Truck, User, MapPin, Euro, Calendar, UserCircle } from 'lucide-react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { cn, formatEuro } from '@/lib/utils'
-import { useAiChat, type ChartData, type EntityRef } from './useAiChat'
+import { useAiChat, type ChartData, type EntityRef, type CrmLeadData, type CrmFunnelStage, type CrmSetterStat } from './useAiChat'
 import { ThinkingAnimation } from './ThinkingAnimation'
+import { SvgFunnel } from '@/features/crm/SvgFunnel'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
@@ -12,8 +13,184 @@ const SUGGESTIONS = [
   { label: 'Umsatz-Entwicklung', prompt: 'Zeig mir meine Umsatz-Entwicklung der letzten 6 Monate' },
   { label: 'Ausgaben', prompt: 'Wie sind meine Ausgaben diesen Monat aufgeteilt?' },
   { label: 'Offene Rechnungen', prompt: 'Welche Rechnungen sind noch offen?' },
+  { label: 'CRM Pipeline', prompt: 'Zeig mir den Conversion-Trichter meiner Leads' },
+  { label: 'Leads heute', prompt: 'Welche Leads haben heute Termin?' },
   { label: 'Angebot erstellen', prompt: 'Erstelle ein Angebot für einen Kunden' },
 ]
+
+const CRM_STATUS_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  neu:           { bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400'   },
+  kontaktiert:   { bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-400'    },
+  termin:        { bg: 'bg-violet-100',  text: 'text-violet-700',  dot: 'bg-violet-500'  },
+  angebot:       { bg: 'bg-amber-100',   text: 'text-amber-700',   dot: 'bg-amber-400'   },
+  auftrag:       { bg: 'bg-green-100',   text: 'text-green-700',   dot: 'bg-green-500'   },
+  abgeschlossen: { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  verloren:      { bg: 'bg-red-100',     text: 'text-red-600',     dot: 'bg-red-400'     },
+}
+
+const CRM_STATUS_LABELS: Record<string, string> = {
+  neu: 'Neu', kontaktiert: 'Kontaktiert', termin: 'Termin',
+  angebot: 'Angebot', auftrag: 'Auftrag', abgeschlossen: 'Abgeschlossen', verloren: 'Verloren',
+}
+
+function initials(name: string) {
+  return name.trim().split(/\s+/).map(w => w[0] ?? '').join('').toUpperCase().slice(0, 2)
+}
+
+function CrmLeadCards({ leads, onClose }: { leads: CrmLeadData[]; onClose: () => void }) {
+  const navigate = useNavigate()
+  return (
+    <div className="mt-3 space-y-2">
+      {leads.map(lead => {
+        const sc = CRM_STATUS_COLORS[lead.status] ?? CRM_STATUS_COLORS.neu
+        return (
+          <button
+            key={lead.id}
+            onClick={() => { navigate(`/crm/${lead.id}`); onClose() }}
+            className="w-full text-left bg-white border border-slate-200 rounded-xl px-3 py-2.5 hover:border-indigo-300 hover:shadow-sm transition-all group"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center text-white text-[11px] font-bold shrink-0">
+                {initials(lead.name)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 justify-between">
+                  <span className="text-sm font-semibold text-slate-800 truncate">{lead.name}</span>
+                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0', sc.bg, sc.text)}>
+                    {CRM_STATUS_LABELS[lead.status] ?? lead.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                  {(lead.plz || lead.ort) && (
+                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <MapPin size={9} />{[lead.plz, lead.ort].filter(Boolean).join(' ')}
+                    </span>
+                  )}
+                  {lead.deal_wert != null && lead.deal_wert > 0 && (
+                    <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold">
+                      <Euro size={9} />{lead.deal_wert.toLocaleString('de-AT')}
+                    </span>
+                  )}
+                  {lead.zugewiesen_an && (
+                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                      <UserCircle size={9} />{lead.zugewiesen_an}
+                    </span>
+                  )}
+                  {lead.termin_datum && (
+                    <span className="flex items-center gap-1 text-[11px] text-violet-600 font-medium">
+                      <Calendar size={9} />{new Date(lead.termin_datum).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ExternalLink size={12} className="text-slate-300 group-hover:text-indigo-400 shrink-0 transition-colors" />
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function CrmFunnelCard({ stages }: { stages: CrmFunnelStage[] }) {
+  return (
+    <div className="mt-3 bg-white border border-slate-200 rounded-xl px-4 pt-4 pb-2">
+      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Conversion-Trichter</span>
+      <SvgFunnel data={stages} labels={CRM_STATUS_LABELS} />
+    </div>
+  )
+}
+
+function renderMarkdown(text: string): React.ReactNode {
+  function inline(s: string): React.ReactNode {
+    const parts = s.split(/(\*\*[^*]+\*\*)/g)
+    return parts.map((p, i) =>
+      p.startsWith('**') && p.endsWith('**')
+        ? <strong key={i} className="font-semibold">{p.slice(2, -2)}</strong>
+        : p
+    )
+  }
+  const lines = text.split('\n')
+  const result: React.ReactNode[] = []
+  let listItems: React.ReactNode[] = []
+  let listType: 'ul' | 'ol' | null = null
+  let olCounter = 0
+  function flushList() {
+    if (!listItems.length) return
+    result.push(
+      listType === 'ul'
+        ? <ul key={`ul-${result.length}`} className="space-y-0.5 my-1 pl-1">{listItems}</ul>
+        : <ol key={`ol-${result.length}`} className="space-y-0.5 my-1 pl-1">{listItems}</ol>
+    )
+    listItems = []; listType = null; olCounter = 0
+  }
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const ul = line.match(/^[-*•]\s+(.+)/)
+    const ol = line.match(/^\d+\.\s+(.+)/)
+    if (ul) {
+      if (listType === 'ol') flushList()
+      listType = 'ul'
+      listItems.push(<li key={i} className="flex gap-1.5"><span className="text-slate-400 shrink-0">·</span><span>{inline(ul[1])}</span></li>)
+    } else if (ol) {
+      if (listType === 'ul') flushList()
+      listType = 'ol'; olCounter++
+      listItems.push(<li key={i} className="flex gap-1.5"><span className="text-slate-400 shrink-0 font-medium">{olCounter}.</span><span>{inline(ol[1])}</span></li>)
+    } else {
+      flushList()
+      if (line.trim()) result.push(<span key={i} className={result.length > 0 ? 'block mt-1' : 'block'}>{inline(line)}</span>)
+    }
+  }
+  flushList()
+  return <>{result}</>
+}
+
+function CrmSetterStats({ stats }: { stats: CrmSetterStat[] }) {
+  const stageKeys = ['neu', 'kontaktiert', 'termin', 'angebot', 'auftrag', 'abgeschlossen', 'verloren'] as const
+  return (
+    <div className="mt-3 space-y-2">
+      {stats.slice(0, 8).map(s => (
+        <div key={s.setter} className="bg-white border border-slate-200 rounded-xl px-3 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-400 to-indigo-500 flex items-center justify-center text-white text-[11px] font-bold shrink-0">
+              {initials(s.setter)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-800 truncate">{s.setter}</span>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="text-[11px] font-bold text-emerald-600">{s.conversion_rate}</span>
+                  <span className="text-[11px] text-slate-400">{s.gesamt} Leads</span>
+                </div>
+              </div>
+              <div className="flex gap-px mt-1.5 h-1.5 rounded-full overflow-hidden bg-slate-100">
+                {stageKeys.map(stage => {
+                  const count = s[stage] as number
+                  if (!count || !s.gesamt) return null
+                  const pct = (count / s.gesamt) * 100
+                  const dot = CRM_STATUS_COLORS[stage]?.dot ?? 'bg-slate-300'
+                  return <div key={stage} className={cn('h-full', dot)} style={{ width: `${pct}%`, minWidth: count > 0 ? 2 : 0 }} title={`${stage}: ${count}`} />
+                })}
+              </div>
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
+                {stageKeys.filter(k => (s[k] as number) > 0).map(k => (
+                  <span key={k} className={cn('text-[10px] font-medium', CRM_STATUS_COLORS[k]?.text ?? 'text-slate-500')}>
+                    {CRM_STATUS_LABELS[k]}: {s[k]}
+                  </span>
+                ))}
+                {s.deal_wert_gesamt > 0 && (
+                  <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-semibold ml-auto">
+                    <Euro size={9} />{s.deal_wert_gesamt.toLocaleString('de-AT')}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 const ENTITY_CONFIG = {
   kunde:               { icon: Building2,     bg: 'bg-blue-50 border-blue-200 hover:bg-blue-100',      text: 'text-blue-700',    external: false, href: (_id: string) => '/kunden' },
@@ -84,6 +261,7 @@ export function AiAgentChat() {
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
   const { messages, loading, angebotLink, sendMessage } = useAiChat()
+  const closeChat = () => setOpen(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -130,7 +308,7 @@ export function AiAgentChat() {
       {open && (
         <div
           className="fixed z-[70] flex flex-col bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden"
-          style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 'min(92vw, 640px)', height: 'min(85vh, 720px)' }}
+          style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 'min(96vw, 860px)', height: 'min(92vh, 900px)' }}
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
@@ -175,11 +353,22 @@ export function AiAgentChat() {
                     <Bot size={14} className="text-white" />
                   </div>
                 )}
-                <div className={cn('max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap', m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-sm shadow-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm')}>
-                  {m.content}
-                  {m.chart && <MiniChart chart={m.chart} />}
-                  {m.entities && m.entities.length > 0 && <EntityChips entities={m.entities} />}
-                </div>
+                {m.role === 'assistant' ? (
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="inline-block max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-slate-100 text-slate-800 rounded-tl-sm">
+                      {renderMarkdown(m.content)}
+                      {m.chart && <MiniChart chart={m.chart} />}
+                      {m.entities && m.entities.length > 0 && <EntityChips entities={m.entities} />}
+                      {m.crm_leads && m.crm_leads.length > 0 && <CrmLeadCards leads={m.crm_leads} onClose={closeChat} />}
+                      {m.crm_setter_stats && m.crm_setter_stats.length > 0 && <CrmSetterStats stats={m.crm_setter_stats} />}
+                    </div>
+                    {m.crm_funnel && m.crm_funnel.length > 0 && <CrmFunnelCard stages={m.crm_funnel} />}
+                  </div>
+                ) : (
+                  <div className="max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-indigo-600 text-white rounded-tr-sm shadow-sm whitespace-pre-wrap">
+                    {m.content}
+                  </div>
+                )}
               </div>
             ))}
 

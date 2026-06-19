@@ -1,28 +1,28 @@
 import { useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  ArrowUpFromLine, LogOut, ReceiptText, Users, Tag, Banknote,
+  LogOut, ReceiptText, Banknote,
   Landmark, MoreHorizontal, X, FileText, ClipboardCheck, Receipt,
   UserSquare2, Briefcase, ChevronDown, LayoutDashboard, BellRing, Settings, ContactRound,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
+import { useRole } from '@/contexts/RoleContext'
 import { useRechnungen } from '@/features/inbox/useRechnungen'
+import { BenachrichtigungenPanel } from './BenachrichtigungenPanel'
 import { toast } from 'sonner'
 
-// Top-level nav items (not in the Aufträge group)
-const CRM_ENABLED = import.meta.env.VITE_CRM_ENABLED === 'true'
+const ADMIN_TOP_ITEMS = [
+  { icon: LayoutDashboard, path: '/',           label: 'Übersicht',  end: true,  badge: false },
+  { icon: ReceiptText,     path: '/rechnungen', label: 'Rechnungen', end: false, badge: true  },
+  { icon: ContactRound,    path: '/crm',        label: 'CRM',        end: false, badge: false },
+]
 
-const TOP_ITEMS = [
-  { icon: LayoutDashboard, path: '/',           label: 'Übersicht',   end: true,  badge: false },
-  { icon: ReceiptText,     path: '/rechnungen', label: 'Rechnungen',  end: false, badge: true  },
-  ...(CRM_ENABLED ? [{ icon: ContactRound, path: '/crm', label: 'CRM', end: false, badge: false }] : []),
-  { icon: ArrowUpFromLine, path: '/exports',    label: 'Exports',     end: false, badge: false },
+const SETTER_TOP_ITEMS = [
+  { icon: ContactRound, path: '/crm', label: 'CRM', end: false, badge: false },
 ]
 
 const BOTTOM_ITEMS = [
-  { icon: Users,    path: '/mitarbeiter',   label: 'Mitarbeiter',  end: false, badge: false },
-  { icon: Tag,      path: '/kategorien',    label: 'Kategorien',   end: false, badge: false },
   { icon: Banknote, path: '/lohn',          label: 'Lohnkosten',   end: false, badge: false },
   { icon: Landmark, path: '/kontoauszuege', label: 'Kontoauszüge', end: false, badge: false },
   { icon: Settings, path: '/einstellungen', label: 'Einstellungen', end: false, badge: false },
@@ -41,16 +41,14 @@ const AUFTRAEGE_CHILDREN = [
 const MOBILE_MAIN = ['/', '/rechnungen', '/lohn', '/kontoauszuege']
 
 const MOBILE_MORE = [
-  { icon: ArrowUpFromLine, path: '/exports',     label: 'Exports'    },
-  { icon: Users,           path: '/mitarbeiter', label: 'Mitarbeiter'},
-  { icon: Tag,             path: '/kategorien',  label: 'Kategorien' },
-  { icon: LogOut,          path: null,           label: 'Logout'     },
+  { icon: Settings, path: '/einstellungen', label: 'Einstellungen' },
+  { icon: LogOut,   path: null,             label: 'Logout'        },
 ]
 
 const RADIAL_OFFSETS = [
+  { x: -40, y: -80 },
+  { x:  40, y: -80 },
   { x: -78, y: -52 },
-  { x: -28, y: -90 },
-  { x:  28, y: -90 },
   { x:  78, y: -52 },
 ]
 
@@ -60,11 +58,14 @@ function getInitials(email: string) {
 
 export function Sidebar() {
   const { user, signOut } = useAuth()
+  const { isAdmin, isSetter } = useRole()
   const navigate = useNavigate()
   const location = useLocation()
   const { data: rechnungen = [] } = useRechnungen()
   const pendingCount = rechnungen.filter(r => r.status === 'eingegangen').length
   const [moreOpen, setMoreOpen] = useState(false)
+
+  const TOP_ITEMS = isSetter ? SETTER_TOP_ITEMS : ADMIN_TOP_ITEMS
 
   // Group is open by default; stays toggled by user click
   const isAuftActive = AUFTRAEGE_CHILDREN.some(c => location.pathname.startsWith(c.path))
@@ -119,81 +120,80 @@ export function Sidebar() {
             </NavLink>
           ))}
 
-          {/* Separator */}
-          <div className="w-6 border-t border-border my-1" />
+          {isAdmin && (
+            <>
+              {/* Separator */}
+              <div className="w-6 border-t border-border my-1" />
 
-          {/* ── Aufträge collapsible group ── */}
-          <div className="w-full flex flex-col items-center">
+              {/* ── Aufträge collapsible group ── */}
+              <div className="w-full flex flex-col items-center">
+                <button
+                  title="Aufträge"
+                  onClick={() => setAuftOpen(v => !v)}
+                  className={cn(
+                    'relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors group',
+                    isAuftActive ? 'bg-accent-100 text-accent-600' : 'text-ink-muted hover:bg-bg-muted'
+                  )}
+                >
+                  <Briefcase size={20} />
+                  <ChevronDown
+                    size={10}
+                    className={cn(
+                      'absolute bottom-1 right-1 transition-transform duration-200',
+                      auftOpen ? 'rotate-0' : '-rotate-90',
+                      isAuftActive ? 'text-accent-500' : 'text-ink-subtle'
+                    )}
+                  />
+                </button>
 
-            {/* Parent toggle button */}
-            <button
-              title="Aufträge"
-              onClick={() => setAuftOpen(v => !v)}
-              className={cn(
-                'relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors group',
-                isAuftActive ? 'bg-accent-100 text-accent-600' : 'text-ink-muted hover:bg-bg-muted'
-              )}
-            >
-              <Briefcase size={20} />
-              {/* Small chevron indicator */}
-              <ChevronDown
-                size={10}
-                className={cn(
-                  'absolute bottom-1 right-1 transition-transform duration-200',
-                  auftOpen ? 'rotate-0' : '-rotate-90',
-                  isAuftActive ? 'text-accent-500' : 'text-ink-subtle'
+                {auftOpen && (
+                  <div className="mt-1 flex flex-col items-center gap-0.5 border-l-2 border-accent-200 pl-1">
+                    {AUFTRAEGE_CHILDREN.map(({ icon: Icon, path, label }) => (
+                      <NavLink
+                        key={path}
+                        to={path}
+                        title={label}
+                        className={({ isActive }) =>
+                          cn(
+                            'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
+                            isActive ? 'bg-accent-100 text-accent-600' : 'text-ink-muted hover:bg-bg-muted'
+                          )
+                        }
+                      >
+                        <Icon size={18} />
+                      </NavLink>
+                    ))}
+                  </div>
                 )}
-              />
-            </button>
-
-            {/* Sub-items with vertical line */}
-            {auftOpen && (
-              <div className="mt-1 flex flex-col items-center gap-0.5 border-l-2 border-accent-200 pl-1">
-                {AUFTRAEGE_CHILDREN.map(({ icon: Icon, path, label }) => (
-                  <NavLink
-                    key={path}
-                    to={path}
-                    title={label}
-                    className={({ isActive }) =>
-                      cn(
-                        'w-9 h-9 rounded-lg flex items-center justify-center transition-colors',
-                        isActive
-                          ? 'bg-accent-100 text-accent-600'
-                          : 'text-ink-muted hover:bg-bg-muted'
-                      )
-                    }
-                  >
-                    <Icon size={18} />
-                  </NavLink>
-                ))}
               </div>
-            )}
-          </div>
 
-          {/* Separator */}
-          <div className="w-6 border-t border-border my-1" />
+              {/* Separator */}
+              <div className="w-6 border-t border-border my-1" />
 
-          {/* Bottom items */}
-          {BOTTOM_ITEMS.map(({ icon: Icon, path, label, end }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={end}
-              title={label}
-              className={({ isActive }) =>
-                cn(
-                  'relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
-                  isActive ? 'bg-accent-100 text-accent-600' : 'text-ink-muted hover:bg-bg-muted'
-                )
-              }
-            >
-              <Icon size={20} />
-            </NavLink>
-          ))}
+              {/* Bottom items */}
+              {BOTTOM_ITEMS.map(({ icon: Icon, path, label, end }) => (
+                <NavLink
+                  key={path}
+                  to={path}
+                  end={end}
+                  title={label}
+                  className={({ isActive }) =>
+                    cn(
+                      'relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors',
+                      isActive ? 'bg-accent-100 text-accent-600' : 'text-ink-muted hover:bg-bg-muted'
+                    )
+                  }
+                >
+                  <Icon size={20} />
+                </NavLink>
+              ))}
+            </>
+          )}
         </nav>
 
-        {/* User + Logout */}
+        {/* Notifications + User + Logout */}
         <div className="flex flex-col items-center gap-2 pb-4">
+          <BenachrichtigungenPanel />
           <div className="w-10 h-10 rounded-full bg-accent-500 flex items-center justify-center">
             <span className="text-white text-xs font-semibold">
               {user?.email ? getInitials(user.email) : 'U'}

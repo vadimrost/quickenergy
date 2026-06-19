@@ -324,6 +324,13 @@ export interface Lead {
   utm_content: string | null
   utm_id: string | null
   kunde_id: string | null
+  zugewiesen_an: string | null
+  deal_wert: number | null
+  nachricht: string | null
+  lead_score: number | null
+  strasse: string | null
+  hausnummer: string | null
+  ort: string | null
   kunde?: Kunde | null
 }
 

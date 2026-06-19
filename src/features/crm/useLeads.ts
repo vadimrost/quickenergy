@@ -4,14 +4,16 @@ import type { Lead, LeadStatus } from '@/types/database'
 
 const Q = 'leads'
 
-export function useLeads() {
+export function useLeads(setterFilter?: string | null) {
   return useQuery({
-    queryKey: [Q],
+    queryKey: setterFilter ? [Q, 'setter', setterFilter] : [Q],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('leads')
         .select('*, kunde:kunden(*)')
         .order('created_at', { ascending: false })
+      if (setterFilter) q = q.eq('zugewiesen_an', setterFilter)
+      const { data, error } = await q
       if (error) throw error
       return data as Lead[]
     },
@@ -46,6 +48,17 @@ export function useUpdateLead() {
         .single()
       if (error) throw error
       return data as Lead
+    },
+    onMutate: async (variables) => {
+      await qc.cancelQueries({ queryKey: [Q] })
+      const snapshot = qc.getQueryData<Lead[]>([Q])
+      qc.setQueryData<Lead[]>([Q], old =>
+        (old ?? []).map(l => l.id === variables.id ? { ...l, ...variables } : l)
+      )
+      return { snapshot }
+    },
+    onError: (_err, _vars, ctx: any) => {
+      if (ctx?.snapshot) qc.setQueryData([Q], ctx.snapshot)
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: [Q] })

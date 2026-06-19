@@ -499,6 +499,131 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'get_setter_performance',
+      description: 'Gibt die Performance pro Setter/Mitarbeiter zurück: Anzahl Leads pro Status, Conversion-Rate, Deal-Wert.',
+      parameters: {
+        type: 'object',
+        properties: {
+          setter_name: { type: 'string', description: 'Optional: nur für diesen Setter filtern' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_lead_pipeline_stats',
+      description: 'Gibt Pipeline-Statistiken zurück: Gesamtzahl Leads, Verteilung nach Status, offene Deals, Conversion-Rate, Gesamtwert.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crm_get_leads',
+      description: 'Listet CRM-Leads auf mit optionalen Filtern. Zeigt eine visuelle Karten-Liste. Verwende für "zeig mir Leads", "alle Leads", "Leads im Status X", "wer hat Termin heute".',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', enum: ['neu', 'kontaktiert', 'termin', 'angebot', 'auftrag', 'abgeschlossen', 'verloren'] },
+          zugewiesen_an: { type: 'string', description: 'Setter-Name als Filter' },
+          search: { type: 'string', description: 'Sucht in Vor-/Nachname, E-Mail, PLZ' },
+          hat_termin_heute: { type: 'boolean', description: 'Wenn true: nur Leads mit Termin heute' },
+          limit: { type: 'number', description: 'Max Anzahl, Standard 15' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crm_get_lead',
+      description: 'Gibt Details zu einem bestimmten Lead. Suche nach Name oder UUID.',
+      parameters: {
+        type: 'object',
+        properties: {
+          lead_id: { type: 'string' },
+          search: { type: 'string', description: 'Vor-/Nachname oder E-Mail' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crm_create_lead',
+      description: 'Erstellt einen neuen CRM-Lead. Frage vorher nach Vorname, Nachname (oder E-Mail), PLZ/Ort.',
+      parameters: {
+        type: 'object',
+        properties: {
+          vorname:        { type: 'string' },
+          nachname:       { type: 'string' },
+          email:          { type: 'string' },
+          telefon:        { type: 'string' },
+          plz:            { type: 'string' },
+          ort:            { type: 'string' },
+          strasse:        { type: 'string' },
+          hausnummer:     { type: 'string' },
+          anlagenort:     { type: 'string' },
+          anlagengroesse: { type: 'string' },
+          notiz:          { type: 'string' },
+          zugewiesen_an:  { type: 'string', description: 'Setter-Name' },
+          deal_wert:      { type: 'number' },
+          status:         { type: 'string', enum: ['neu', 'kontaktiert', 'termin', 'angebot', 'auftrag', 'abgeschlossen', 'verloren'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crm_update_lead',
+      description: 'Aktualisiert einen Lead: Status ändern, Setter zuweisen, Deal-Wert setzen, Notiz schreiben, Termin setzen. Verwende crm_get_lead zuerst wenn nur ein Name bekannt ist.',
+      parameters: {
+        type: 'object',
+        required: ['lead_id'],
+        properties: {
+          lead_id:       { type: 'string' },
+          status:        { type: 'string', enum: ['neu', 'kontaktiert', 'termin', 'angebot', 'auftrag', 'abgeschlossen', 'verloren'] },
+          zugewiesen_an: { type: 'string', description: 'Setter-Name, leerer String zum Entfernen' },
+          deal_wert:     { type: 'number' },
+          notiz:         { type: 'string' },
+          termin_datum:  { type: 'string', description: 'ISO datetime z.B. 2026-06-20T14:00:00' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crm_delete_lead',
+      description: 'Löscht einen Lead unwiderruflich. IMMER zuerst Bestätigung einholen: "Soll ich [Name] wirklich löschen? Das kann nicht rückgängig gemacht werden."',
+      parameters: {
+        type: 'object',
+        required: ['lead_id'],
+        properties: {
+          lead_id: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'crm_get_funnel',
+      description: 'Zeigt den Conversion-Trichter als visuelle Animation. Verwende für "Trichter", "Funnel", "wie konvertieren meine Leads", "Pipeline zeigen".',
+      parameters: {
+        type: 'object',
+        properties: {
+          monat:       { type: 'string', description: 'YYYY-MM, Standard: alle' },
+          setter_name: { type: 'string', description: 'Filtert nach Setter' },
+        },
+      },
+    },
+  },
 ]
 
 async function executeTool(name: string, input: any, supabase: any): Promise<any> {
@@ -1163,6 +1288,198 @@ async function executeTool(name: string, input: any, supabase: any): Promise<any
     }
   }
 
+  if (name === 'get_setter_performance') {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('zugewiesen_an, status, deal_wert')
+    if (error) return { error: error.message }
+    const map = new Map<string, any>()
+    for (const lead of data ?? []) {
+      const key = lead.zugewiesen_an ?? 'Nicht zugewiesen'
+      if (!map.has(key)) map.set(key, { setter: key, gesamt: 0, neu: 0, kontaktiert: 0, termin: 0, angebot: 0, auftrag: 0, abgeschlossen: 0, verloren: 0, deal_wert_gesamt: 0 })
+      const s = map.get(key)!
+      s.gesamt++
+      if (lead.status in s) s[lead.status]++
+      s.deal_wert_gesamt += lead.deal_wert ?? 0
+    }
+    const stats = Array.from(map.values()).map(s => ({
+      ...s,
+      deal_wert_gesamt: Math.round(s.deal_wert_gesamt),
+      conversion_rate: s.gesamt > 0 ? `${Math.round(((s.auftrag + s.abgeschlossen) / s.gesamt) * 100)}%` : '0%',
+    })).sort((a, b) => b.gesamt - a.gesamt)
+    const filtered = input.setter_name ? stats.filter(s => s.setter.toLowerCase().includes(input.setter_name.toLowerCase())) : stats
+    return {
+      count: filtered.length,
+      setter_list: filtered.map(s => ({ setter: s.setter, gesamt: s.gesamt, conversion_rate: s.conversion_rate, deal_wert_gesamt: s.deal_wert_gesamt })),
+      _crm_setter_stats: filtered,
+    }
+  }
+
+  if (name === 'get_lead_pipeline_stats') {
+    const { data, error } = await supabase
+      .from('leads')
+      .select('status, deal_wert, created_at, termin_datum, zugewiesen_an')
+    if (error) return { error: error.message }
+    type LeadRow = { status: string; deal_wert: number | null; termin_datum: string | null }
+    const leads: LeadRow[] = data ?? []
+    const total = leads.length
+    const stages = ['neu', 'kontaktiert', 'termin', 'angebot', 'auftrag', 'abgeschlossen', 'verloren']
+    const byStage = stages.map(s => ({
+      status: s, count: leads.filter((l: LeadRow) => l.status === s).length,
+      wert: Math.round(leads.filter((l: LeadRow) => l.status === s).reduce((acc: number, l: LeadRow) => acc + (l.deal_wert ?? 0), 0)),
+    }))
+    const auftraege = leads.filter((l: LeadRow) => l.status === 'auftrag' || l.status === 'abgeschlossen').length
+    const gesamtwert = Math.round(leads.reduce((acc: number, l: LeadRow) => acc + (l.deal_wert ?? 0), 0))
+    const auftragswert = Math.round(leads.filter((l: LeadRow) => l.status === 'auftrag' || l.status === 'abgeschlossen').reduce((acc: number, l: LeadRow) => acc + (l.deal_wert ?? 0), 0))
+    const mitTermin = leads.filter((l: LeadRow) => l.termin_datum && new Date(l.termin_datum) > new Date()).length
+    const funnelOrder = ['neu', 'kontaktiert', 'termin', 'angebot', 'auftrag', 'abgeschlossen']
+    const funnelIdxMap: Record<string, number> = Object.fromEntries(funnelOrder.map((s, i) => [s, i]))
+    const funnelStages = funnelOrder.map(stage => ({
+      stage,
+      count: leads.filter((l: LeadRow) => l.status !== 'verloren' && (funnelIdxMap[l.status] ?? -1) >= funnelIdxMap[stage]).length,
+    }))
+    return {
+      total,
+      conversion_rate: total > 0 ? `${Math.round((auftraege / total) * 100)}%` : '0%',
+      auftraege,
+      gesamtwert_pipeline: gesamtwert,
+      auftragswert,
+      offene_termine: mitTermin,
+      nach_status: byStage,
+      _crm_funnel: funnelStages,
+    }
+  }
+
+  // ── CRM Tools ──────────────────────────────────────────────────────────────
+
+  if (name === 'crm_get_leads') {
+    const today = new Date().toISOString().slice(0, 10)
+    let query = supabase
+      .from('leads')
+      .select('id, vorname, nachname, email, telefon, plz, ort, status, zugewiesen_an, deal_wert, created_at, termin_datum, lead_score')
+      .order('created_at', { ascending: false })
+      .limit(input.limit ?? 15)
+    if (input.status) query = query.eq('status', input.status)
+    if (input.zugewiesen_an) query = query.eq('zugewiesen_an', input.zugewiesen_an)
+    if (input.search) {
+      query = query.or(`vorname.ilike.%${input.search}%,nachname.ilike.%${input.search}%,email.ilike.%${input.search}%,plz.ilike.%${input.search}%`)
+    }
+    if (input.hat_termin_heute) {
+      query = query.gte('termin_datum', `${today}T00:00:00`).lte('termin_datum', `${today}T23:59:59`)
+    }
+    const { data, error } = await query
+    if (error) return { error: error.message }
+    const leads = (data ?? []).map((l: any) => ({
+      id: l.id,
+      name: [l.vorname, l.nachname].filter(Boolean).join(' ') || l.email || '—',
+      email: l.email,
+      plz: l.plz,
+      ort: l.ort,
+      status: l.status,
+      zugewiesen_an: l.zugewiesen_an,
+      deal_wert: l.deal_wert,
+      created_at: l.created_at,
+      termin_datum: l.termin_datum,
+    }))
+    return { count: leads.length, leads: leads.map((l: any) => ({ name: l.name, status: l.status, ort: l.ort, setter: l.zugewiesen_an })), _crm_leads: leads }
+  }
+
+  if (name === 'crm_get_lead') {
+    if (input.lead_id) {
+      const { data, error } = await supabase.from('leads')
+        .select('id, vorname, nachname, email, telefon, plz, ort, strasse, hausnummer, status, zugewiesen_an, deal_wert, created_at, termin_datum, lead_score, notiz, nachricht, anlagenort, anlagengroesse')
+        .eq('id', input.lead_id).single()
+      if (error) return { error: error.message }
+      const name = [data.vorname, data.nachname].filter(Boolean).join(' ') || data.email || '—'
+      return { lead: { ...data, name }, _crm_leads: [{ id: data.id, name, status: data.status, zugewiesen_an: data.zugewiesen_an, deal_wert: data.deal_wert, created_at: data.created_at, termin_datum: data.termin_datum, email: data.email, plz: data.plz, ort: data.ort }] }
+    }
+    if (input.search) {
+      const { data, error } = await supabase.from('leads')
+        .select('id, vorname, nachname, email, plz, ort, status, zugewiesen_an, deal_wert, created_at, termin_datum, notiz')
+        .or(`vorname.ilike.%${input.search}%,nachname.ilike.%${input.search}%,email.ilike.%${input.search}%`)
+        .limit(5)
+      if (error) return { error: error.message }
+      const leads = (data ?? []).map((l: any) => ({ id: l.id, name: [l.vorname, l.nachname].filter(Boolean).join(' ') || l.email || '—', status: l.status, zugewiesen_an: l.zugewiesen_an, deal_wert: l.deal_wert, created_at: l.created_at, termin_datum: l.termin_datum, email: l.email, plz: l.plz, ort: l.ort }))
+      return { count: leads.length, leads, _crm_leads: leads }
+    }
+    return { error: 'lead_id oder search erforderlich' }
+  }
+
+  if (name === 'crm_create_lead') {
+    const { data, error } = await supabase.from('leads').insert({
+      vorname:        input.vorname ?? null,
+      nachname:       input.nachname ?? null,
+      email:          input.email ?? null,
+      telefon:        input.telefon ?? null,
+      plz:            input.plz ?? null,
+      ort:            input.ort ?? null,
+      strasse:        input.strasse ?? null,
+      hausnummer:     input.hausnummer ?? null,
+      anlagenort:     input.anlagenort ?? null,
+      anlagengroesse: input.anlagengroesse ?? null,
+      notiz:          input.notiz ?? null,
+      zugewiesen_an:  input.zugewiesen_an ?? null,
+      deal_wert:      input.deal_wert ?? null,
+      status:         input.status ?? 'neu',
+    }).select('id, vorname, nachname, email, status, created_at').single()
+    if (error) return { error: error.message }
+    const leadName = [data.vorname, data.nachname].filter(Boolean).join(' ') || data.email || 'Lead'
+    return {
+      success: true, lead_id: data.id, name: leadName, status: data.status,
+      _crm_leads: [{ id: data.id, name: leadName, status: data.status, zugewiesen_an: input.zugewiesen_an ?? null, deal_wert: input.deal_wert ?? null, created_at: data.created_at, plz: input.plz ?? null, ort: input.ort ?? null }],
+    }
+  }
+
+  if (name === 'crm_update_lead') {
+    const update: any = {}
+    if (input.status !== undefined) update.status = input.status
+    if (input.zugewiesen_an !== undefined) update.zugewiesen_an = input.zugewiesen_an || null
+    if (input.deal_wert !== undefined) update.deal_wert = input.deal_wert
+    if (input.notiz !== undefined) update.notiz = input.notiz
+    if (input.termin_datum !== undefined) update.termin_datum = input.termin_datum
+    const { data, error } = await supabase.from('leads').update(update).eq('id', input.lead_id)
+      .select('id, vorname, nachname, email, status, zugewiesen_an, deal_wert, created_at, termin_datum, plz, ort').single()
+    if (error) return { error: error.message }
+    const leadName = [data.vorname, data.nachname].filter(Boolean).join(' ') || data.email || '—'
+    return {
+      success: true, lead_id: data.id, name: leadName, updated: Object.keys(update),
+      _crm_leads: [{ id: data.id, name: leadName, status: data.status, zugewiesen_an: data.zugewiesen_an, deal_wert: data.deal_wert, created_at: data.created_at, termin_datum: data.termin_datum, plz: data.plz, ort: data.ort }],
+    }
+  }
+
+  if (name === 'crm_delete_lead') {
+    const { error } = await supabase.from('leads').delete().eq('id', input.lead_id)
+    if (error) return { error: error.message }
+    return { success: true, deleted_id: input.lead_id }
+  }
+
+  if (name === 'crm_get_funnel') {
+    let query = supabase.from('leads').select('status, deal_wert, created_at, zugewiesen_an')
+    if (input.monat) {
+      query = query.gte('created_at', `${input.monat}-01`).lt('created_at', `${input.monat.slice(0, 4)}-${String(parseInt(input.monat.slice(5, 7)) + 1).padStart(2, '0')}-01`)
+    }
+    if (input.setter_name) query = query.eq('zugewiesen_an', input.setter_name)
+    const { data, error } = await query
+    if (error) return { error: error.message }
+    const leads: any[] = data ?? []
+    const stageOrder = ['neu', 'kontaktiert', 'termin', 'angebot', 'auftrag', 'abgeschlossen']
+    const stageIdx = Object.fromEntries(stageOrder.map((s, i) => [s, i]))
+    const funnelStages = stageOrder.map(stage => {
+      const idx = stageIdx[stage]
+      const count = leads.filter(l => l.status !== 'verloren' && (stageIdx[l.status] ?? -1) >= idx).length
+      return { stage, count }
+    })
+    const total = leads.length
+    const auftraege = leads.filter(l => l.status === 'auftrag' || l.status === 'abgeschlossen').length
+    return {
+      total_leads: total,
+      conversion_rate: total > 0 ? `${Math.round((auftraege / total) * 100)}%` : '0%',
+      verloren: leads.filter(l => l.status === 'verloren').length,
+      funnel_stages: funnelStages,
+      _crm_funnel: funnelStages,
+    }
+  }
+
   return { error: `Unbekanntes Tool: ${name}` }
 }
 
@@ -1188,7 +1505,9 @@ REGELN:
 1. Nenne oder beschreibe deine Tools NIEMALS in deiner Antwort — ruf sie einfach auf.
 2. Sage NIEMALS, dass du keinen Datenzugriff hast — du hast immer Zugriff über die Tools.
 3. Antworte immer auf Deutsch, kurz und direkt.
-4. Nach einem Tool-Aufruf: erkläre die Ergebnisse in 1-3 Sätzen.
+4. Wenn ein Tool-Ergebnis das Feld angezeigt="visuell_im_frontend" enthält, antworte mit GENAU EINEM kurzen Satz ohne jegliche Zahlen oder Daten — z.B. "Hier ist dein aktueller Conversion-Trichter." oder "Hier sind die Setter-Statistiken." — sonst nichts. Das Frontend zeigt alle Details automatisch.
+5. Verwende KEIN Markdown: keine ### Überschriften, kein **fett**, keine - Listen, keine nummerierten Listen, keine Tabellen mit |. Nur normaler Fließtext.
+6. Erwähne Charts, Grafiken, Karten oder visuelle Elemente NICHT in deiner Antwort — sie erscheinen automatisch. Schreibe NICHT "Hier ist ein Chart", "Grafik folgt", "Die Karten zeigen..." o.ä.
 
 WICHTIG — Rechnungstypen unterscheiden:
 - "von [Name]" / "Eingangsrechnung" / "empfangen" / "Lieferant" → get_eingangsrechnungen (Tabelle: rechnungen, wir haben diese BEKOMMEN)
@@ -1225,6 +1544,17 @@ Welches Tool wann (PFLICHT — sofort aufrufen, nicht erst fragen):
 - Skonto / ablaufende Fristen / bald fällig → get_skonto_alarm
 - USt-Vorschau / Umsatzsteuer / Zahllast Finanzamt → get_ust_vorschau
 - Kunden bearbeiten/aktualisieren → update_kunde
+- Setter-Performance / wer hat wie viele Leads / Conversion pro Mitarbeiter → get_setter_performance
+- Pipeline-Statistiken / Leads gesamt / Deal-Werte / Conversion-Rate → get_lead_pipeline_stats
+
+CRM-Aktionen (PFLICHT — sofort aufrufen):
+- Leads auflisten / suchen / anzeigen → crm_get_leads
+- Lead-Details anzeigen → crm_get_lead
+- Neuen Lead anlegen → crm_create_lead (fehlende Pflichtfelder vorher erfragen)
+- Lead-Status ändern / Setter zuweisen / Deal-Wert setzen / Termin setzen / Notiz → crm_update_lead (zuerst crm_get_lead wenn nur Name bekannt)
+- Lead löschen → IMMER erst fragen "Soll ich [Name] wirklich löschen? Das kann nicht rückgängig gemacht werden." DANN crm_delete_lead
+- Conversion-Trichter / Funnel visualisieren → crm_get_funnel
+- Leads mit Termin heute → crm_get_leads(hat_termin_heute=true)
 
 Heute: ${new Date().toLocaleDateString('de-AT')}`,
     }
@@ -1232,6 +1562,9 @@ Heute: ${new Date().toLocaleDateString('de-AT')}`,
     let claudeMessages = [systemMessage, ...messages]
     let pendingChart: any = null
     const pendingEntities: any[] = []
+    let pendingCrmLeads: any[] | null = null
+    let pendingCrmFunnel: any[] | null = null
+    let pendingCrmSetterStats: any[] | null = null
 
     for (let i = 0; i < 5; i++) {
       const res = await fetch(OPENROUTER_URL, {
@@ -1268,6 +1601,9 @@ Heute: ${new Date().toLocaleDateString('de-AT')}`,
             reply: text,
             chart: pendingChart,
             entities: pendingEntities.length ? pendingEntities : undefined,
+            crm_leads: pendingCrmLeads ?? undefined,
+            crm_funnel: pendingCrmFunnel ?? undefined,
+            crm_setter_stats: pendingCrmSetterStats ?? undefined,
           }),
           { headers: { ...CORS, 'Content-Type': 'application/json' } }
         )
@@ -1290,14 +1626,31 @@ Heute: ${new Date().toLocaleDateString('de-AT')}`,
           }
         }
 
-        // Collect entity references, strip before sending to model
-        const { _entities, ...cleanResult } = toolResult
+        // Strip visual-only fields before sending to model; capture them for frontend
+        const { _entities, _crm_leads, _crm_funnel, _crm_setter_stats, ...cleanResult } = toolResult
         if (_entities) pendingEntities.push(..._entities)
+        if (_crm_leads) pendingCrmLeads = _crm_leads
+        if (_crm_funnel) pendingCrmFunnel = _crm_funnel
+        if (_crm_setter_stats) pendingCrmSetterStats = _crm_setter_stats
+
+        // For CRM visual tools, replace the model's view with a minimal hint
+        // so the model has no numeric data to describe as text
+        let modelResult: Record<string, unknown>
+        if (_crm_funnel || _crm_setter_stats) {
+          modelResult = { angezeigt: 'visuell_im_frontend' }
+        } else if (_crm_leads && _crm_leads.length > 0) {
+          modelResult = { angezeigt: 'visuell_im_frontend', anzahl: _crm_leads.length }
+        } else {
+          delete cleanResult.funnel_stages
+          delete cleanResult.nach_status
+          delete cleanResult.setter_list
+          modelResult = cleanResult
+        }
 
         toolResults.push({
           role: 'tool',
           tool_call_id: call.id,
-          content: JSON.stringify(cleanResult),
+          content: JSON.stringify(modelResult),
         })
       }
 
