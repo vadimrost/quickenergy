@@ -452,10 +452,32 @@ function ListView({ leads, mitarbeiter, labels, onAssign, onDeleteLead }: {
   const aktiveMa = mitarbeiter.filter(m => m.aktiv)
   const [confirmId, setConfirmId] = useState<string | null>(null)
 
+  const deleteButton = (lead: Lead) => (
+    <div onClick={e => e.stopPropagation()}>
+      {confirmId === lead.id ? (
+        <button
+          onClick={() => { setConfirmId(null); onDeleteLead(lead.id) }}
+          className="w-8 h-8 rounded-lg bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
+          title="Bestätigen"
+        >
+          <Trash2 size={13} />
+        </button>
+      ) : (
+        <button
+          onClick={() => setConfirmId(lead.id)}
+          className="w-8 h-8 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-colors"
+          title="Löschen"
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-      {/* Header */}
-      <div className="grid items-center gap-4 px-5 py-3 bg-slate-50 border-b border-slate-200"
+      {/* Desktop table header */}
+      <div className="hidden md:grid items-center gap-4 px-5 py-3 bg-slate-50 border-b border-slate-200"
         style={{ gridTemplateColumns: '1fr 120px 100px 130px 190px 36px' }}>
         {['Name', 'Status', 'Score', 'Eingegangen', 'Zugewiesen', ''].map(h => (
           <span key={h} className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">{h}</span>
@@ -469,111 +491,115 @@ function ListView({ leads, mitarbeiter, labels, onAssign, onDeleteLead }: {
       ) : (
         leads.map((lead, i) => {
           const name = leadName(lead)
+          const borderClass = i !== leads.length - 1 ? 'border-b border-slate-100' : ''
           return (
-            <div
-              key={lead.id}
-              onClick={() => navigate(`/crm/${lead.id}`)}
-              className={cn(
-                'grid items-center gap-4 px-5 py-3 cursor-pointer transition-colors hover:bg-slate-50',
-                i !== leads.length - 1 && 'border-b border-slate-100',
-              )}
-              style={{ gridTemplateColumns: '1fr 120px 100px 130px 190px 36px' }}
-            >
-              {/* Name */}
-              <div className="flex items-center gap-3 min-w-0">
+            <div key={lead.id} className={borderClass}>
+
+              {/* ── Mobile card layout ─────────────────────────────────────── */}
+              <div
+                className="md:hidden flex items-center gap-3 px-4 py-3 cursor-pointer active:bg-slate-50 transition-colors"
+                onClick={() => navigate(`/crm/${lead.id}`)}
+              >
                 <Avatar name={name} size="md" />
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{name}</p>
-                  {lead.email && (
-                    <p className="text-[11px] text-slate-400 truncate">{lead.email}</p>
-                  )}
-                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    {lead.plz && (
-                      <span className="text-[10px] text-slate-400">
-                        {lead.plz} {lead.bundesland}
-                      </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <p className="text-sm font-semibold text-slate-800">{name}</p>
+                    <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap', LEAD_STATUS_COLORS[lead.status])}>
+                      {labels[lead.status]}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(lead.plz || lead.bundesland) && (
+                      <span className="text-[11px] text-slate-400">{[lead.plz, lead.bundesland].filter(Boolean).join(' ')}</span>
                     )}
                     {lead.utm_source && (
                       <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-semibold tracking-wide">
                         {lead.utm_source.toUpperCase()}
                       </span>
                     )}
+                    <span className="text-[11px] text-slate-400">{relTime(lead.created_at)}</span>
                   </div>
                 </div>
+                {deleteButton(lead)}
               </div>
 
-              {/* Status */}
-              <span className={cn(
-                'text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap w-fit',
-                LEAD_STATUS_COLORS[lead.status],
-              )}>
-                {labels[lead.status]}
-              </span>
-
-              {/* Score */}
-              <div><ScoreBadge score={lead.lead_score} /></div>
-
-              {/* Time */}
-              <span className="text-xs text-slate-400 whitespace-nowrap">
-                {relTime(lead.created_at)}
-              </span>
-
-              {/* Assignee dropdown */}
-              <div onClick={e => e.stopPropagation()}>
-                <Select
-                  value={lead.zugewiesen_an ?? '__none__'}
-                  onValueChange={v => onAssign(lead.id, v === '__none__' ? null : v)}
-                >
-                  <SelectTrigger className={cn(
-                    'h-8 text-xs border rounded-xl px-2.5 w-full transition-colors',
-                    lead.zugewiesen_an
-                      ? 'border-slate-200 bg-white text-slate-700'
-                      : 'border-dashed border-slate-200 bg-transparent text-slate-400',
-                  )}>
-                    {lead.zugewiesen_an ? (
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Avatar name={lead.zugewiesen_an} size="sm" />
-                        <span className="truncate font-medium">{lead.zugewiesen_an}</span>
-                      </div>
-                    ) : (
-                      <SelectValue placeholder="Nicht zugewiesen" />
+              {/* ── Desktop table row ──────────────────────────────────────── */}
+              <div
+                className="hidden md:grid items-center gap-4 px-5 py-3 cursor-pointer transition-colors hover:bg-slate-50"
+                onClick={() => navigate(`/crm/${lead.id}`)}
+                style={{ gridTemplateColumns: '1fr 120px 100px 130px 190px 36px' }}
+              >
+                {/* Name */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar name={name} size="md" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{name}</p>
+                    {lead.email && (
+                      <p className="text-[11px] text-slate-400 truncate">{lead.email}</p>
                     )}
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-slate-400 italic">Nicht zugewiesen</span>
-                    </SelectItem>
-                    {aktiveMa.map(m => (
-                      <SelectItem key={m.id} value={m.name}>
-                        <div className="flex items-center gap-2">
-                          <Avatar name={m.name} size="sm" />
-                          {m.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                      {lead.plz && (
+                        <span className="text-[10px] text-slate-400">{lead.plz} {lead.bundesland}</span>
+                      )}
+                      {lead.utm_source && (
+                        <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-semibold tracking-wide">
+                          {lead.utm_source.toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
 
-              {/* Delete */}
-              <div onClick={e => e.stopPropagation()}>
-                {confirmId === lead.id ? (
-                  <button
-                    onClick={() => { setConfirmId(null); onDeleteLead(lead.id) }}
-                    className="w-8 h-8 rounded-lg bg-red-500 hover:bg-red-600 text-white flex items-center justify-center transition-colors"
-                    title="Bestätigen"
+                {/* Status */}
+                <span className={cn('text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap w-fit', LEAD_STATUS_COLORS[lead.status])}>
+                  {labels[lead.status]}
+                </span>
+
+                {/* Score */}
+                <div><ScoreBadge score={lead.lead_score} /></div>
+
+                {/* Time */}
+                <span className="text-xs text-slate-400 whitespace-nowrap">{relTime(lead.created_at)}</span>
+
+                {/* Assignee */}
+                <div onClick={e => e.stopPropagation()}>
+                  <Select
+                    value={lead.zugewiesen_an ?? '__none__'}
+                    onValueChange={v => onAssign(lead.id, v === '__none__' ? null : v)}
                   >
-                    <Trash2 size={13} />
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setConfirmId(lead.id)}
-                    className="w-8 h-8 rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-colors"
-                    title="Löschen"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
+                    <SelectTrigger className={cn(
+                      'h-8 text-xs border rounded-xl px-2.5 w-full transition-colors',
+                      lead.zugewiesen_an
+                        ? 'border-slate-200 bg-white text-slate-700'
+                        : 'border-dashed border-slate-200 bg-transparent text-slate-400',
+                    )}>
+                      {lead.zugewiesen_an ? (
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Avatar name={lead.zugewiesen_an} size="sm" />
+                          <span className="truncate font-medium">{lead.zugewiesen_an}</span>
+                        </div>
+                      ) : (
+                        <SelectValue placeholder="Nicht zugewiesen" />
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">
+                        <span className="text-slate-400 italic">Nicht zugewiesen</span>
+                      </SelectItem>
+                      {aktiveMa.map(m => (
+                        <SelectItem key={m.id} value={m.name}>
+                          <div className="flex items-center gap-2">
+                            <Avatar name={m.name} size="sm" />
+                            {m.name}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Delete */}
+                {deleteButton(lead)}
               </div>
             </div>
           )
@@ -1002,44 +1028,44 @@ export function CrmPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex items-center justify-between mb-5 gap-3">
         <PageTitle title="CRM" subtitle={`${filtered.length} Leads`} />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <div className="flex items-center bg-slate-100 rounded-xl p-0.5 gap-0.5">
             {VIEWS.map(v => (
               <button
                 key={v.key}
                 onClick={() => setView(v.key)}
                 className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                  'flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
                   view === v.key
                     ? 'bg-white shadow-sm text-slate-800'
                     : 'text-slate-400 hover:text-slate-600',
                 )}
               >
                 <v.icon size={13} />
-                {v.label}
+                <span className="hidden sm:inline">{v.label}</span>
               </button>
             ))}
           </div>
           {isAdmin && (
-            <Button size="sm" onClick={() => navigate('/crm/neu')} className="shadow-sm">
-              <Plus size={14} className="mr-1.5" />
-              Neuer Lead
+            <Button size="sm" onClick={() => navigate('/crm/neu')} className="shadow-sm px-2 sm:px-3">
+              <Plus size={14} className="sm:mr-1.5" />
+              <span className="hidden sm:inline">Neuer Lead</span>
             </Button>
           )}
         </div>
       </div>
 
       {/* Search + Setter filter */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <Input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Suche..."
-            className="pl-9 h-8 text-sm w-52 bg-white border-slate-200"
+            className="pl-9 h-8 text-sm w-full sm:w-52 bg-white border-slate-200"
           />
         </div>
         {isAdmin && (

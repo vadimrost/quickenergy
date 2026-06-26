@@ -45,7 +45,7 @@ function StatusStepper({ status, onChange }: { status: LeadStatus; onChange: (s:
   const { labels } = useStageLabels()
 
   return (
-    <div className="flex items-center flex-wrap gap-y-2">
+    <div className="flex items-center flex-wrap gap-y-3">
       {FORWARD.map((stage, i) => {
         const past = i < activeIdx
         const current = stage === status
@@ -67,14 +67,14 @@ function StatusStepper({ status, onChange }: { status: LeadStatus; onChange: (s:
                 {past && <div className="w-2 h-2 rounded-full bg-accent-400" />}
               </div>
               <span className={cn(
-                'text-[10px] font-semibold whitespace-nowrap transition-colors',
+                'text-[9px] sm:text-[10px] font-semibold whitespace-nowrap transition-colors',
                 current ? 'text-accent-600' : past ? 'text-slate-400' : 'text-slate-300 group-hover:text-slate-400',
               )}>
                 {labels[stage]}
               </span>
             </button>
             {i < FORWARD.length - 1 && (
-              <div className={cn('h-0.5 w-6 mx-1 mb-4 transition-colors', i < activeIdx ? 'bg-accent-300' : 'bg-slate-200')} />
+              <div className={cn('h-0.5 w-4 sm:w-6 mx-0.5 sm:mx-1 mb-4 transition-colors', i < activeIdx ? 'bg-accent-300' : 'bg-slate-200')} />
             )}
           </div>
         )
@@ -83,7 +83,7 @@ function StatusStepper({ status, onChange }: { status: LeadStatus; onChange: (s:
       <button
         onClick={() => onChange('verloren')}
         className={cn(
-          'ml-4 text-[11px] font-semibold px-3 py-1 rounded-full border transition-all',
+          'ml-2 sm:ml-4 text-[11px] font-semibold px-3 py-1 rounded-full border transition-all',
           status === 'verloren'
             ? 'bg-red-50 text-red-600 border-red-200'
             : 'text-slate-400 border-slate-200 hover:border-red-200 hover:text-red-400',
@@ -334,8 +334,8 @@ export function LeadDetailPage() {
   return (
     <div>
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between mb-6 gap-4">
-        <div className="flex items-start gap-4 min-w-0">
+      <div className="flex items-start justify-between mb-6 gap-3">
+        <div className="flex items-start gap-3 min-w-0">
           <button
             onClick={() => navigate('/crm')}
             className="mt-1.5 text-slate-400 hover:text-slate-700 transition-colors shrink-0"
@@ -345,12 +345,12 @@ export function LeadDetailPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-3 mb-0.5">
               {/* Avatar */}
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-accent-200 shrink-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-accent-400 to-accent-600 flex items-center justify-center text-white font-bold text-sm shadow-md shadow-accent-200 shrink-0">
                 {initials(name)}
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-900 leading-tight">{name}</h1>
-                <p className="text-sm text-slate-400">
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 leading-tight">{name}</h1>
+                <p className="text-xs sm:text-sm text-slate-400">
                   Lead · {format(new Date(lead.created_at), 'dd. MMMM yyyy', { locale: de })}
                 </p>
               </div>
@@ -365,8 +365,9 @@ export function LeadDetailPage() {
             className="bg-accent-500 hover:bg-accent-600 text-white shadow-sm shadow-accent-200"
             size="sm"
           >
-            <UserPlus size={14} className="mr-1.5" />
-            {lead.kunde_id ? 'Angebot erstellen' : 'Kunde + Angebot'}
+            <UserPlus size={14} className="mr-1.5 sm:mr-1.5" />
+            <span className="hidden sm:inline">{lead.kunde_id ? 'Angebot erstellen' : 'Kunde + Angebot'}</span>
+            <span className="sm:hidden">Angebot</span>
           </Button>
           <Button
             variant="ghost" size="sm" onClick={handleDelete} disabled={deleting}
@@ -378,12 +379,12 @@ export function LeadDetailPage() {
       </div>
 
       {/* ── Status Stepper ─────────────────────────────────────────────────── */}
-      <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4 mb-6 shadow-sm">
+      <div className="bg-white border border-slate-200 rounded-2xl px-4 sm:px-5 py-4 mb-6 shadow-sm overflow-x-auto">
         <StatusStepper status={lead.status} onChange={handleStatusChange} />
       </div>
 
       {/* ── Main Grid ──────────────────────────────────────────────────────── */}
-      <div className="grid gap-5" style={{ gridTemplateColumns: '1fr 300px' }}>
+      <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
 
         {/* ── Left column ─────────────────────────────────────────────────── */}
         <div className="space-y-5 min-w-0">

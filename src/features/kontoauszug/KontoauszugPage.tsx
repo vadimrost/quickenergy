@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo } from 'react'
-import { Upload, Loader2, ChevronDown, ChevronUp, CheckCircle2, CircleDot, ArrowRight, X, FileText, Search, TrendingDown, TrendingUp, Link2, Trash2, RefreshCw, AlertCircle } from 'lucide-react'
+import { Upload, Loader2, ChevronDown, ChevronUp, CheckCircle2, CircleDot, ArrowRight, X, FileText, Search, TrendingDown, TrendingUp, Link2, Trash2, RefreshCw, AlertCircle, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { StatCard } from '@/components/shared/StatCard'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -527,6 +527,18 @@ function KontoauszugCard({
           >
             {rerunMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
           </button>
+          {konto.pdf_url && (
+            <a
+              href={konto.pdf_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              title="PDF herunterladen"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-ink-subtle hover:text-accent-600 hover:bg-accent-50 transition-colors"
+            >
+              <Download size={14} />
+            </a>
+          )}
           <button
             onClick={e => { e.stopPropagation(); setConfirmDelete(true) }}
             disabled={deleteMutation.isPending}
