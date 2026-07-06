@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Trash2, RotateCcw, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Trash2, RotateCcw, AlertTriangle, Receipt } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { PageTitle } from '@/components/shared/PageTitle'
@@ -18,8 +18,9 @@ import {
   useUpdateAusgangsrechnungStatus,
   useBezahltMarkieren,
   useDeleteAusgangsrechnung,
+  useRechnungenForAngebot,
 } from './useAusgangsrechnungen'
-import type { AusgangsrechnungTyp, AusgangsrechnungStatus, Kunde } from '@/types/database'
+import type { AusgangsrechnungTyp, AusgangsrechnungStatus, Kunde, Ausgangsrechnung } from '@/types/database'
 import type { PositionDraft } from '@/features/auftraege/shared/positionenUtils'
 
 import { DEFAULT_KOPF, DEFAULT_FUSS } from '@/features/auftraege/shared/dokumentDefaults'
@@ -30,6 +31,13 @@ const TYP_OPTIONS: { value: AusgangsrechnungTyp; label: string }[] = [
   { value: 'schlussrechnung', label: 'Schlussrechnung' },
   { value: 'stornorechnung',  label: 'Stornorechnung'  },
 ]
+
+const TYP_LABEL: Record<AusgangsrechnungTyp, string> = Object.fromEntries(
+  TYP_OPTIONS.map(o => [o.value, o.label]),
+) as Record<AusgangsrechnungTyp, string>
+
+const fmtEur = (n: number) =>
+  '€ ' + n.toLocaleString('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 const STATUS_OPTIONS: { value: AusgangsrechnungStatus; label: string }[] = [
   { value: 'entwurf',     label: 'Entwurf'     },
@@ -57,6 +65,9 @@ type StornoZu = {
 
 type LocationState = {
   ab_id?: string
+  angebot_id?: string
+  auftragswert_netto?: number
+  doc_typ?: AusgangsrechnungTyp
   prefill?: {
     kunde?: Kunde | null
     betreff?: string | null
@@ -73,6 +84,9 @@ export function AusgangsrechnungFormPage() {
   const fromState = (location.state as LocationState)
   const fromAb = fromState?.ab_id ? fromState : null
   const fromStorno = fromState?.storno_zu ?? null
+  const prefill = fromState?.prefill ?? null
+  const fromAngebotId = fromState?.angebot_id ?? null
+  const stateDocTyp = fromState?.doc_typ
   const isEdit = !!id && id !== 'neu'
 
   const { data: existing } = useAusgangsrechnung(isEdit ? id : undefined)
@@ -81,20 +95,26 @@ export function AusgangsrechnungFormPage() {
   const { mutate: bezahltMarkieren, isPending: bezahltPending } = useBezahltMarkieren()
   const { mutate: deleteRechnung, isPending: deletePending } = useDeleteAusgangsrechnung()
 
+  const angebotId = fromAngebotId ?? existing?.angebot_id ?? null
+  const { data: geschwister = [] } = useRechnungenForAngebot(angebotId ?? undefined)
+
   // Determine initial typ from navigation source
-  const initialTyp: AusgangsrechnungTyp = fromStorno ? 'stornorechnung' : 'rechnung'
+  const initialTyp: AusgangsrechnungTyp = fromStorno ? 'stornorechnung' : (stateDocTyp ?? 'rechnung')
 
   const [values, setValues] = useState<DokumentFormValues>({
-    kunde: fromStorno?.kunde ?? fromAb?.prefill?.kunde ?? null,
-    betreff: fromStorno ? `Storno zu ${fromStorno.rechnungsnummer}` : (fromAb?.prefill?.betreff ?? ''),
+    kunde: fromStorno?.kunde ?? prefill?.kunde ?? null,
+    betreff: fromStorno ? `Storno zu ${fromStorno.rechnungsnummer}` : (prefill?.betreff ?? ''),
     datum: new Date().toISOString().split('T')[0],
     kopftext: DEFAULT_KOPF,
     fusstext: DEFAULT_FUSS,
     positionen: (fromStorno?.positionen?.length ? fromStorno.positionen
-      : fromAb?.prefill?.positionen?.length ? fromAb.prefill.positionen
+      : prefill?.positionen?.length ? prefill.positionen
       : [emptyPosition(0)]),
-    rabattGesamt: fromStorno?.rabattGesamt ?? fromAb?.prefill?.rabattGesamt ?? 0,
+    rabattGesamt: fromStorno?.rabattGesamt ?? prefill?.rabattGesamt ?? 0,
   })
+  const [auftragswert, setAuftragswert] = useState(
+    fromState?.auftragswert_netto != null ? String(fromState.auftragswert_netto) : ''
+  )
 
   const [typ, setTyp] = useState<AusgangsrechnungTyp>(initialTyp)
   const [leistungsdatum, setLeistungsdatum] = useState(new Date().toISOString().split('T')[0])
@@ -128,6 +148,7 @@ export function AusgangsrechnungFormPage() {
       setTeilProzent(existing.teilrechnungs_prozent ? String(existing.teilrechnungs_prozent) : '')
       setBezahltBetrag(String(existing.summe_brutto ?? ''))
       setRechnungsnummer(existing.rechnungsnummer ?? '')
+      if (existing.auftragswert_netto != null) setAuftragswert(String(existing.auftragswert_netto))
     }
   }, [existing])
 
@@ -143,6 +164,23 @@ export function AusgangsrechnungFormPage() {
     const faellig = new Date(values.datum)
     faellig.setDate(faellig.getDate() + zahlungsTage)
 
+    // Schlussrechnung: Übersicht aller bisherigen Teilrechnungen einfrieren
+    let uebersichtFields: Partial<Ausgangsrechnung> = {}
+    if (typ === 'schlussrechnung' && angebotId) {
+      const prior = geschwister.filter(r => r.id !== id && r.status !== 'storniert')
+      const bereits = prior.reduce((sum, r) => sum + r.netto, 0)
+      uebersichtFields = {
+        rechnungsuebersicht: prior.map(r => ({
+          rechnungsnummer: r.rechnungsnummer,
+          datum: r.rechnungsdatum,
+          label: TYP_LABEL[r.typ] ?? 'Rechnung',
+          netto: r.netto,
+        })),
+        bereits_berechnet_netto: bereits,
+        restbetrag_netto: summen.netto_gesamt - bereits,
+      }
+    }
+
     upsert({
       rechnung: {
         id: isEdit ? id : undefined,
@@ -150,6 +188,9 @@ export function AusgangsrechnungFormPage() {
         ...(isEdit && rechnungsnummer ? { rechnungsnummer } : {}),
         kunde_id: values.kunde.id,
         auftragsbestaetigung_id: existing?.auftragsbestaetigung_id ?? (fromAb?.ab_id || null),
+        angebot_id: existing?.angebot_id ?? fromAngebotId ?? null,
+        auftragswert_netto: auftragswert ? parseFloat(auftragswert) : (existing?.auftragswert_netto ?? null),
+        ...uebersichtFields,
         storno_zu_rechnung_id: existing?.storno_zu_rechnung_id ?? (fromStorno?.id ?? null),
         betreff: values.betreff || null,
         rechnungsdatum: values.datum,
@@ -238,9 +279,17 @@ export function AusgangsrechnungFormPage() {
     existing.status !== 'storniert' &&
     existing.typ !== 'stornorechnung'
 
+  const summenNow = berechneSummen(values.positionen, values.rabattGesamt)
   const storedBrutto = existing?.summe_brutto ?? 0
-  const calcBrutto = berechneSummen(values.positionen, values.rabattGesamt).brutto
+  const calcBrutto = summenNow.brutto
   const hasMismatch = isEdit && storedBrutto > 0 && !(existing?.positionen?.length) && Math.abs(storedBrutto - calcBrutto) > 0.01
+
+  // Teilrechnungs-Tracking (nur wenn mit einem Angebot verknüpft)
+  const andereRechnungen = geschwister.filter(r => r.id !== id && r.status !== 'storniert')
+  const bereitsBerechnet = andereRechnungen.reduce((sum, r) => sum + r.netto, 0)
+  const auftragswertNum = parseFloat(auftragswert) || 0
+  const dieseNetto = summenNow.netto_gesamt
+  const verbleibend = auftragswertNum - bereitsBerechnet - dieseNetto
 
   return (
     <div className="xl:flex xl:gap-6 xl:items-start">
@@ -318,6 +367,72 @@ export function AusgangsrechnungFormPage() {
           </div>
         </div>
 
+        {/* Teilrechnungs-Übersicht (Angebot-verknüpft) */}
+        {angebotId && (
+          <div className="mb-5 rounded-xl border border-accent-200 bg-accent-50/50 p-4 max-w-5xl">
+            <div className="flex items-center gap-2 mb-3">
+              <Receipt size={14} className="text-accent-600" />
+              <h3 className="text-sm font-semibold text-ink">Teilrechnungs-Übersicht</h3>
+              {typ === 'schlussrechnung' && (
+                <span className="text-[10px] font-medium bg-accent-100 text-accent-700 px-2 py-0.5 rounded-full">Schlussrechnung</span>
+              )}
+            </div>
+
+            <div className="space-y-1.5 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-ink-muted">Auftragswert (netto)</label>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    type="number" step="0.01"
+                    value={auftragswert}
+                    onChange={e => setAuftragswert(e.target.value)}
+                    placeholder="0,00"
+                    className="h-7 w-32 text-sm text-right"
+                  />
+                  <span className="text-ink-muted text-xs">€</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-muted">Bereits berechnet ({andereRechnungen.length} {andereRechnungen.length === 1 ? 'Rechnung' : 'Rechnungen'})</span>
+                <span className="font-medium">– {fmtEur(bereitsBerechnet)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-ink-muted">Diese Rechnung</span>
+                <span className="font-medium">– {fmtEur(dieseNetto)}</span>
+              </div>
+              <div className="border-t border-accent-200 my-1.5" />
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-ink">Verbleibend</span>
+                <span className={cn('font-bold', verbleibend < -0.01 ? 'text-red-600' : 'text-ink')}>
+                  {fmtEur(verbleibend)}
+                </span>
+              </div>
+            </div>
+
+            {verbleibend < -0.01 && (
+              <p className="text-[11px] text-red-600 mt-2">
+                Achtung: Die Summe der Rechnungen übersteigt den Auftragswert.
+              </p>
+            )}
+
+            {andereRechnungen.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-accent-200 space-y-1">
+                {andereRechnungen.map(r => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => navigate(`/ausgangsrechnungen/${r.id}`)}
+                    className="w-full flex items-center justify-between gap-2 text-xs text-ink-muted hover:text-accent-700 transition-colors"
+                  >
+                    <span className="truncate">{r.rechnungsnummer} · {TYP_LABEL[r.typ]}</span>
+                    <span className="font-medium shrink-0">{fmtEur(r.netto)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         <DokumentForm
           titel="Rechnungs"
           nummer={isEdit ? rechnungsnummer : undefined}
@@ -383,6 +498,11 @@ export function AusgangsrechnungFormPage() {
           zahlungsziel={zahlungsziel}
           teilProzent={teilProzent}
           existingNr={existing?.rechnungsnummer}
+          rechnungsuebersicht={typ === 'schlussrechnung' && angebotId
+            ? andereRechnungen.map(r => ({ rechnungsnummer: r.rechnungsnummer, datum: r.rechnungsdatum, label: TYP_LABEL[r.typ], netto: r.netto }))
+            : null}
+          bereitsBerechnet={typ === 'schlussrechnung' && angebotId ? bereitsBerechnet : null}
+          restbetrag={typ === 'schlussrechnung' && angebotId ? dieseNetto - bereitsBerechnet : null}
           className="border-l border-border rounded-none shadow-none flex-1"
         />
       </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Trash2, ArrowRightLeft } from 'lucide-react'
+import { ArrowLeft, Trash2, ArrowRightLeft, Receipt, FileCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { PageTitle } from '@/components/shared/PageTitle'
@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DokumentForm, type DokumentFormValues } from '@/features/auftraege/shared/DokumentForm'
 import { PdfButton } from '@/features/auftraege/shared/PdfButton'
 import { PdfLivePreview } from '@/features/auftraege/shared/PdfLivePreview'
+import { VorlagenControls } from '@/features/auftraege/shared/VorlagenControls'
 import { berechneSummen, emptyPosition } from '@/features/auftraege/shared/positionenUtils'
 import { useAngebot, useUpsertAngebot, useUpdateAngebotStatus, useDeleteAngebot } from './useAngebote'
 import { useConvertAngebotToAb } from '../auftragsbestatigungen/useAuftragsbestatigungen'
@@ -51,6 +52,11 @@ export function AngebotFormPage() {
   // Set when navigating from CRM lead detail (1-click Angebot)
   const leadId: string | undefined = (location.state as any)?.lead_id
   const leadKunde: Kunde | undefined = (location.state as any)?.kunde
+  // Set when navigating from the Vorlagen overview page
+  const vorlage = (location.state as any)?.vorlage as {
+    betreff: string; kopftext: string; fusstext: string; rabattGesamt: number
+    positionen: DokumentFormValues['positionen']
+  } | undefined
 
   const { data: existing } = useAngebot(isEdit ? id : undefined)
   const { mutate: upsert, isPending } = useUpsertAngebot()
@@ -60,12 +66,12 @@ export function AngebotFormPage() {
 
   const [values, setValues] = useState<DokumentFormValues>({
     kunde: leadKunde ?? null,
-    betreff: '',
+    betreff: vorlage?.betreff ?? '',
     datum: new Date().toISOString().split('T')[0],
-    kopftext: DEFAULT_KOPF,
-    fusstext: DEFAULT_FUSS,
-    positionen: [emptyPosition(0)],
-    rabattGesamt: 0,
+    kopftext: vorlage?.kopftext || DEFAULT_KOPF,
+    fusstext: vorlage?.fusstext || DEFAULT_FUSS,
+    positionen: vorlage?.positionen?.length ? vorlage.positionen : [emptyPosition(0)],
+    rabattGesamt: vorlage?.rabattGesamt ?? 0,
   })
 
   const [gueltigBis, setGueltigBis] = useState('')
@@ -153,8 +159,60 @@ export function AngebotFormPage() {
     })
   }
 
+  const angebotNetto = existing
+    ? (existing.summe_netto_20 ?? 0) + (existing.summe_netto_10 ?? 0) + (existing.summe_netto_0 ?? 0)
+    : 0
+
+  function handleCreateTeilrechnung() {
+    if (!existing) return
+    navigate('/ausgangsrechnungen/neu', {
+      state: {
+        angebot_id: existing.id,
+        auftragswert_netto: angebotNetto,
+        doc_typ: 'teilrechnung',
+        prefill: {
+          kunde: existing.kunde,
+          betreff: `Teilrechnung zu Angebot ${existing.angebotsnummer}`,
+          positionen: [{
+            reihenfolge: 0,
+            bezeichnung: `Teilrechnung gemäß Angebot ${existing.angebotsnummer}`,
+            beschreibung: existing.betreff ?? null,
+            menge: 1,
+            einheit: 'pausch',
+            einzelpreis_netto: 0,
+            ust_satz: 20 as const,
+            rabatt_prozent: 0,
+            zeilenbetrag_netto: 0,
+          }],
+          rabattGesamt: 0,
+        },
+      },
+    })
+  }
+
+  function handleCreateSchlussrechnung() {
+    if (!existing) return
+    navigate('/ausgangsrechnungen/neu', {
+      state: {
+        angebot_id: existing.id,
+        auftragswert_netto: angebotNetto,
+        doc_typ: 'schlussrechnung',
+        prefill: {
+          kunde: existing.kunde,
+          betreff: existing.betreff,
+          positionen: existing.positionen,
+          rabattGesamt: existing.rabatt_gesamt_prozent,
+        },
+      },
+    })
+  }
+
   const canConvert = isEdit && existing &&
     !existing.auftragsbestaetigung_id &&
+    existing.status !== 'abgelehnt' &&
+    (existing.positionen?.length ?? 0) > 0
+
+  const canFakturieren = isEdit && existing &&
     existing.status !== 'abgelehnt' &&
     (existing.positionen?.length ?? 0) > 0
 
@@ -173,6 +231,20 @@ export function AngebotFormPage() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Vorlagen */}
+            <VorlagenControls
+              typ="angebot"
+              current={{
+                betreff: values.betreff,
+                kopftext: values.kopftext,
+                fusstext: values.fusstext,
+                rabattGesamt: values.rabattGesamt,
+                positionen: values.positionen,
+              }}
+              hasContent={values.positionen.some(p => p.bezeichnung.trim() || p.einzelpreis_netto > 0)}
+              onLoad={p => setValues(v => ({ ...v, ...p }))}
+            />
+
             {/* Status */}
             {isEdit && existing && (
               <Select
@@ -199,6 +271,22 @@ export function AngebotFormPage() {
               <Button variant="outline" size="sm" onClick={handleConvert} disabled={convertPending}>
                 <ArrowRightLeft size={13} className="mr-1.5" />
                 In AB umwandeln
+              </Button>
+            )}
+
+            {/* Teilrechnung erstellen */}
+            {canFakturieren && (
+              <Button variant="outline" size="sm" onClick={handleCreateTeilrechnung}>
+                <Receipt size={13} className="mr-1.5" />
+                Teilrechnung
+              </Button>
+            )}
+
+            {/* Schlussrechnung erstellen */}
+            {canFakturieren && (
+              <Button variant="outline" size="sm" onClick={handleCreateSchlussrechnung}>
+                <FileCheck size={13} className="mr-1.5" />
+                Schlussrechnung
               </Button>
             )}
 

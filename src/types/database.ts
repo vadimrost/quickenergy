@@ -71,6 +71,8 @@ export interface Rechnung {
   betrag_0: number | null
   mwst_10: number | null
   mwst_20: number | null
+  dokument_art: string | null
+  pruef_hinweis: string | null
   flag: RechnungFlag | null
   bank_transaktion_id: string | null
   bezahlt_am: string | null
@@ -203,6 +205,18 @@ export interface DokumentPosition {
   created_at: string
 }
 
+export interface DokumentVorlage {
+  id: string
+  name: string
+  typ: DokumentTyp
+  betreff: string | null
+  kopftext: string | null
+  fusstext: string | null
+  rabatt_gesamt_prozent: number
+  positionen: Omit<DokumentPosition, 'id' | 'created_at' | 'dokument_id' | 'dokument_typ'>[]
+  created_at: string
+}
+
 export type AngebotStatus = 'entwurf' | 'offen' | 'berechnet' | 'teilberechnet' | 'abgelehnt'
 
 export interface Angebot {
@@ -258,6 +272,13 @@ export interface Auftragsbestaetigung {
 export type AusgangsrechnungStatus = 'entwurf' | 'offen' | 'teilbezahlt' | 'bezahlt' | 'storniert'
 export type AusgangsrechnungTyp = 'rechnung' | 'teilrechnung' | 'schlussrechnung' | 'stornorechnung'
 
+export interface RechnungsuebersichtZeile {
+  rechnungsnummer: string
+  datum: string | null
+  label: string
+  netto: number
+}
+
 export interface Ausgangsrechnung {
   id: string
   rechnungsnummer: string
@@ -265,6 +286,11 @@ export interface Ausgangsrechnung {
   typ: AusgangsrechnungTyp
   kunde_id: string | null
   auftragsbestaetigung_id: string | null
+  angebot_id: string | null
+  auftragswert_netto: number | null
+  rechnungsuebersicht: RechnungsuebersichtZeile[] | null
+  bereits_berechnet_netto: number | null
+  restbetrag_netto: number | null
   storno_zu_rechnung_id: string | null
   betreff: string | null
   rechnungsdatum: string

@@ -72,6 +72,10 @@ export interface GeminiOcrResult {
   skonto_prozent: number | null
   skonto_tage:    number | null
   skonto_datum:   string | null
+  // Dokumenttyp-Erkennung (Steuerberaterin): Angebote/Mahnungen sind keine Eingangsrechnungen
+  document_kind:  string | null   // 'rechnung' | 'angebot' | 'mahnung' | 'lieferschein' | 'proforma' | 'sonstige'
+  // Vollständigkeit mehrseitiger Dokumente: false = laut Seitenangaben fehlen Seiten
+  seiten_vollstaendig: boolean | null
 }
 
 export interface KategoriePrompt {
@@ -150,7 +154,22 @@ SKONTO:
 RECHNUNGSNUMMER: Formale Rechnungs-Nr. bevorzugen. Bei Kassenbons (Tankstelle, Restaurant) alternativ Bon-Nr., Beleg-Nr. oder Kassen-ID verwenden — niemals null lassen wenn irgendeine Belegnummer sichtbar ist.
 DATUM: immer YYYY-MM-DD.
 card_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.
-supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).`
+supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).
+
+DOKUMENTTYP (document_kind) — WICHTIG für die Buchhaltung:
+Klassifiziere, um welche Art von Dokument es sich handelt:
+- "rechnung"     → echte Rechnung / Faktura / Kassenbon / Quittung (enthält Rechnungsnummer + zu zahlenden Betrag für bereits erbrachte Leistung)
+- "angebot"      → Angebot, Kostenvoranschlag, Offert, "unverbindliches Angebot", Preisauskunft (NOCH KEINE Zahlungsverpflichtung) — z.B. Versicherungsangebote
+- "mahnung"      → Mahnung, Zahlungserinnerung, "1./2./3. Mahnung", Mahnspesen, "überfällig" — verweist auf eine bereits bestehende Rechnung
+- "lieferschein" → Lieferschein, Packliste (keine Preise / kein Rechnungsbetrag)
+- "proforma"     → Proforma-Rechnung
+- "sonstige"     → alles andere
+Im Zweifel "rechnung". Ein Dokument mit dem Wort "Angebot"/"Offert" im Titel ist "angebot", KEINE Rechnung.
+
+SEITEN-VOLLSTÄNDIGKEIT (seiten_vollstaendig):
+- Prüfe Seitenangaben wie "Seite X von Y", "X/Y", "Blatt X von Y".
+- true  → alle Seiten 1..Y sind vorhanden ODER keine Seitenangabe erkennbar
+- false → laut Seitenangabe fehlen Seiten (z.B. nur "Seite 3 von 3" vorhanden, Seiten 1-2 fehlen)`
 
 function sanitizeOcr(result: GeminiOcrResult): GeminiOcrResult {
   if (result.is_proforma) {
@@ -206,6 +225,8 @@ export async function geminiOcr(base64: string, apiKey: string, kategorien?: Kat
               skonto_prozent: { type: 'NUMBER',  nullable: true },
               skonto_tage:    { type: 'NUMBER',  nullable: true },
               skonto_datum:   { type: 'STRING',  nullable: true },
+              document_kind:  { type: 'STRING',  nullable: true },
+              seiten_vollstaendig: { type: 'BOOLEAN', nullable: true },
             },
           },
         },

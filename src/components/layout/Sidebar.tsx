@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LogOut, ReceiptText, Banknote,
   Landmark, MoreHorizontal, X, FileText, ClipboardCheck, Receipt,
-  UserSquare2, Briefcase, ChevronDown, LayoutDashboard, BellRing, Settings, ContactRound,
+  UserSquare2, Briefcase, ChevronDown, LayoutDashboard, BellRing, Settings, ContactRound, LayoutTemplate,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -31,6 +31,7 @@ const BOTTOM_ITEMS = [
 // The grouped "Aufträge" sub-items
 const AUFTRAEGE_CHILDREN = [
   { icon: FileText,      path: '/angebote',            label: 'Angebote'           },
+  { icon: LayoutTemplate, path: '/vorlagen',           label: 'Vorlagen'           },
   { icon: ClipboardCheck, path: '/auftraege',           label: 'Auftragsb.'         },
   { icon: Receipt,       path: '/ausgangsrechnungen',  label: 'Rechnungen'         },
   { icon: BellRing,      path: '/mahnwesen',           label: 'Mahnwesen'          },

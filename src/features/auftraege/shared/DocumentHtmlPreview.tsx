@@ -297,6 +297,11 @@ export function DocumentHtmlPreview(input: DocInput) {
         </div>
       </div>
 
+      {/* ── Rechnungsübersicht (nur Schlussrechnung) ── */}
+      {input.typ === 'rechnung' && input.doc.typ === 'schlussrechnung' && (
+        <RechnungsUebersichtHtml r={input.doc} />
+      )}
+
       {/* ── Fußtext ── */}
       {doc.fusstext && (
         <div style={{ fontSize: 8.5, lineHeight: 1.6, marginTop: 16 }}>
@@ -331,6 +336,41 @@ function SumRow({ label, value }: { label: string; value: string }) {
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0' }}>
       <span style={{ fontSize: 8.5, color: '#333' }}>{label}</span>
       <span style={{ fontSize: 8.5 }}>{value}</span>
+    </div>
+  )
+}
+
+function RechnungsUebersichtHtml({ r }: { r: Ausgangsrechnung }) {
+  const prior = r.rechnungsuebersicht ?? []
+  if (prior.length === 0 && r.restbetrag_netto == null) return null
+
+  const zeilen = [
+    ...prior,
+    { rechnungsnummer: r.rechnungsnummer, datum: r.rechnungsdatum, label: 'Schlussrechnung', netto: r.restbetrag_netto ?? 0 },
+  ]
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 8.5, fontWeight: 700, marginBottom: 4 }}>Rechnungsübersicht:</div>
+      {zeilen.map((z, i) => (
+        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0' }}>
+          <span style={{ fontSize: 8.5 }}>{i + 1}. {z.label} Nr. {z.rechnungsnummer} vom {fmtDate(z.datum)}</span>
+          <span style={{ fontSize: 8.5, textAlign: 'right' }}>Betrag netto {fmt(z.netto)}</span>
+        </div>
+      ))}
+      {r.bereits_berechnet_netto != null && (
+        <div style={{ marginTop: 4 }}>
+          <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0' }}>
+            <span style={{ fontSize: 8.5, color: '#555' }}>Bereits berechnet (Teilrechnungen)</span>
+            <span style={{ fontSize: 8.5 }}>– {fmt(r.bereits_berechnet_netto)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0' }}>
+            <span style={{ fontSize: 9.5, fontWeight: 700 }}>Restbetrag netto (offen)</span>
+            <span style={{ fontSize: 9.5, fontWeight: 700 }}>{fmt(r.restbetrag_netto ?? 0)}</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

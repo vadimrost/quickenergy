@@ -17,6 +17,7 @@ import { RoleProvider, useRole } from '@/contexts/RoleContext'
 import { KundenPage } from '@/features/auftraege/kunden/KundenPage'
 import { AngebotePage } from '@/features/auftraege/angebote/AngebotePage'
 import { AngebotFormPage } from '@/features/auftraege/angebote/AngebotFormPage'
+import { VorlagenPage } from '@/features/auftraege/vorlagen/VorlagenPage'
 import { AuftragsbestaetigungPage } from '@/features/auftraege/auftragsbestatigungen/AuftragsbestaetigungPage'
 import { AuftragsbestaetigungFormPage } from '@/features/auftraege/auftragsbestatigungen/AuftragsbestaetigungFormPage'
 import { AusgangsrechnungPage } from '@/features/auftraege/ausgangsrechnungen/AusgangsrechnungPage'
@@ -100,6 +101,7 @@ function AppRoutes() {
       <Route path="/kunden"              element={<AdminRoute><KundenPage /></AdminRoute>} />
       <Route path="/angebote"            element={<AdminRoute><AngebotePage /></AdminRoute>} />
       <Route path="/angebote/:id"        element={<AdminRoute><AngebotFormPage /></AdminRoute>} />
+      <Route path="/vorlagen"            element={<AdminRoute><VorlagenPage /></AdminRoute>} />
       <Route path="/auftraege"           element={<AdminRoute><AuftragsbestaetigungPage /></AdminRoute>} />
       <Route path="/auftraege/:id"       element={<AdminRoute><AuftragsbestaetigungFormPage /></AdminRoute>} />
       <Route path="/ausgangsrechnungen"  element={<AdminRoute><AusgangsrechnungPage /></AdminRoute>} />

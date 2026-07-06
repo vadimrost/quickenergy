@@ -130,6 +130,18 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           updated.push('Kategorie')
         }
 
+        // Dokumenttyp-Prüfung (Steuerberaterin): Angebot/Mahnung/Lieferschein/unvollständig
+        if (ocr.document_kind && (forceAll || !r.dokument_art)) {
+          updates.dokument_art = ocr.document_kind
+          let hinweis: string | null = null
+          if (ocr.document_kind === 'angebot') hinweis = 'Angebot erkannt – keine Eingangsrechnung. Nicht als ER buchen.'
+          else if (ocr.document_kind === 'mahnung') hinweis = 'Mahnung erkannt – Original-Rechnung bereits erfasst? Nicht doppelt buchen.'
+          else if (ocr.document_kind === 'lieferschein') hinweis = 'Lieferschein erkannt – keine Rechnung.'
+          else if (ocr.seiten_vollstaendig === false) hinweis = 'Dokument evtl. unvollständig – fehlende Seiten prüfen.'
+          updates.pruef_hinweis = hinweis
+          if (hinweis) updated.push('Prüf-Hinweis')
+        }
+
         const resolvedCard = resolveCard(ocr.card_last_four)
         if (resolvedCard && (forceAll || !r.karte)) {
           updates.karte = resolvedCard

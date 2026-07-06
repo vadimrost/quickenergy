@@ -4,13 +4,13 @@ import { cn } from '@/lib/utils'
 import { DocumentHtmlPreview } from './DocumentHtmlPreview'
 import { berechneSummen } from './positionenUtils'
 import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
-import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, AusgangsrechnungTyp } from '@/types/database'
+import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, AusgangsrechnungTyp, RechnungsuebersichtZeile } from '@/types/database'
 import type { DokumentFormValues } from './DokumentForm'
 
 export type PdfLivePreviewProps =
   | { typ: 'angebot'; values: DokumentFormValues; gueltigBis: string; referenz: string; existingNr?: string }
   | { typ: 'auftragsbestaetigung'; values: DokumentFormValues; lieferdatum: string; zahlungsziel: string; existingNr?: string }
-  | { typ: 'rechnung'; values: DokumentFormValues; rechnungTyp: AusgangsrechnungTyp; leistungsdatum: string; leistungVon: string; leistungBis: string; zahlungsziel: string; teilProzent: string; existingNr?: string }
+  | { typ: 'rechnung'; values: DokumentFormValues; rechnungTyp: AusgangsrechnungTyp; leistungsdatum: string; leistungVon: string; leistungBis: string; zahlungsziel: string; teilProzent: string; existingNr?: string; rechnungsuebersicht?: RechnungsuebersichtZeile[] | null; bereitsBerechnet?: number | null; restbetrag?: number | null }
 
 function buildAngebotDoc(p: Extract<PdfLivePreviewProps, { typ: 'angebot' }>): Angebot {
   const s = berechneSummen(p.values.positionen, p.values.rabattGesamt)
@@ -67,6 +67,10 @@ function buildRechnungDoc(p: Extract<PdfLivePreviewProps, { typ: 'rechnung' }>):
     rabatt_gesamt_prozent: p.values.rabattGesamt,
     summe_netto_20: s.netto_20, summe_netto_10: s.netto_10, summe_netto_0: s.netto_0,
     ust_20: s.ust_20, ust_10: s.ust_10, summe_brutto: s.brutto,
+    angebot_id: null, auftragswert_netto: null,
+    rechnungsuebersicht: p.rechnungsuebersicht ?? null,
+    bereits_berechnet_netto: p.bereitsBerechnet ?? null,
+    restbetrag_netto: p.restbetrag ?? null,
     bezahlt_am: null, bezahlt_betrag: null, datev_exportiert_am: null,
     mahnstufe: 0, gemahnt_am_1: null, gemahnt_am_2: null, gemahnt_am_3: null, mahngebuehr: 0,
     created_at: '', kunde: p.values.kunde ?? null,

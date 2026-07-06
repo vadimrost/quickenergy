@@ -43,6 +43,88 @@ function matchLabel(tx: BankTransaktion): string | null {
   return null
 }
 
+// ── Lückenprüfung (Steuerberaterin: Kontoauszüge müssen lückenlos sein) ─────────
+
+interface KontoLuecke {
+  iban: string | null
+  kontoName: string | null
+  vonLuecke: string
+  bisLuecke: string
+  tage: number
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(iso)
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+function diffDaysIso(a: string, b: string): number {
+  return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000)
+}
+
+// Findet fehlende Zeiträume zwischen aufeinanderfolgenden Auszügen je IBAN
+function computeLuecken(kontoauszuege: Kontoauszug[]): KontoLuecke[] {
+  const byIban = new Map<string, Kontoauszug[]>()
+  for (const k of kontoauszuege) {
+    if (!k.von_datum || !k.bis_datum) continue
+    const key = k.konto_iban ?? '—'
+    if (!byIban.has(key)) byIban.set(key, [])
+    byIban.get(key)!.push(k)
+  }
+
+  const luecken: KontoLuecke[] = []
+  for (const [iban, list] of byIban) {
+    const sorted = [...list].sort((a, b) => (a.von_datum! < b.von_datum! ? -1 : 1))
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1]
+      const cur = sorted[i]
+      const gapStart = addDaysIso(prev.bis_datum!, 1)
+      // Lücke, wenn der nächste Auszug erst nach dem Folgetag des Vorgängers beginnt
+      if (cur.von_datum! > gapStart) {
+        const gapEnd = addDaysIso(cur.von_datum!, -1)
+        luecken.push({
+          iban: iban === '—' ? null : iban,
+          kontoName: cur.konto_name ?? prev.konto_name ?? null,
+          vonLuecke: gapStart,
+          bisLuecke: gapEnd,
+          tage: diffDaysIso(gapStart, gapEnd) + 1,
+        })
+      }
+    }
+  }
+  return luecken
+}
+
+function LueckenWarnung({ luecken }: { luecken: KontoLuecke[] }) {
+  if (luecken.length === 0) return null
+  return (
+    <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <AlertCircle size={16} className="text-amber-500 shrink-0" />
+        <h3 className="text-sm font-semibold text-amber-800">
+          {luecken.length === 1 ? 'Lücke in den Kontoauszügen' : `${luecken.length} Lücken in den Kontoauszügen`}
+        </h3>
+      </div>
+      <p className="text-xs text-amber-700 mb-2.5">
+        Für eine lückenlose Buchhaltung müssen alle Zeiträume abgedeckt sein. Bitte fehlende Auszüge nachladen:
+      </p>
+      <ul className="space-y-1">
+        {luecken.map((l, i) => (
+          <li key={i} className="text-xs text-amber-800 flex items-start gap-2">
+            <span className="text-amber-400 mt-0.5">•</span>
+            <span>
+              <strong>{formatDate(l.vonLuecke)} – {formatDate(l.bisLuecke)}</strong>
+              {' '}fehlt ({l.tage} {l.tage === 1 ? 'Tag' : 'Tage'})
+              {l.iban && <span className="text-amber-600"> · {fmtIBAN(l.iban)}</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 // ── Score bar ─────────────────────────────────────────────────────────────────
 
 function ScoreBar({ score }: { score: number }) {
@@ -760,6 +842,9 @@ export function KontoauszugPage() {
   const totalMatched = totalOutgoing.filter(t => t.status === 'zugewiesen').length
   const totalOpen = totalOutgoing.filter(t => t.status !== 'zugewiesen').length
   const totalMatchedEuro = totalOutgoing.filter(t => t.status === 'zugewiesen').reduce((s, t) => s + Math.abs(t.betrag), 0)
+  const totalOpenEuro = totalOutgoing.filter(t => t.status !== 'zugewiesen').reduce((s, t) => s + Math.abs(t.betrag), 0)
+
+  const luecken = useMemo(() => computeLuecken(kontoauszuege), [kontoauszuege])
 
   const handleFileSelect = async (file: File) => {
     setUploadFileName(file.name)
@@ -827,6 +912,9 @@ export function KontoauszugPage() {
         </button>
       </div>
 
+      {/* Lückenprüfung */}
+      <LueckenWarnung luecken={luecken} />
+
       {/* KPIs */}
       {kontoauszuege.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -838,9 +926,9 @@ export function KontoauszugPage() {
             icon={<CheckCircle2 size={16} />}
           />
           <StatCard
-            label="Offen"
+            label="Ohne Beleg"
             value={String(totalOpen)}
-            sub="nicht zugewiesen"
+            sub={`${formatEuro(totalOpenEuro)} nicht zugeordnet`}
             icon={<CircleDot size={16} />}
           />
           <StatCard

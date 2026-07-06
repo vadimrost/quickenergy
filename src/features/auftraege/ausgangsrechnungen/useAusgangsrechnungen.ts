@@ -35,6 +35,41 @@ export function useAusgangsrechnung(id: string | undefined) {
   })
 }
 
+export interface TeilrechnungInfo {
+  id: string
+  rechnungsnummer: string
+  typ: Ausgangsrechnung['typ']
+  status: Ausgangsrechnung['status']
+  rechnungsdatum: string
+  betreff: string | null
+  netto: number
+}
+
+// Alle Rechnungen zu einem Angebot (für Teilrechnungs-Tracking & Schlussrechnungs-Übersicht)
+export function useRechnungenForAngebot(angebotId: string | undefined) {
+  return useQuery({
+    queryKey: [Q, 'angebot', angebotId],
+    enabled: !!angebotId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ausgangsrechnungen')
+        .select('id, rechnungsnummer, typ, status, rechnungsdatum, betreff, summe_netto_20, summe_netto_10, summe_netto_0')
+        .eq('angebot_id', angebotId!)
+        .order('rechnungsdatum', { ascending: true })
+      if (error) throw error
+      return (data ?? []).map(r => ({
+        id: r.id,
+        rechnungsnummer: r.rechnungsnummer,
+        typ: r.typ,
+        status: r.status,
+        rechnungsdatum: r.rechnungsdatum,
+        betreff: r.betreff,
+        netto: (r.summe_netto_20 ?? 0) + (r.summe_netto_10 ?? 0) + (r.summe_netto_0 ?? 0),
+      })) as TeilrechnungInfo[]
+    },
+  })
+}
+
 export function useUpsertAusgangsrechnung() {
   const qc = useQueryClient()
   return useMutation({

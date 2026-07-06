@@ -339,6 +339,44 @@ function TotalsRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+// Schlussrechnung: Übersicht aller Teilrechnungen + Restbetrag (wie RE-1002641)
+function RechnungsUebersicht({ r }: { r: Ausgangsrechnung }) {
+  const prior = r.rechnungsuebersicht ?? []
+  if (prior.length === 0 && r.restbetrag_netto == null) return null
+
+  const zeilen = [
+    ...prior,
+    { rechnungsnummer: r.rechnungsnummer, datum: r.rechnungsdatum, label: 'Schlussrechnung', netto: r.restbetrag_netto ?? 0 },
+  ]
+
+  return (
+    <View style={{ marginTop: 14 }} wrap={false}>
+      <Text style={[s.bodyText, { fontFamily: 'Helvetica-Bold', marginBottom: 4 }]}>Rechnungsübersicht:</Text>
+      {zeilen.map((z, i) => (
+        <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1.5 }}>
+          <Text style={{ fontSize: 8.5, flex: 1 }}>
+            {i + 1}. {z.label} Nr. {z.rechnungsnummer} vom {fmtDate(z.datum)}
+          </Text>
+          <Text style={{ fontSize: 8.5, textAlign: 'right', width: 130 }}>Betrag netto {fmt(z.netto)}</Text>
+        </View>
+      ))}
+      {r.bereits_berechnet_netto != null && (
+        <View style={{ marginTop: 4 }}>
+          <View style={s.totalsHrLight} />
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1.5 }}>
+            <Text style={{ fontSize: 8.5, color: '#555' }}>Bereits berechnet (Teilrechnungen)</Text>
+            <Text style={{ fontSize: 8.5, textAlign: 'right', width: 130 }}>– {fmt(r.bereits_berechnet_netto)}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1.5 }}>
+            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>Restbetrag netto (offen)</Text>
+            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', textAlign: 'right', width: 130 }}>{fmt(r.restbetrag_netto ?? 0)}</Text>
+          </View>
+        </View>
+      )}
+    </View>
+  )
+}
+
 function Fusszeile({ firma }: { firma: FirmaConfig }) {
   return (
     <View style={s.footerContainer} fixed>
@@ -486,6 +524,9 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
           brutto={doc.summe_brutto}
           rabatt={doc.rabatt_gesamt_prozent}
         />
+
+        {/* Rechnungsübersicht (nur Schlussrechnung) */}
+        {_ar?.typ === 'schlussrechnung' && <RechnungsUebersicht r={_ar} />}
 
         {/* Fußtext / Zahlungsinfo */}
         {doc.fusstext && (

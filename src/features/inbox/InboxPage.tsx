@@ -216,6 +216,14 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
         ? ocr.invoice_type as any
         : null
 
+      // Dokumenttyp-Prüfung (Steuerberaterin): kein Angebot/Mahnung/Lieferschein als ER, Vollständigkeit
+      const dokumentArt = ocr?.document_kind ?? null
+      let pruefHinweis: string | null = null
+      if (dokumentArt === 'angebot') pruefHinweis = 'Angebot erkannt – keine Eingangsrechnung. Nicht als ER buchen.'
+      else if (dokumentArt === 'mahnung') pruefHinweis = 'Mahnung erkannt – Original-Rechnung bereits erfasst? Nicht doppelt buchen.'
+      else if (dokumentArt === 'lieferschein') pruefHinweis = 'Lieferschein erkannt – keine Rechnung.'
+      else if (ocr && ocr.seiten_vollstaendig === false) pruefHinweis = 'Dokument evtl. unvollständig – fehlende Seiten prüfen.'
+
       const { error: insertError } = await supabase.from('rechnungen').insert({
         pdf_url:       publicUrl,
         rechnungsnr:   ocr?.invoice_number?.trim() || `BELEG-${Date.now()}`,
@@ -235,6 +243,8 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
         mitarbeiter:   null,
         skonto_datum:   normalizeDate(ocr?.skonto_datum) ?? null,
         skonto_prozent: ocr?.skonto_prozent ?? null,
+        dokument_art:  dokumentArt,
+        pruef_hinweis: pruefHinweis,
         ocr_json:      ocr as any ?? null,
       })
 
@@ -243,6 +253,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
         continue
       }
 
+      if (pruefHinweis) toast.warning(`${pdfFile.name}: ${pruefHinweis}`)
       updateEntry(id, { status: 'done', supplier: ocr?.supplier_name ?? undefined })
       await new Promise(r => setTimeout(r, 500))
     }
@@ -1127,6 +1138,13 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
                   </span>
                 )}
               </div>
+              {r.pruef_hinweis && (
+                <div className="mb-1.5">
+                  <span className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                    ⚠ {r.pruef_hinweis}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-ink">{formatEuro(getBrutto(r))}</span>
                 <span className="text-xs text-ink-muted">{r.ust_satz}% USt.</span>
@@ -1249,6 +1267,14 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
                     <span className="text-sm font-medium text-ink truncate max-w-[160px]">
                       {r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '—'}
                     </span>
+                    {r.pruef_hinweis && (
+                      <span
+                        title={r.pruef_hinweis}
+                        className="shrink-0 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded cursor-help"
+                      >
+                        ⚠ Prüfen
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="text-sm font-mono text-ink-muted">{r.rechnungsnr}</td>
