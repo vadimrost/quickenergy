@@ -341,7 +341,7 @@ function AssignDialog({
 
 const UPLOAD_STEPS: { key: UploadStep; label: string; note?: string }[] = [
   { key: 'uploading', label: 'PDF hochladen' },
-  { key: 'ocr',       label: 'Transaktionen erkennen', note: 'Gemini OCR — kann bis zu 30 Sekunden dauern' },
+  { key: 'ocr',       label: 'Transaktionen erkennen', note: 'OpenRouter OCR — kann bis zu 30 Sekunden dauern' },
   { key: 'saving',    label: 'In Datenbank speichern' },
   { key: 'matching',  label: 'Automatischer Abgleich' },
 ]

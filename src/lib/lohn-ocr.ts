@@ -1,3 +1,5 @@
+import { callOpenRouterPdfJson } from './gemini-ocr'
+
 export interface LohnDienstnehmerRaw {
   ma_nr: number | null
   name: string
@@ -50,65 +52,7 @@ SUMMEN: "Summe Dienstnehmer" → gesamt_dienstnehmer, "Summe Körperschaften" �
 Alle Beträge als Dezimalzahlen (Punkt als Dezimaltrenner).`
 
 export async function lohnOcr(base64: string, apiKey: string): Promise<LohnOcrResult> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { inline_data: { mime_type: 'application/pdf', data: base64 } },
-          { text: LOHN_PROMPT },
-        ]}],
-        generationConfig: {
-          response_mime_type: 'application/json',
-          response_schema: {
-            type: 'OBJECT',
-            properties: {
-              monat:                  { type: 'INTEGER', nullable: true },
-              jahr:                   { type: 'INTEGER', nullable: true },
-              gesamt_dienstnehmer:    { type: 'NUMBER',  nullable: true },
-              gesamt_koerperschaften: { type: 'NUMBER',  nullable: true },
-              gesamt_total:           { type: 'NUMBER',  nullable: true },
-              dienstnehmer: {
-                type: 'ARRAY',
-                items: {
-                  type: 'OBJECT',
-                  properties: {
-                    ma_nr:       { type: 'INTEGER', nullable: true },
-                    name:        { type: 'STRING' },
-                    iban:        { type: 'STRING', nullable: true },
-                    betrag:      { type: 'NUMBER' },
-                    zahlungsart: { type: 'STRING' },
-                  },
-                },
-              },
-              koerperschaften: {
-                type: 'ARRAY',
-                items: {
-                  type: 'OBJECT',
-                  properties: {
-                    bezeichnung: { type: 'STRING' },
-                    swift_bic:   { type: 'STRING', nullable: true },
-                    iban:        { type: 'STRING', nullable: true },
-                    betrag:      { type: 'NUMBER' },
-                    typ:         { type: 'STRING', nullable: true },
-                  },
-                },
-              },
-            },
-          },
-        },
-      }),
-    }
-  )
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message ?? `Gemini Fehler ${res.status}`)
-  }
-  const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  const raw: LohnOcrResult = typeof text === 'string' ? JSON.parse(text) : (text ?? {})
+  const raw = await callOpenRouterPdfJson<LohnOcrResult>(base64, apiKey, LOHN_PROMPT)
   return {
     ...raw,
     dienstnehmer:    raw.dienstnehmer    ?? [],

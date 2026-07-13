@@ -54,6 +54,75 @@ export async function pdfUrlToBase64(url: string): Promise<string> {
   })
 }
 
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const OPENROUTER_OCR_MODEL = 'google/gemini-2.5-pro'
+
+function parseJsonContent<T>(content: unknown): T {
+  const text = Array.isArray(content)
+    ? content.map(part => typeof part?.text === 'string' ? part.text : '').join('')
+    : String(content ?? '')
+
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+
+  return JSON.parse(cleaned) as T
+}
+
+export async function callOpenRouterPdfJson<T>(base64: string, apiKey: string, prompt: string): Promise<T> {
+  const res = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': window.location.origin,
+      'X-Title': 'QuickEnergy OCR',
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_OCR_MODEL,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `${prompt}\n\nAntworte ausschließlich mit einem validen JSON-Objekt. Keine Markdown-Codeblöcke, keine Erklärungen.`,
+            },
+            {
+              type: 'file',
+              file: {
+                filename: 'document.pdf',
+                file_data: `data:application/pdf;base64,${base64}`,
+              },
+            },
+          ],
+        },
+      ],
+      plugins: [
+        {
+          id: 'file-parser',
+          pdf: {
+            engine: 'cloudflare-ai',
+          },
+        },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.error?.message ?? `OpenRouter Fehler ${res.status}`)
+  }
+
+  const data = await res.json()
+  const content = data.choices?.[0]?.message?.content
+  if (!content) throw new Error('Keine OCR-Antwort von OpenRouter')
+  return parseJsonContent<T>(content)
+}
+
 export interface GeminiOcrResult {
   invoice_date:   string | null
   due_date:       string | null
@@ -193,53 +262,7 @@ function sanitizeOcr(result: GeminiOcrResult): GeminiOcrResult {
 
 export async function geminiOcr(base64: string, apiKey: string, kategorien?: KategoriePrompt[]): Promise<GeminiOcrResult> {
   const prompt = kategorien?.length ? buildOcrPrompt(kategorien) + OCR_PROMPT.slice(OCR_PROMPT.indexOf('\n\nNETTOBETRAG')) : OCR_PROMPT
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { inline_data: { mime_type: 'application/pdf', data: base64 } },
-          { text: prompt },
-        ]}],
-        generationConfig: {
-          response_mime_type: 'application/json',
-          response_schema: {
-            type: 'OBJECT',
-            properties: {
-              invoice_date:   { type: 'STRING',  nullable: true },
-              due_date:       { type: 'STRING',  nullable: true },
-              invoice_number: { type: 'STRING',  nullable: true },
-              supplier_name:  { type: 'STRING',  nullable: true },
-              net_amount:     { type: 'NUMBER',  nullable: true },
-              tax_rate:       { type: 'NUMBER',  nullable: true },
-              net_amount_10:  { type: 'NUMBER',  nullable: true },
-              net_amount_20:  { type: 'NUMBER',  nullable: true },
-              net_amount_0:   { type: 'NUMBER',  nullable: true },
-              tax_amount_10:  { type: 'NUMBER',  nullable: true },
-              tax_amount_20:  { type: 'NUMBER',  nullable: true },
-              invoice_type:   { type: 'STRING',  nullable: true },
-              card_last_four: { type: 'STRING',  nullable: true },
-              is_proforma:    { type: 'BOOLEAN', nullable: true },
-              skonto_prozent: { type: 'NUMBER',  nullable: true },
-              skonto_tage:    { type: 'NUMBER',  nullable: true },
-              skonto_datum:   { type: 'STRING',  nullable: true },
-              document_kind:  { type: 'STRING',  nullable: true },
-              seiten_vollstaendig: { type: 'BOOLEAN', nullable: true },
-            },
-          },
-        },
-      }),
-    }
-  )
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message ?? `Gemini Fehler ${res.status}`)
-  }
-  const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  const raw: GeminiOcrResult = typeof text === 'string' ? JSON.parse(text) : (text ?? {})
+  const raw = await callOpenRouterPdfJson<GeminiOcrResult>(base64, apiKey, prompt)
   return sanitizeOcr(raw)
 }
 
@@ -314,54 +337,8 @@ ZAHLUNGSZIEL:
 DATUM: immer YYYY-MM-DD.
 invoice_number: formale Rechnungsnummer.`
 
-async function callGemini(base64: string, apiKey: string, prompt: string, schema: object): Promise<unknown> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { inline_data: { mime_type: 'application/pdf', data: base64 } },
-          { text: prompt },
-        ]}],
-        generationConfig: {
-          response_mime_type: 'application/json',
-          response_schema: schema,
-        },
-      }),
-    }
-  )
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message ?? `Gemini Fehler ${res.status}`)
-  }
-  const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  return typeof text === 'string' ? JSON.parse(text) : (text ?? {})
-}
-
 export async function geminiOcrAusgangsrechnung(base64: string, apiKey: string): Promise<AusgangsrechnungOcrResult> {
-  const result = await callGemini(base64, apiKey, AUSGANGSRECHNUNG_PROMPT, {
-    type: 'OBJECT',
-    properties: {
-      invoice_number:        { type: 'STRING',  nullable: true },
-      invoice_date:          { type: 'STRING',  nullable: true },
-      due_date:              { type: 'STRING',  nullable: true },
-      customer_name:         { type: 'STRING',  nullable: true },
-      subject:               { type: 'STRING',  nullable: true },
-      net_amount_20:         { type: 'NUMBER',  nullable: true },
-      net_amount_10:         { type: 'NUMBER',  nullable: true },
-      net_amount_0:          { type: 'NUMBER',  nullable: true },
-      tax_amount_20:         { type: 'NUMBER',  nullable: true },
-      tax_amount_10:         { type: 'NUMBER',  nullable: true },
-      total_brutto:          { type: 'NUMBER',  nullable: true },
-      zahlungsziel_tage:     { type: 'NUMBER',  nullable: true },
-      is_schlussrechnung:    { type: 'BOOLEAN', nullable: true },
-      teilrechnungen_brutto: { type: 'NUMBER',  nullable: true },
-      is_stornorechnung:     { type: 'BOOLEAN', nullable: true },
-    },
-  }) as AusgangsrechnungOcrResult
+  const result = await callOpenRouterPdfJson<AusgangsrechnungOcrResult>(base64, apiKey, AUSGANGSRECHNUNG_PROMPT)
   return {
     ...result,
     invoice_date: normalizeDate(result.invoice_date),

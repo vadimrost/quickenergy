@@ -168,8 +168,8 @@ export function useUploadKontoauszug() {
       file: File
       onStep: (step: UploadStep) => void
     }) => {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
-      if (!apiKey) throw new Error('Kein Gemini API Key konfiguriert')
+      const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
+      if (!apiKey) throw new Error('Kein OpenRouter API Key konfiguriert')
 
       // Step 1: Upload to storage
       onStep('uploading')
@@ -180,7 +180,7 @@ export function useUploadKontoauszug() {
       if (uploadError) throw new Error(`Upload fehlgeschlagen: ${uploadError.message}`)
       const { data: { publicUrl } } = supabase.storage.from('rechnungen').getPublicUrl(storagePath)
 
-      // Step 2: Gemini OCR
+      // Step 2: OpenRouter OCR
       onStep('ocr')
       const base64 = await fileToBase64(file)
       const ocr = await kontoauszugOcr(base64, apiKey)

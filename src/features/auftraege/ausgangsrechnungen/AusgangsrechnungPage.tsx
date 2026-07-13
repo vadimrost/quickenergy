@@ -125,10 +125,10 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
   }, [])
 
   const processFiles = useCallback(async (files: File[]) => {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
     const valid = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
     if (!valid.length) { toast.error('Nur PDF-Dateien werden unterstützt.'); return }
-    if (!apiKey) { toast.error('Kein Gemini API Key konfiguriert.'); return }
+    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert.'); return }
 
     const newEntries: FileEntry[] = valid.map(f => ({ id: crypto.randomUUID(), name: f.name, status: 'pending' as FileStatus }))
     setEntries(prev => [...prev, ...newEntries])

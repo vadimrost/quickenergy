@@ -539,7 +539,7 @@ function KategorienSection() {
           </div>
         )}
         <p className="mt-4 text-xs text-ink-subtle border-t border-border/50 pt-3">
-          Die <strong>Beschreibung</strong> wird direkt in den Gemini-OCR-Prompt eingebettet.
+          Die <strong>Beschreibung</strong> wird direkt in den OCR-Prompt eingebettet.
         </p>
       </SectionCard>
 
@@ -609,4 +609,3 @@ function KategorienSection() {
     </>
   )
 }
-

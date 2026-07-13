@@ -152,12 +152,12 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
   }, [])
 
   const processFiles = useCallback(async (files: File[]) => {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
     const valid = files.filter(f =>
       f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || isImageFile(f)
     )
     if (!valid.length) { toast.error('Keine gültigen Dateien (PDF, HEIC, JPG, PNG, WEBP).'); return }
-    if (!apiKey) { toast.error('Kein Gemini API Key konfiguriert – Rechnungen werden ohne OCR hochgeladen.') }
+    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert – Rechnungen werden ohne OCR hochgeladen.') }
 
     const newEntries: FileEntry[] = valid.map(f => ({
       id: crypto.randomUUID(), name: f.name, status: 'pending',
@@ -193,7 +193,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       }
       const { data: { publicUrl } } = supabase.storage.from('rechnungen').getPublicUrl(storagePath)
 
-      // 3. Gemini OCR
+      // 3. OpenRouter OCR
       updateEntry(id, { status: 'ocr' })
       let ocr: Awaited<ReturnType<typeof geminiOcr>> | null = null
       if (apiKey) {

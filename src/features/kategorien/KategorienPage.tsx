@@ -111,7 +111,7 @@ export function KategorienPage() {
         )}
 
         <p className="mt-4 text-xs text-ink-subtle border-t border-border/50 pt-3">
-          Die <strong>Beschreibung</strong> wird direkt in den Gemini-OCR-Prompt eingebettet — präzise Formulierungen verbessern die automatische Erkennung.
+          Die <strong>Beschreibung</strong> wird direkt in den OCR-Prompt eingebettet — präzise Formulierungen verbessern die automatische Erkennung.
         </p>
       </SectionCard>
 

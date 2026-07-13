@@ -37,7 +37,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
   rechnungen: Rechnung[]
   onRefresh: () => void
 }) {
-  const [apiKey, setApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY ?? '')
+  const [apiKey, setApiKey] = useState(import.meta.env.VITE_OPENROUTER_API_KEY ?? '')
   const [limit, setLimit] = useState<number>(5)
   const [forceAll, setForceAll] = useState(false)
   const { data: kategorien = [] } = useKategorien()
@@ -212,7 +212,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           {!running && !done && (
             <>
               <div>
-                <label className="label-caps block mb-1.5">Gemini API Key</label>
+                <label className="label-caps block mb-1.5">OpenRouter API Key</label>
                 <div className="relative">
                   <KeyRound size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
                   <input

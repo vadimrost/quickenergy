@@ -208,8 +208,8 @@ export function LohnPage() {
     if (!file) return
     e.target.value = ''
 
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
-    if (!apiKey) { toast.error('Kein Gemini API Key konfiguriert'); return }
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
+    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert'); return }
 
     setProcessing(true)
     try {

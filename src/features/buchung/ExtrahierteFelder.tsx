@@ -46,8 +46,8 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
 
   const handleOcr = async () => {
     if (!rechnung.pdf_url || rechnung.pdf_url === 'demo') return
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY
-    if (!apiKey) { toast.error('VITE_GEMINI_API_KEY nicht gesetzt'); return }
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY
+    if (!apiKey) { toast.error('VITE_OPENROUTER_API_KEY nicht gesetzt'); return }
     setOcrLoading(true)
     try {
       const base64 = await pdfUrlToBase64(rechnung.pdf_url)

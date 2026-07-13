@@ -1,3 +1,5 @@
+import { callOpenRouterPdfJson } from './gemini-ocr'
+
 export interface BankTransaktionRaw {
   datum: string
   betrag: number
@@ -53,54 +55,6 @@ WICHTIG:
 - Jeden Buchungseintrag genau einmal erfassen`
 
 export async function kontoauszugOcr(base64: string, apiKey: string): Promise<KontoauszugOcrResult> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { inline_data: { mime_type: 'application/pdf', data: base64 } },
-          { text: PROMPT },
-        ]}],
-        generationConfig: {
-          response_mime_type: 'application/json',
-          response_schema: {
-            type: 'OBJECT',
-            properties: {
-              konto_iban:       { type: 'STRING',  nullable: true },
-              konto_name:       { type: 'STRING',  nullable: true },
-              auszug_nr:        { type: 'STRING',  nullable: true },
-              von_datum:        { type: 'STRING',  nullable: true },
-              bis_datum:        { type: 'STRING',  nullable: true },
-              alter_kontostand: { type: 'NUMBER',  nullable: true },
-              neuer_kontostand: { type: 'NUMBER',  nullable: true },
-              transaktionen: {
-                type: 'ARRAY',
-                items: {
-                  type: 'OBJECT',
-                  properties: {
-                    datum:        { type: 'STRING' },
-                    betrag:       { type: 'NUMBER' },
-                    buchungstext: { type: 'STRING' },
-                    empfaenger:   { type: 'STRING', nullable: true },
-                    referenz:     { type: 'STRING', nullable: true },
-                    typ:          { type: 'STRING' },
-                  },
-                },
-              },
-            },
-          },
-        },
-      }),
-    }
-  )
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message ?? `Gemini Fehler ${res.status}`)
-  }
-  const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-  const raw: KontoauszugOcrResult = typeof text === 'string' ? JSON.parse(text) : (text ?? {})
+  const raw = await callOpenRouterPdfJson<KontoauszugOcrResult>(base64, apiKey, PROMPT)
   return { ...raw, transaktionen: raw.transaktionen ?? [] }
 }
