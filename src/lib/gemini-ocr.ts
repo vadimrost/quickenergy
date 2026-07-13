@@ -103,7 +103,7 @@ export async function callOpenRouterPdfJson<T>(base64: string, apiKey: string, p
         {
           id: 'file-parser',
           pdf: {
-            engine: 'cloudflare-ai',
+            engine: 'native',
           },
         },
       ],
@@ -260,10 +260,28 @@ function sanitizeOcr(result: GeminiOcrResult): GeminiOcrResult {
   return result
 }
 
+function hasInvoiceOcrData(result: GeminiOcrResult): boolean {
+  return Boolean(
+    result.invoice_number?.trim() ||
+    result.supplier_name?.trim() ||
+    result.invoice_date ||
+    result.due_date ||
+    result.net_amount ||
+    result.net_amount_10 ||
+    result.net_amount_20 ||
+    result.tax_amount_10 ||
+    result.tax_amount_20
+  )
+}
+
 export async function geminiOcr(base64: string, apiKey: string, kategorien?: KategoriePrompt[]): Promise<GeminiOcrResult> {
   const prompt = kategorien?.length ? buildOcrPrompt(kategorien) + OCR_PROMPT.slice(OCR_PROMPT.indexOf('\n\nNETTOBETRAG')) : OCR_PROMPT
   const raw = await callOpenRouterPdfJson<GeminiOcrResult>(base64, apiKey, prompt)
-  return sanitizeOcr(raw)
+  const result = sanitizeOcr(raw)
+  if (!hasInvoiceOcrData(result)) {
+    throw new Error('OCR hat keine Rechnungsdaten erkannt. Bitte PDF prüfen oder OpenRouter-Antwort im Network-Tab ansehen.')
+  }
+  return result
 }
 
 export interface AusgangsrechnungOcrResult {

@@ -157,7 +157,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || isImageFile(f)
     )
     if (!valid.length) { toast.error('Keine gültigen Dateien (PDF, HEIC, JPG, PNG, WEBP).'); return }
-    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert – Rechnungen werden ohne OCR hochgeladen.') }
+    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert. Upload abgebrochen.'); return }
 
     const newEntries: FileEntry[] = valid.map(f => ({
       id: crypto.randomUUID(), name: f.name, status: 'pending',
