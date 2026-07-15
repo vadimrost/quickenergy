@@ -55,7 +55,8 @@ export async function pdfUrlToBase64(url: string): Promise<string> {
 }
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const OPENROUTER_OCR_MODEL = 'google/gemini-3.1-pro-preview'
+const OPENROUTER_OCR_MODEL = 'google/gemini-3.5-flash'
+const OCR_TIMEOUT_MS = 120_000
 
 function parseJsonContent<T>(content: unknown): T {
   const text = Array.isArray(content)
@@ -71,46 +72,60 @@ function parseJsonContent<T>(content: unknown): T {
 }
 
 export async function callOpenRouterPdfJson<T>(base64: string, apiKey: string, prompt: string): Promise<T> {
-  const res = await fetch(OPENROUTER_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': window.location.origin,
-      'X-Title': 'QuickEnergy OCR',
-    },
-    body: JSON.stringify({
-      model: OPENROUTER_OCR_MODEL,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: `${prompt}\n\nAntworte ausschließlich mit einem validen JSON-Objekt. Keine Markdown-Codeblöcke, keine Erklärungen.`,
-            },
-            {
-              type: 'file',
-              file: {
-                filename: 'document.pdf',
-                file_data: `data:application/pdf;base64,${base64}`,
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS)
+
+  let res: Response
+  try {
+    res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': window.location.origin,
+        'X-Title': 'QuickEnergy OCR',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_OCR_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `${prompt}\n\nAntworte ausschließlich mit einem validen JSON-Objekt. Keine Markdown-Codeblöcke, keine Erklärungen.`,
               },
-            },
-          ],
-        },
-      ],
-      plugins: [
-        {
-          id: 'file-parser',
-          pdf: {
-            engine: 'native',
+              {
+                type: 'file',
+                file: {
+                  filename: 'document.pdf',
+                  file_data: `data:application/pdf;base64,${base64}`,
+                },
+              },
+            ],
           },
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0,
-    }),
-  })
+        ],
+        plugins: [
+          {
+            id: 'file-parser',
+            pdf: {
+              engine: 'native',
+            },
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+      }),
+    })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(`OCR-Zeitüberschreitung nach ${OCR_TIMEOUT_MS / 1000}s — bitte erneut versuchen`)
+    }
+    throw new Error('OCR-Anfrage fehlgeschlagen (Netzwerk/OpenRouter nicht erreichbar)')
+  } finally {
+    clearTimeout(timeout)
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
