@@ -203,7 +203,7 @@ NETTOBETRAG (net_amount / net_amount_XX):
 - Österreichische MwSt-Sätze (UID beginnt mit "ATU"): AUSSCHLIESSLICH 0%, 10% oder 20% — 19% ist in Österreich UNMÖGLICH und VERBOTEN
 - Deutsche MwSt-Sätze (UID beginnt mit "DE"): 19% oder 7% möglich
 - Wenn KEINE UID sichtbar: Standard-Österreich (20%) annehmen, NICHT 19%
-- STEUERFREI / 0% USt (WICHTIG): Wenn der Beleg AUSDRÜCKLICH "0% USt", "0,00 USt", "USt-frei", "steuerfrei", "keine USt" ausweist (typisch: Österreichische Post/Paket-Belege, Behörden-/Amtsbelege, Parkgebühren/Parkometerabgabe, Gebühren): tax_rate = 0, net_amount = Gesamtbetrag, net_amount_0 = Gesamtbetrag, net_amount_20 = null, net_amount_10 = null, tax_amount_10 = null, tax_amount_20 = null. Der gedruckte 0-%-Ausweis hat IMMER Vorrang — NIEMALS eine 20%-Aufteilung erfinden.
+- STEUERFREI / 0% USt (WICHTIG): Wenn der Beleg AUSDRÜCKLICH "0% USt", "0,00 USt", "USt-frei", "steuerfrei", "keine USt" ausweist (typisch: Österreichische Post/Paket-Belege, Behörden-/Amtsbelege, Parkgebühren/Parkometerabgabe, Gebühren): tax_rate = 0, net_amount = Gesamtbetrag, net_amount_20 = null, net_amount_10 = null, net_amount_0 = null, tax_amount_10 = null, tax_amount_20 = null. Der gedruckte 0-%-Ausweis hat IMMER Vorrang — NIEMALS eine 20%-Aufteilung erfinden. net_amount_0 bleibt NULL (das ist ausschließlich das Trinkgeld-Feld für Gastronomie).
 - Wenn kein Steuersatz UND kein 0-%-Ausweis sichtbar, aber Nettobetrag vorhanden: tax_rate = 20 (österreichischer Standard). Dieser 20%-Standard gilt NUR wenn gar kein Steuersatz aufgedruckt ist — nicht gegen einen aufgedruckten 0-%-Ausweis
 - 19 aus einer österreichischen Postleitzahl (z.B. "1190 Wien", "1140 Wien") oder Auftragsnummer ist KEIN Steuersatz
 - Zahlen in Adressen, Postleitzahlen oder Belegnummern sind NIEMALS Steuersätze
@@ -222,7 +222,7 @@ MEHRWERTSTEUER:
 - net_amount_10: NETTO (exkl. MwSt) aller Positionen mit 10%
 - net_amount_20: NETTO (exkl. MwSt) aller Positionen mit 20%
 - net_amount_0:  Trinkgeld/Tip AUSSCHLIESSLICH bei Bewirtung (Restaurant/Café/Bar) UND nur wenn "Tip", "+ Tip", "Tipp", "Trinkgeld" WÖRTLICH auf dem Beleg steht — dieser Betrag hat 0% MwSt und wird NICHT in net_amount_10/20 eingerechnet
-- NIEMALS einen Tipp/Trinkgeld erfinden. Bei Post, Behörden, Tankstellen, Handel, Dienstleistung gibt es KEINEN Tipp — net_amount_0 hier nur für ausdrücklich 0%-besteuerte Positionen verwenden (siehe unten), sonst null
+- NIEMALS einen Tipp/Trinkgeld erfinden. Bei Post, Behörden, Tankstellen, Handel, Dienstleistung ist net_amount_0 IMMER null. Insbesondere NIEMALS den Gesamtbetrag/Zahlbetrag in net_amount_0 schreiben.
 - "enth. MwSt" / "Inkl. X% MwSt" / "inkl. MwSt" / "enth.Mwst" → Bruttoangabe enthält MwSt. Netto = Bruttoangabe − MwSt-Betrag. IMMER ausrechnen und net_amount_XX befüllen.
 - Beispiel 1: "Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR" → net_amount_20 = 98,33, tax_amount_20 = 19,67
 - Beispiel 2: "10% Ware 46,10 enth.Mwst 4,19" → net_amount_10 = 41,91, tax_amount_10 = 4,19  (46,10 − 4,19 = 41,91)
@@ -268,6 +268,12 @@ SEITEN-VOLLSTÄNDIGKEIT (seiten_vollstaendig):
 function sanitizeOcr(result: GeminiOcrResult): GeminiOcrResult {
   if (result.is_proforma) {
     return { ...result, tax_rate: null, tax_amount_10: null, tax_amount_20: null, net_amount_10: null, net_amount_20: null }
+  }
+  // net_amount_0 ist in dieser App das Trinkgeld-Feld (nur Bewirtung). Bei allen
+  // anderen Belegen wirft das Modell dort gern den Gesamtbetrag rein → Doppelzählung
+  // (z.B. Post 40,42 statt 20,21, Stadt Wien 1908 statt 954). Deterministisch verwerfen.
+  if (result.invoice_type !== 'bewirtung' && result.net_amount_0) {
+    result = { ...result, net_amount_0: null }
   }
   if (result.tax_rate === 19) result = { ...result, tax_rate: 20 }
   // Only default to 20% when there's actual taxable net — not if only Trinkgeld (net_amount_0)
