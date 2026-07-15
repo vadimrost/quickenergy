@@ -71,7 +71,10 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
           if (ocr.tax_rate)     { next.ust_satz = String(ocr.tax_rate); updated.push('USt.') }
           if (ocr.net_amount_10 != null) { next.betrag_10 = String(ocr.net_amount_10); updated.push('Netto 10%') }
           if (ocr.net_amount_20 != null) { next.betrag_20 = String(ocr.net_amount_20); updated.push('Netto 20%') }
-          if (ocr.net_amount_0  != null) { next.betrag_0  = String(ocr.net_amount_0);  updated.push('Trinkgeld') }
+          // 0%-Tipp ist OCR-maßgeblich: gesetzt bei Bewirtung, sonst aktiv leeren
+          // (verhindert stehengebliebene Phantom-Tipps aus früheren Läufen)
+          next.betrag_0 = ocr.net_amount_0 != null ? String(ocr.net_amount_0) : ''
+          if (ocr.net_amount_0 != null) updated.push('Trinkgeld')
           if (ocr.tax_amount_10 != null) { next.mwst_10 = String(ocr.tax_amount_10) }
           if (ocr.tax_amount_20 != null) { next.mwst_20 = String(ocr.tax_amount_20) }
         }

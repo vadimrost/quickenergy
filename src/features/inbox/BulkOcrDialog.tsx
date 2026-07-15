@@ -118,6 +118,9 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           }
           if (ocr.net_amount_0 != null && (forceAll || !r.betrag_0)) {
             updates.betrag_0 = Number(ocr.net_amount_0); updated.push('Trinkgeld 0%')
+          } else if (ocr.net_amount_0 == null && r.betrag_0) {
+            // Stehengebliebenen Phantom-Tipp aus früheren Läufen aktiv entfernen
+            updates.betrag_0 = null; updated.push('Phantom-Tipp entfernt')
           }
           if (ocr.tax_amount_10 != null && (forceAll || !r.mwst_10)) updates.mwst_10 = Number(ocr.tax_amount_10)
           if (ocr.tax_amount_20 != null && (forceAll || !r.mwst_20)) updates.mwst_20 = Number(ocr.tax_amount_20)
