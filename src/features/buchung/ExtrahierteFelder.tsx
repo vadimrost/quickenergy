@@ -154,7 +154,9 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const hasBreakdown = parseFloat(form.betrag_10 || '0') > 0 || parseFloat(form.betrag_20 || '0') > 0
   const n10 = parseFloat(form.betrag_10 || '0')
   const n20 = parseFloat(form.betrag_20 || '0')
-  const n0  = parseFloat(form.betrag_0  || '0')
+  // 0%-Feld ist das Trinkgeld — nur bei Bewirtung berücksichtigen. Bei anderen
+  // Belegen ist ein gespeicherter Wert ein OCR-Phantom-Tipp und wird ignoriert.
+  const n0  = form.rechnungstyp === 'bewirtung' ? parseFloat(form.betrag_0 || '0') : 0
   const t10 = form.mwst_10 ? parseFloat(form.mwst_10) : Math.round(n10 * 0.10 * 100) / 100
   const t20 = form.mwst_20 ? parseFloat(form.mwst_20) : Math.round(n20 * 0.20 * 100) / 100
   const breakdownBrutto = Math.round((n10 + t10 + n20 + t20 + n0) * 100) / 100
@@ -383,8 +385,8 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                     {n20 > 0 ? `€ ${(n20 + t20).toFixed(2)}` : '—'}
                   </div>
                 </div>
-                {/* 0% row — nur Bewirtung */}
-                {(form.rechnungstyp === 'bewirtung' || parseFloat(form.betrag_0 || '0') > 0) && (
+                {/* 0% row — nur Bewirtung (Trinkgeld) */}
+                {form.rechnungstyp === 'bewirtung' && (
                   <div className="grid grid-cols-4 gap-1 items-center mb-1">
                     <span className="text-xs font-medium text-ink">0% Tipp</span>
                     <div className="relative">
