@@ -55,7 +55,7 @@ export async function pdfUrlToBase64(url: string): Promise<string> {
 }
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const OPENROUTER_OCR_MODEL = 'google/gemini-2.5-pro'
+const OPENROUTER_OCR_MODEL = 'google/gemini-3.1-pro-preview'
 
 function parseJsonContent<T>(content: unknown): T {
   const text = Array.isArray(content)
@@ -188,7 +188,8 @@ NETTOBETRAG (net_amount / net_amount_XX):
 - Österreichische MwSt-Sätze (UID beginnt mit "ATU"): AUSSCHLIESSLICH 0%, 10% oder 20% — 19% ist in Österreich UNMÖGLICH und VERBOTEN
 - Deutsche MwSt-Sätze (UID beginnt mit "DE"): 19% oder 7% möglich
 - Wenn KEINE UID sichtbar: Standard-Österreich (20%) annehmen, NICHT 19%
-- Wenn kein expliziter Steuersatz sichtbar aber Nettobetrag vorhanden: tax_rate = 20 (österreichischer Standard) — NIEMALS 0 annehmen außer bei Proforma
+- STEUERFREI / 0% USt (WICHTIG): Wenn der Beleg AUSDRÜCKLICH "0% USt", "0,00 USt", "USt-frei", "steuerfrei", "keine USt" ausweist (typisch: Österreichische Post/Paket-Belege, Behörden-/Amtsbelege, Parkgebühren/Parkometerabgabe, Gebühren): tax_rate = 0, net_amount = Gesamtbetrag, net_amount_0 = Gesamtbetrag, net_amount_20 = null, net_amount_10 = null, tax_amount_10 = null, tax_amount_20 = null. Der gedruckte 0-%-Ausweis hat IMMER Vorrang — NIEMALS eine 20%-Aufteilung erfinden.
+- Wenn kein Steuersatz UND kein 0-%-Ausweis sichtbar, aber Nettobetrag vorhanden: tax_rate = 20 (österreichischer Standard). Dieser 20%-Standard gilt NUR wenn gar kein Steuersatz aufgedruckt ist — nicht gegen einen aufgedruckten 0-%-Ausweis
 - 19 aus einer österreichischen Postleitzahl (z.B. "1190 Wien", "1140 Wien") oder Auftragsnummer ist KEIN Steuersatz
 - Zahlen in Adressen, Postleitzahlen oder Belegnummern sind NIEMALS Steuersätze
 
@@ -205,13 +206,20 @@ MEHRWERTSTEUER:
 - tax_amount_10 / tax_amount_20: den TATSÄCHLICHEN MwSt-Betrag direkt vom Beleg nehmen ("Steuer", "MwSt-Betrag", "Umsatzsteuer von €X") — NIEMALS selbst ausrechnen
 - net_amount_10: NETTO (exkl. MwSt) aller Positionen mit 10%
 - net_amount_20: NETTO (exkl. MwSt) aller Positionen mit 20%
-- net_amount_0:  Trinkgeld / Tip (bei Bewirtung): "Tip", "+ Tip", "Tipp", "Trinkgeld", "tip" — dieser Betrag hat 0% MwSt und wird NICHT in net_amount_10/20 eingerechnet
+- net_amount_0:  Trinkgeld/Tip AUSSCHLIESSLICH bei Bewirtung (Restaurant/Café/Bar) UND nur wenn "Tip", "+ Tip", "Tipp", "Trinkgeld" WÖRTLICH auf dem Beleg steht — dieser Betrag hat 0% MwSt und wird NICHT in net_amount_10/20 eingerechnet
+- NIEMALS einen Tipp/Trinkgeld erfinden. Bei Post, Behörden, Tankstellen, Handel, Dienstleistung gibt es KEINEN Tipp — net_amount_0 hier nur für ausdrücklich 0%-besteuerte Positionen verwenden (siehe unten), sonst null
 - "enth. MwSt" / "Inkl. X% MwSt" / "inkl. MwSt" / "enth.Mwst" → Bruttoangabe enthält MwSt. Netto = Bruttoangabe − MwSt-Betrag. IMMER ausrechnen und net_amount_XX befüllen.
 - Beispiel 1: "Betrag 118,00 EUR, Inkl. 20% MwSt 19,67 EUR" → net_amount_20 = 98,33, tax_amount_20 = 19,67
 - Beispiel 2: "10% Ware 46,10 enth.Mwst 4,19" → net_amount_10 = 41,91, tax_amount_10 = 4,19  (46,10 − 4,19 = 41,91)
 - Beispiel 3: "20% Ware 7,80 enth.Mwst 1,30" → net_amount_20 = 6,50, tax_amount_20 = 1,30
 - Wenn KEINE MwSt auf dem Beleg steht: tax_rate = null, tax_amount_10 = null, tax_amount_20 = null, net_amount_XX = null
 - Bei Dienstleistung mit einem Satz: net_amount + tax_rate + tax_amount_20 (oder tax_amount_10) füllen, net_amount_XX = null
+
+KEINE DOPPELZÄHLUNG / KEINE ERFUNDENEN BETRÄGE (streng):
+- Die Summe aus net_amount_10 + net_amount_20 + net_amount_0 + tax_amount_10 + tax_amount_20 darf NIEMALS größer sein als der auf dem Beleg gedruckte Gesamt-/Zahlbetrag. Im Zweifel weniger Felder befüllen.
+- Denselben Betrag NIE in mehrere Felder gleichzeitig schreiben (z.B. nicht gleichzeitig in net_amount_20 und net_amount_0).
+- Getrennte Positionszeilen (mehrere verschiedene Artikel/Leistungen, z.B. "Wochenkarte 795" + "Tageskarte 159") sind KEINE Netto/USt-Aufteilung. Nur in Netto + USt aufteilen, wenn der Beleg tatsächlich einen eigenen USt-Betrag ("USt", "MwSt", "enth. MwSt") ausweist.
+- Wenn KEIN USt-Betrag ausgewiesen ist: den Gesamtbetrag als Brutto behandeln (net_amount = Gesamtbetrag, tax_rate wie oben) und NICHT künstlich in Netto+20% zerlegen.
 
 SKONTO:
 - Steht auf dem Beleg "Skonto", "Barskonto", "2% Skonto bei Zahlung binnen X Tagen" o.ä.?
