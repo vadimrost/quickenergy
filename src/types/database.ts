@@ -107,6 +107,8 @@ export interface LohnDienstnehmer {
   betrag: number
   zahlungsart: string
   bank_transaktion_id: string | null
+  bezahlt: boolean
+  bezahlt_am: string | null
   created_at: string
 }
 

@@ -11,6 +11,8 @@ function setColWidths(ws: XLSX.WorkSheet, widths: number[]) {
 
 export function getMonthLabel(month: string): string {
   const [y, m] = month.split('-')
+  // Year-only period ("yyyy") → just the year label
+  if (!m) return `Jahr ${y}`
   return new Date(parseInt(y), parseInt(m) - 1, 1)
     .toLocaleString('de-AT', { month: 'long', year: 'numeric' })
 }

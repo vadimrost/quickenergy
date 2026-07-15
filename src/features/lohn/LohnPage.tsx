@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Upload, ChevronDown, ChevronUp, Trash2, Users, Building2, Loader2, FileText, FileSpreadsheet } from 'lucide-react'
+import { Upload, ChevronDown, ChevronUp, Trash2, Users, Building2, Loader2, FileText, FileSpreadsheet, CheckCheck } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { StatCard } from '@/components/shared/StatCard'
@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/lib/supabase'
 import { fileToBase64 } from '@/lib/gemini-ocr'
 import { lohnOcr } from '@/lib/lohn-ocr'
-import { useLohnabrechnungen, useDeleteLohnabrechnung } from './useLohn'
+import { useLohnabrechnungen, useDeleteLohnabrechnung, useSetDienstnehmerBezahlt } from './useLohn'
+import type { LohnDienstnehmer } from '@/types/database'
 import { runAutoMatchAllOpen } from '@/features/kontoauszug/useKontoauszug'
 import { formatEuro, cn } from '@/lib/utils'
 import type { Lohnabrechnung } from '@/types/database'
@@ -198,6 +199,16 @@ export function LohnPage() {
   const qc = useQueryClient()
   const { data: abrechnungen = [], isLoading } = useLohnabrechnungen()
   const deleteMutation = useDeleteLohnabrechnung()
+  const bezahltMutation = useSetDienstnehmerBezahlt()
+
+  const istBezahlt = (d: LohnDienstnehmer) => d.bezahlt || !!d.bank_transaktion_id
+
+  const setBezahlt = (ids: string[], bezahlt: boolean) => {
+    if (ids.length === 0) return
+    bezahltMutation.mutate({ ids, bezahlt }, {
+      onError: e => toast.error(e instanceof Error ? e.message : 'Fehler beim Aktualisieren'),
+    })
+  }
 
   const totalLohnkosten   = abrechnungen.reduce((s, a) => s + a.gesamt_total, 0)
   const totalDienstnehmer = abrechnungen.reduce((s, a) => s + a.gesamt_dienstnehmer, 0)
@@ -412,9 +423,26 @@ export function LohnPage() {
                     </div>
 
                     {/* Dienstnehmer */}
-                    {dienstnehmer.length > 0 && (
+                    {dienstnehmer.length > 0 && (() => {
+                      const offeneIds = dienstnehmer.filter(d => !istBezahlt(d)).map(d => d.id)
+                      const alleBezahlt = offeneIds.length === 0
+                      const anzahlBezahlt = dienstnehmer.length - offeneIds.length
+                      return (
                       <div>
-                        <p className="label-caps mb-3">Dienstnehmer</p>
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="label-caps">Dienstnehmer</p>
+                          <button
+                            onClick={() => setBezahlt(
+                              alleBezahlt ? dienstnehmer.map(d => d.id) : offeneIds,
+                              !alleBezahlt,
+                            )}
+                            disabled={bezahltMutation.isPending}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border border-border text-ink hover:bg-bg-muted transition-colors disabled:opacity-50"
+                          >
+                            <CheckCheck size={13} />
+                            {alleBezahlt ? 'Alle auf offen' : 'Alle als bezahlt'}
+                          </button>
+                        </div>
                         <div className="rounded-xl border border-border overflow-hidden">
                           <table className="w-full text-sm">
                             <thead>
@@ -433,10 +461,20 @@ export function LohnPage() {
                                   <td className="px-4 py-2.5 font-medium text-ink">{d.name}</td>
                                   <td className="px-4 py-2.5 text-ink-muted capitalize hidden md:table-cell">{d.zahlungsart}</td>
                                   <td className="px-4 py-2.5">
-                                    {d.bank_transaktion_id
-                                      ? <span className="inline-flex items-center gap-1 text-xs font-medium text-status-active bg-green-50 px-2 py-0.5 rounded-full">✓ Bezahlt</span>
-                                      : <span className="inline-flex items-center gap-1 text-xs font-medium text-ink-muted bg-bg-muted px-2 py-0.5 rounded-full">Offen</span>
-                                    }
+                                    <button
+                                      onClick={() => setBezahlt([d.id], !istBezahlt(d))}
+                                      disabled={bezahltMutation.isPending || !!d.bank_transaktion_id}
+                                      title={d.bank_transaktion_id ? 'Über Bank-Match bezahlt' : istBezahlt(d) ? 'Auf offen setzen' : 'Als bezahlt markieren'}
+                                      className={cn(
+                                        'inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full transition-colors',
+                                        istBezahlt(d)
+                                          ? 'text-status-active bg-green-50 hover:bg-green-100'
+                                          : 'text-ink-muted bg-bg-muted hover:bg-border',
+                                        !!d.bank_transaktion_id && 'cursor-default',
+                                      )}
+                                    >
+                                      {istBezahlt(d) ? '✓ Bezahlt' : 'Offen'}
+                                    </button>
                                   </td>
                                   <td className="px-4 py-2.5 text-right font-semibold text-ink tabular-nums">{formatEuro(d.betrag)}</td>
                                 </tr>
@@ -448,7 +486,7 @@ export function LohnPage() {
                                   Summe Dienstnehmer
                                   {' · '}
                                   <span className="text-status-active">
-                                    {dienstnehmer.filter(d => d.bank_transaktion_id).length}/{dienstnehmer.length} bezahlt
+                                    {anzahlBezahlt}/{dienstnehmer.length} bezahlt
                                   </span>
                                 </td>
                                 <td className="px-4 py-2.5 text-right font-bold text-ink tabular-nums">{formatEuro(abr.gesamt_dienstnehmer)}</td>
@@ -457,7 +495,8 @@ export function LohnPage() {
                           </table>
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
 
                     {/* Körperschaften */}
                     {koerperschaften.length > 0 && (

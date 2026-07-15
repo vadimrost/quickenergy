@@ -17,6 +17,21 @@ export function useLohnabrechnungen() {
   })
 }
 
+export function useSetDienstnehmerBezahlt() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ ids, bezahlt }: { ids: string[]; bezahlt: boolean }) => {
+      const bezahlt_am = bezahlt ? new Date().toISOString().split('T')[0] : null
+      const { error } = await supabase
+        .from('lohn_dienstnehmer')
+        .update({ bezahlt, bezahlt_am })
+        .in('id', ids)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['lohnabrechnungen'] }),
+  })
+}
+
 export function useDeleteLohnabrechnung() {
   const qc = useQueryClient()
   return useMutation({

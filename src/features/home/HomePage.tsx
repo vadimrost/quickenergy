@@ -83,6 +83,10 @@ export function HomePage() {
   const { data: kontoauszuege = [] } = useKontoauszuege()
 
   const currentMonth = format(new Date(), 'yyyy-MM')
+  const currentYear = format(new Date(), 'yyyy')
+  const [periodMode, setPeriodMode] = useState<'monat' | 'jahr'>('monat')
+  // selectedMonth holds either a month key ("yyyy-MM") or a year key ("yyyy").
+  // Both work as a startsWith() prefix against the "yyyy-MM-dd" Rechnungsdatum.
   const [selectedMonth, setSelectedMonth] = useState(currentMonth)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const exportMenuRef = useRef<HTMLDivElement>(null)
@@ -107,6 +111,21 @@ export function HomePage() {
     if (!months.has(currentMonth)) months.add(currentMonth)
     return [...months].sort().reverse()
   }, [ausgangsrechnungen, rechnungen, currentMonth])
+
+  const availableYears = useMemo(() => {
+    const years = new Set<string>()
+    ausgangsrechnungen.forEach(r => { if (r.rechnungsdatum) years.add(r.rechnungsdatum.slice(0, 4)) })
+    rechnungen.forEach(r => { if (r.rechnungsdatum) years.add(r.rechnungsdatum.slice(0, 4)) })
+    if (!years.has(currentYear)) years.add(currentYear)
+    return [...years].sort().reverse()
+  }, [ausgangsrechnungen, rechnungen, currentYear])
+
+  // Switch between month and year overview, resetting the selected period.
+  const changePeriodMode = (mode: 'monat' | 'jahr') => {
+    if (mode === periodMode) return
+    setPeriodMode(mode)
+    setSelectedMonth(mode === 'jahr' ? currentYear : currentMonth)
+  }
 
   // ── Finanz-KPIs ──────────────────────────────────────────
   const monatsumsatz = ausgangsrechnungen
@@ -197,7 +216,9 @@ export function HomePage() {
     })
     .slice(0, 6)
 
-  const monthLabel = format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy', { locale: de })
+  const monthLabel = periodMode === 'jahr'
+    ? `Jahr ${selectedMonth}`
+    : format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy', { locale: de })
 
   return (
     <div className="space-y-5">
@@ -214,17 +235,38 @@ export function HomePage() {
               <FolderArchive size={14} />
               <span className="hidden sm:inline">Belege ZIP</span>
             </button>
+            {/* Monat / Jahr Umschalter */}
+            <div className="flex items-center h-9 rounded-card-sm border border-border bg-bg-surface overflow-hidden">
+              {(['monat', 'jahr'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => changePeriodMode(mode)}
+                  className={cn(
+                    'h-full px-3 text-sm transition-colors',
+                    periodMode === mode
+                      ? 'bg-accent-500 text-white'
+                      : 'text-ink-muted hover:bg-bg-muted'
+                  )}
+                >
+                  {mode === 'monat' ? 'Monat' : 'Jahr'}
+                </button>
+              ))}
+            </div>
             <div className="relative">
               <select
                 value={selectedMonth}
                 onChange={e => setSelectedMonth(e.target.value)}
                 className="h-9 pl-3 pr-8 text-sm border border-border rounded-card-sm bg-bg-surface text-ink appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent-400"
               >
-                {availableMonths.map(m => (
-                  <option key={m} value={m}>
-                    {format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}
-                  </option>
-                ))}
+                {periodMode === 'jahr'
+                  ? availableYears.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))
+                  : availableMonths.map(m => (
+                      <option key={m} value={m}>
+                        {format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}
+                      </option>
+                    ))}
               </select>
               <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-ink-muted" />
             </div>

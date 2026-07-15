@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, FileText, AlignLeft, Pencil, Check, X } from 'lucide-react'
-import { useRechnung, useUpdateRechnung } from '@/features/inbox/useRechnungen'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { ArrowLeft, ExternalLink, FileText, AlignLeft, Pencil, Check, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useRechnung, useUpdateRechnung, useRechnungen } from '@/features/inbox/useRechnungen'
 import { useDuplikate } from './useBuchung'
 import { PdfViewer } from './PdfViewer'
 import { SkontoAlert } from './SkontoAlert'
@@ -112,18 +112,49 @@ function SupplierNameEdit({ rechnungId, currentName, onSaved }: {
 export function BuchungPage() {
   const { id = '' } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const { data: rechnung, isLoading, refetch } = useRechnung(id)
   const { data: duplikate = [] } = useDuplikate(id)
   const [mobileTab, setMobileTab] = useState<MobileTab>('details')
 
+  // Reihenfolge für die Vor/Zurück-Navigation: bevorzugt die Liste, aus der der
+  // Nutzer gekommen ist (via Router-State), sonst die Standard-Rechnungsliste.
+  const navState = location.state as { rechnungIds?: string[] } | null
+  const { data: allRechnungen = [] } = useRechnungen()
+  const idList = navState?.rechnungIds?.length ? navState.rechnungIds : allRechnungen.map(r => r.id)
+  const currentIndex = idList.indexOf(id)
+  const prevId = currentIndex > 0 ? idList[currentIndex - 1] : null
+  const nextId = currentIndex >= 0 && currentIndex < idList.length - 1 ? idList[currentIndex + 1] : null
+  const goToRechnung = (targetId: string) =>
+    navigate(`/buchung/${targetId}`, { state: navState })
+
   const header = (
     <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border flex-shrink-0">
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/rechnungen')}
+        title="Zurück zur Rechnungsübersicht"
         className="w-8 h-8 rounded-xl flex items-center justify-center text-ink-muted hover:bg-bg-muted transition-colors"
       >
         <ArrowLeft size={16} />
       </button>
+      <div className="flex items-center">
+        <button
+          onClick={() => prevId && goToRechnung(prevId)}
+          disabled={!prevId}
+          title="Vorherige Rechnung"
+          className="w-8 h-8 rounded-xl flex items-center justify-center text-ink-muted hover:bg-bg-muted transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-default"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <button
+          onClick={() => nextId && goToRechnung(nextId)}
+          disabled={!nextId}
+          title="Nächste Rechnung"
+          className="w-8 h-8 rounded-xl flex items-center justify-center text-ink-muted hover:bg-bg-muted transition-colors disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-default"
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
       {isLoading ? (
         <Skeleton className="h-5 w-48" />
       ) : rechnung ? (

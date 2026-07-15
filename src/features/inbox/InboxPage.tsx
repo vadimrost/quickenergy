@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, ChevronUp, Building2, FileSpreadsheet, Sparkles, Trash2 } from 'lucide-react'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, ChevronUp, Building2, FileSpreadsheet, Sparkles, Trash2, Camera, X, Check } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { buildErRows, writeBmdExcel } from '@/lib/bmd-export'
@@ -41,10 +41,11 @@ function isHeic(file: File): boolean {
     /\.(heic|heif)$/i.test(file.name)
 }
 
-async function convertImageToPdf(file: File): Promise<File> {
+// Render a single image file to a JPEG data URL, scaled down for mobile memory.
+async function imageToJpegPage(file: Blob): Promise<{ jpegDataUrl: string; cw: number; ch: number }> {
   let imageBlob: Blob = file
 
-  if (isHeic(file)) {
+  if (file instanceof File && isHeic(file)) {
     const heic2any = (await import('heic2any')).default
     const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.90 })
     imageBlob = Array.isArray(result) ? result[0] : result
@@ -76,25 +77,175 @@ async function convertImageToPdf(file: File): Promise<File> {
   // canvas.toDataURL is synchronous and avoids an extra FileReader round-trip
   const jpegDataUrl = canvas.toDataURL('image/jpeg', 0.90)
   if (jpegDataUrl === 'data:,') throw new Error('Canvas-Export fehlgeschlagen')
+  return { jpegDataUrl, cw, ch }
+}
 
+// Merge one or more images into a single (multi-page) A4 PDF — one image per page.
+async function convertImagesToPdf(files: Blob[], filename: string): Promise<File> {
   const { jsPDF } = await import('jspdf')
   const A4_W = 210, A4_H = 297
   const mmPerPx = 25.4 / 96
-  let imgW = cw * mmPerPx
-  let imgH = ch * mmPerPx
-  const orientation = imgW > imgH ? 'l' : 'p'
-  const pageW = orientation === 'p' ? A4_W : A4_H
-  const pageH = orientation === 'p' ? A4_H : A4_W
-  if (imgW > pageW || imgH > pageH) {
-    const s = Math.min(pageW / imgW, pageH / imgH)
-    imgW *= s; imgH *= s
-  }
-  const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
-  doc.addImage(jpegDataUrl, 'JPEG', (pageW - imgW) / 2, (pageH - imgH) / 2, imgW, imgH)
+  let doc: import('jspdf').jsPDF | null = null
 
+  for (const file of files) {
+    const { jpegDataUrl, cw, ch } = await imageToJpegPage(file)
+    let imgW = cw * mmPerPx
+    let imgH = ch * mmPerPx
+    const orientation = imgW > imgH ? 'l' : 'p'
+    const pageW = orientation === 'p' ? A4_W : A4_H
+    const pageH = orientation === 'p' ? A4_H : A4_W
+    if (imgW > pageW || imgH > pageH) {
+      const s = Math.min(pageW / imgW, pageH / imgH)
+      imgW *= s; imgH *= s
+    }
+    if (!doc) doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
+    else doc.addPage('a4', orientation)
+    doc.addImage(jpegDataUrl, 'JPEG', (pageW - imgW) / 2, (pageH - imgH) / 2, imgW, imgH)
+  }
+
+  if (!doc) throw new Error('Keine Bilder zum Zusammenführen')
   const blob = doc.output('blob')
   if (!blob || blob.size < 100) throw new Error('PDF-Erzeugung fehlgeschlagen (leeres Ergebnis)')
-  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.pdf', { type: 'application/pdf' })
+  return new File([blob], filename, { type: 'application/pdf' })
+}
+
+async function convertImageToPdf(file: File): Promise<File> {
+  return convertImagesToPdf([file], file.name.replace(/\.[^.]+$/, '') + '.pdf')
+}
+
+// In-App-Kamera: mehrere Seiten fotografieren, ohne die Kamera zu verlassen.
+function CameraCapture({ onDone, onCancel }: {
+  onDone: (photos: Blob[]) => void
+  onCancel: () => void
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const [photos, setPhotos] = useState<{ url: string; blob: Blob }[]>([])
+  const photosRef = useRef(photos)
+  photosRef.current = photos
+  const [error, setError] = useState<string | null>(null)
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        })
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          await videoRef.current.play().catch(() => {})
+        }
+        setReady(true)
+      } catch {
+        setError('Kamera konnte nicht gestartet werden. Bitte Kamerazugriff erlauben.')
+      }
+    })()
+    return () => {
+      cancelled = true
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+  }, [])
+
+  // Revoke thumbnail object URLs only on unmount (photosRef holds the latest set)
+  useEffect(() => () => { photosRef.current.forEach(p => URL.revokeObjectURL(p.url)) }, [])
+
+  const capture = () => {
+    const video = videoRef.current
+    if (!video || !video.videoWidth) return
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    canvas.toBlob(blob => {
+      if (blob) setPhotos(prev => [...prev, { url: URL.createObjectURL(blob), blob }])
+    }, 'image/jpeg', 0.9)
+  }
+
+  const removePhoto = (idx: number) => {
+    setPhotos(prev => {
+      URL.revokeObjectURL(prev[idx].url)
+      return prev.filter((_, i) => i !== idx)
+    })
+  }
+
+  const finish = () => {
+    if (photos.length === 0) return
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    onDone(photos.map(p => p.blob))
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-4 py-3 text-white">
+        <button onClick={onCancel} className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
+          <X size={20} />
+        </button>
+        <span className="text-sm font-medium">
+          {photos.length > 0 ? `${photos.length} Seite${photos.length === 1 ? '' : 'n'}` : 'Rechnung fotografieren'}
+        </span>
+        <button
+          onClick={finish}
+          disabled={photos.length === 0}
+          className="h-9 px-4 rounded-full bg-accent-500 text-white text-sm font-semibold flex items-center gap-1.5 disabled:opacity-40 transition-opacity"
+        >
+          <Check size={16} /> Fertig
+        </button>
+      </div>
+
+      {/* Video / error */}
+      <div className="flex-1 relative overflow-hidden flex items-center justify-center">
+        {error ? (
+          <div className="text-center text-white/80 px-8">
+            <Camera size={32} className="mx-auto mb-3 opacity-60" />
+            <p className="text-sm">{error}</p>
+          </div>
+        ) : (
+          <video ref={videoRef} playsInline muted className="max-h-full max-w-full" />
+        )}
+        {!ready && !error && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 size={28} className="text-white/70 animate-spin" />
+          </div>
+        )}
+      </div>
+
+      {/* Thumbnails */}
+      {photos.length > 0 && (
+        <div className="flex gap-2 px-4 py-2 overflow-x-auto bg-black/60">
+          {photos.map((p, i) => (
+            <div key={p.url} className="relative flex-shrink-0">
+              <img src={p.url} alt={`Seite ${i + 1}`} className="h-16 w-12 object-cover rounded border border-white/20" />
+              <button
+                onClick={() => removePhoto(i)}
+                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black/80 text-white flex items-center justify-center border border-white/30"
+              >
+                <X size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Shutter */}
+      <div className="flex items-center justify-center py-6 bg-black">
+        <button
+          onClick={capture}
+          disabled={!ready || !!error}
+          className="w-16 h-16 rounded-full bg-white ring-4 ring-white/30 active:scale-95 transition-transform disabled:opacity-40"
+          aria-label="Foto aufnehmen"
+        />
+      </div>
+    </div>
+  )
 }
 
 function FileStatusIcon({ status }: { status: FileStatus }) {
@@ -138,6 +289,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
 }) {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [dragover, setDragover] = useState(false)
+  const [cameraOpen, setCameraOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const { data: kategorien = [] } = useKategorien()
 
@@ -279,6 +431,17 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
     e.target.value = ''
   }
 
+  const handleCameraDone = useCallback(async (photos: Blob[]) => {
+    setCameraOpen(false)
+    try {
+      // Alle Fotos werden zu EINER mehrseitigen Rechnung zusammengeführt
+      const pdf = await convertImagesToPdf(photos, `rechnung_${Date.now()}.pdf`)
+      void processFiles([pdf])
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Fotos konnten nicht verarbeitet werden')
+    }
+  }, [processFiles])
+
   return (
     <Dialog open={open} onOpenChange={v => !v && handleClose()}>
       <DialogContent className="max-w-lg bg-white border border-border shadow-xl">
@@ -345,6 +508,15 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
             )}
           </div>
 
+          {/* Kamera: mehrere Seiten zu einer Rechnung */}
+          <button
+            onClick={() => setCameraOpen(true)}
+            className="mt-3 w-full h-11 flex items-center justify-center gap-2 rounded-card border border-border bg-bg-surface text-sm font-medium text-ink hover:bg-bg-muted transition-colors"
+          >
+            <Camera size={16} className="text-accent-500" />
+            Mehrere Seiten fotografieren
+          </button>
+
           <div className="flex justify-between items-center mt-4 pt-3 border-t border-border">
             <div className="flex items-center gap-1.5 text-xs text-ink-muted">
               <FileText size={12} />
@@ -360,6 +532,9 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
           </div>
         </div>
       </DialogContent>
+      {cameraOpen && (
+        <CameraCapture onDone={handleCameraDone} onCancel={() => setCameraOpen(false)} />
+      )}
     </Dialog>
   )
 }
@@ -705,7 +880,7 @@ export function InboxPage() {
         ) : (
           <RechnungenTable
             rows={filtered}
-            onRowClick={id => navigate(`/buchung/${id}`)}
+            onRowClick={id => navigate(`/buchung/${id}`, { state: { rechnungIds: filtered.map(r => r.id) } })}
             selectedIds={selectedIds}
             onToggle={id => setSelectedIds(prev => {
               const next = new Set(prev)

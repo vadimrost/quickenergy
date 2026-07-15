@@ -194,6 +194,9 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
           typ:                rechnungsTyp,
           status:             rechnungsStatus,
           kunde_id:           kundeId,
+          // Echte Rechnungsnummer vom Beleg übernehmen; nur wenn OCR keine findet,
+          // vergibt der DB-Trigger eine fortlaufende RE-Nummer (Fallback).
+          rechnungsnummer:    ocr.invoice_number?.trim() || null,
           betreff:            ocr.subject ?? null,
           rechnungsdatum,
           leistungsdatum:     rechnungsdatum,
