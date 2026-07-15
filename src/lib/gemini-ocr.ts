@@ -221,7 +221,9 @@ SKONTO:
 - Der Nettobetrag (net_amount) bleibt IMMER der Betrag VOR Skonto — Skonto nie abziehen
 
 RECHNUNGSNUMMER: Formale Rechnungs-Nr. bevorzugen. Bei Kassenbons (Tankstelle, Restaurant) alternativ Bon-Nr., Beleg-Nr. oder Kassen-ID verwenden — niemals null lassen wenn irgendeine Belegnummer sichtbar ist.
-DATUM: immer YYYY-MM-DD.
+DATUM — beide Felder IMMER im JSON zurückgeben (Format YYYY-MM-DD):
+- invoice_date: das RECHNUNGS-/BELEGDATUM (Ausstellungsdatum). Bei Kassenbons/Quittungen (Tankstelle, Restaurant) das Bon-/Kassendatum — steht oft klein im Kopf oder Fuß des Belegs neben Uhrzeit/Kassen-Nr. NIEMALS null lassen, wenn irgendein Datum auf dem Beleg sichtbar ist.
+- due_date: das FÄLLIGKEITSDATUM ("zahlbar bis", "Zahlungsziel", "fällig am", "Zahlbar innerhalb ... bis"). Nur ausfüllen wenn explizit angegeben, sonst null.
 card_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.
 supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).
 
@@ -352,7 +354,9 @@ ZAHLUNGSZIEL:
 - zahlungsziel_tage: Anzahl Tage Zahlungsziel (z.B. "zahlbar binnen 14 Tagen" → 14), null wenn nicht angegeben
 - Bei "Zahlung sofort nach Rechnungseingang" → zahlungsziel_tage = 0
 
-DATUM: immer YYYY-MM-DD.
+DATUM — beide Felder IMMER im JSON zurückgeben (Format YYYY-MM-DD):
+- invoice_date: das RECHNUNGSDATUM (Ausstellungsdatum der Rechnung). NIEMALS null lassen, wenn ein Datum sichtbar ist.
+- due_date: das FÄLLIGKEITSDATUM ("zahlbar bis", "Zahlungsziel", "fällig am"). Nur ausfüllen wenn explizit angegeben, sonst null.
 invoice_number: formale Rechnungsnummer.`
 
 export async function geminiOcrAusgangsrechnung(base64: string, apiKey: string): Promise<AusgangsrechnungOcrResult> {
