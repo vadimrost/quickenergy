@@ -103,10 +103,13 @@ export function buildArRows(rechnungen: Ausgangsrechnung[]): BmdRow[] {
         text,
       })
     }
-    // Fallback: invoice has brutto but no detailed breakdown
+    // Fallback: invoice has brutto but no detailed 20/10 breakdown
     if ((r.summe_netto_20 ?? 0) === 0 && (r.summe_netto_10 ?? 0) === 0 && r.summe_brutto !== 0) {
-      const netto = Math.round((r.summe_netto_0 !== 0 ? r.summe_netto_0 : r.summe_brutto / 1.2) * 100) / 100
-      const ust   = Math.round((r.summe_brutto - netto) * 100) / 100
+      // 0%/steuerfrei: eigener Nettobetrag (summe_netto_0) → 0% behalten, KEINE 20% erfinden
+      const istNullProzent = (r.summe_netto_0 ?? 0) !== 0
+      const netto = Math.round((istNullProzent ? r.summe_netto_0 : r.summe_brutto / 1.2) * 100) / 100
+      const ust   = istNullProzent ? 0 : Math.round((r.summe_brutto - netto) * 100) / 100
+      const pct   = istNullProzent ? 0 : 20
       rows.push({
         konto:      4000,
         buchcode:   AR_BUCHCODE,
@@ -115,8 +118,8 @@ export function buildArRows(rechnungen: Ausgangsrechnung[]): BmdRow[] {
         buchdatum:  today,
         belegdatum,
         buchsymbol: 'AR',
-        steuercode: steuercode(20),
-        prozent:    20,
+        steuercode: steuercode(pct),
+        prozent:    pct,
         betrag:     -netto,
         steuer:     -ust,
         text,
