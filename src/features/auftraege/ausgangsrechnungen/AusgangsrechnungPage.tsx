@@ -366,19 +366,21 @@ function BmdExportDialog({ open, onClose, rechnungen }: {
   const [month, setMonth] = useState(defaultMonth)
 
   useEffect(() => {
-    if (availableMonths.length > 0 && !availableMonths.includes(month)) setMonth(availableMonths[0])
+    if (month !== 'alle' && availableMonths.length > 0 && !availableMonths.includes(month)) setMonth(availableMonths[0])
   }, [availableMonths])
 
   const monthData = rechnungen.filter(r =>
-    r.rechnungsdatum?.startsWith(month) &&
+    (month === 'alle' || r.rechnungsdatum?.startsWith(month)) &&
     r.status !== 'entwurf' &&
     !(r.status === 'storniert' && r.typ !== 'stornorechnung')
   )
-  const monthLabel = month ? format(parseISO(`${month}-01`), 'MMMM yyyy', { locale: de }) : ''
+  const monthLabel = month === 'alle'
+    ? 'Alle Monate'
+    : month ? format(parseISO(`${month}-01`), 'MMMM yyyy', { locale: de }) : ''
 
   const handleExport = () => {
     const rows = buildArRows(monthData)
-    writeBmdExcel(rows, `BMD_AR_${month}.xlsx`)
+    writeBmdExcel(rows, `BMD_AR_${month === 'alle' ? 'alle' : month}.xlsx`)
     onClose()
   }
 
@@ -403,6 +405,7 @@ function BmdExportDialog({ open, onClose, rechnungen }: {
                 onChange={e => setMonth(e.target.value)}
                 className="w-full h-9 px-3 text-sm border border-border rounded-card-sm bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 appearance-none cursor-pointer"
               >
+                <option value="alle">Alle Monate</option>
                 {availableMonths.map(m => (
                   <option key={m} value={m}>{format(parseISO(`${m}-01`), 'MMMM yyyy', { locale: de })}</option>
                 ))}
