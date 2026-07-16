@@ -183,6 +183,7 @@ export function AngebotFormPage() {
             ust_satz: 20 as const,
             rabatt_prozent: 0,
             zeilenbetrag_netto: 0,
+            bild_url: null,
           }],
           rabattGesamt: 0,
         },

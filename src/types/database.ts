@@ -204,6 +204,14 @@ export interface DokumentPosition {
   ust_satz: 0 | 10 | 20
   rabatt_prozent: number
   zeilenbetrag_netto: number
+  bild_url: string | null
+  created_at: string
+}
+
+export interface Bild {
+  id: string
+  name: string | null
+  url: string
   created_at: string
 }
 
@@ -401,6 +409,7 @@ export interface Database {
       auftragsbestatigungen: { Row: Auftragsbestaetigung; Insert: Omit<Auftragsbestaetigung, 'id' | 'created_at' | 'ab_nummer'>; Update: Partial<Auftragsbestaetigung> }
       ausgangsrechnungen: { Row: Ausgangsrechnung; Insert: Omit<Ausgangsrechnung, 'id' | 'created_at' | 'rechnungsnummer'>; Update: Partial<Ausgangsrechnung> }
       firma_einstellungen: { Row: FirmaStammdaten; Insert: Omit<FirmaStammdaten, 'id' | 'updated_at'>; Update: Partial<FirmaStammdaten> }
+      bilder: { Row: Bild; Insert: Omit<Bild, 'id' | 'created_at'>; Update: Partial<Bild> }
       leads: { Row: Lead; Insert: Omit<Lead, 'id' | 'created_at' | 'kunde'>; Update: Partial<Omit<Lead, 'id' | 'created_at' | 'kunde'>> }
     }
     Views: Record<string, never>

@@ -268,8 +268,9 @@ export function DocumentHtmlPreview(input: DocInput) {
               <td style={{ ...td, textAlign: 'right' }}>
                 {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.einzelpreis_netto)} EUR
               </td>
-              <td style={{ ...td, textAlign: 'right' }}>
+              <td style={{ ...td, textAlign: 'right', verticalAlign: 'top' }}>
                 {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.zeilenbetrag_netto)} EUR
+                {p.bild_url ? <img src={p.bild_url} alt="" style={{ marginTop: 4, maxWidth: 150, maxHeight: 100, objectFit: 'contain', display: 'block', marginLeft: 'auto' }} /> : null}
               </td>
             </tr>
           ))}

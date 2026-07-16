@@ -55,5 +55,6 @@ export function emptyPosition(reihenfolge = 0): PositionDraft {
     ust_satz: 20,
     rabatt_prozent: 0,
     zeilenbetrag_netto: 0,
+    bild_url: null,
   }
 }

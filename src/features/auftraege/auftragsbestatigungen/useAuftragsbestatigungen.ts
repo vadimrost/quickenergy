@@ -126,6 +126,7 @@ export function useConvertAngebotToAb() {
             ust_satz: p.ust_satz,
             rabatt_prozent: p.rabatt_prozent,
             zeilenbetrag_netto: p.zeilenbetrag_netto,
+            bild_url: p.bild_url,
           }))
         )
         if (posErr) throw posErr

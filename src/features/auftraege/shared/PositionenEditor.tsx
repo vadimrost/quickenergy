@@ -1,9 +1,11 @@
-import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, Trash2, ChevronUp, ChevronDown, ImageIcon } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { formatEuro } from '@/lib/utils'
 import { type PositionDraft, EINHEITEN, UST_SAETZE, berechneZeilenbetrag, emptyPosition } from './positionenUtils'
+import { BildPickerDialog } from './BildPickerDialog'
 
 interface Props {
   positionen: PositionDraft[]
@@ -11,6 +13,8 @@ interface Props {
 }
 
 export function PositionenEditor({ positionen, onChange }: Props) {
+  const [bildIndex, setBildIndex] = useState<number | null>(null)
+
   function update(index: number, patch: Partial<PositionDraft>) {
     const next = positionen.map((p, i) => {
       if (i !== index) return p
@@ -47,7 +51,8 @@ export function PositionenEditor({ positionen, onChange }: Props) {
 
       <div className="space-y-1.5">
         {positionen.map((p, i) => (
-          <div key={i} className="grid grid-cols-[2fr_65px_72px_90px_52px_48px_105px_28px] gap-2 items-center group">
+          <div key={i}>
+          <div className="grid grid-cols-[2fr_65px_72px_90px_52px_48px_105px_28px] gap-2 items-center group">
             {/* Bezeichnung */}
             <Input
               value={p.bezeichnung}
@@ -129,8 +134,34 @@ export function PositionenEditor({ positionen, onChange }: Props) {
               style={{ display: 'none' }}
             />
           </div>
+
+          {/* Bild-Zeile */}
+          <div className="flex items-center gap-2 pl-1 mt-1">
+            {p.bild_url ? (
+              <>
+                <img src={p.bild_url} alt="" className="h-12 w-12 object-cover rounded border border-border" />
+                <button type="button" onClick={() => setBildIndex(i)} className="text-xs text-accent-600 hover:text-accent-700">
+                  Bild ändern
+                </button>
+                <button type="button" onClick={() => update(i, { bild_url: null })} className="text-xs text-ink-muted hover:text-red-500">
+                  entfernen
+                </button>
+              </>
+            ) : (
+              <button type="button" onClick={() => setBildIndex(i)} className="text-xs text-ink-muted hover:text-accent-600 flex items-center gap-1">
+                <ImageIcon size={12} /> Bild hinzufügen
+              </button>
+            )}
+          </div>
+          </div>
         ))}
       </div>
+
+      <BildPickerDialog
+        open={bildIndex !== null}
+        onClose={() => setBildIndex(null)}
+        onSelect={url => { if (bildIndex !== null) update(bildIndex, { bild_url: url }) }}
+      />
 
       <div className="mt-3 flex items-center gap-4">
         <Button type="button" variant="ghost" size="sm" onClick={add} className="text-accent-600 hover:text-accent-700 px-0">

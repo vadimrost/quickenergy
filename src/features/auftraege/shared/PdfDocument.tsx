@@ -146,6 +146,8 @@ const s = StyleSheet.create({
   colMenge: { width: 42, textAlign: 'right' },
   colEP: { width: 72, textAlign: 'right' },
   colGP: { width: 72, textAlign: 'right' },
+  colRight: { width: 186 },
+  posBild: { marginTop: 4, maxWidth: 170, maxHeight: 110, objectFit: 'contain', alignSelf: 'flex-end' },
 
   // Totals
   totalsContainer: { marginTop: 10, alignItems: 'flex-end' },
@@ -287,15 +289,20 @@ function Positionen({ positionen }: { positionen: DokumentPosition[] }) {
             <Text style={s.tableCell}>{p.bezeichnung}</Text>
             {p.beschreibung ? <Text style={s.tableCellMuted}>{p.beschreibung}</Text> : null}
           </View>
-          <Text style={[s.tableCell, s.colMenge]}>
-            {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2 }).format(p.menge)} {p.einheit}
-          </Text>
-          <Text style={[s.tableCell, s.colEP]}>
-            {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.einzelpreis_netto)} EUR
-          </Text>
-          <Text style={[s.tableCell, s.colGP]}>
-            {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.zeilenbetrag_netto)} EUR
-          </Text>
+          <View style={s.colRight}>
+            <View style={{ flexDirection: 'row' }}>
+              <Text style={[s.tableCell, s.colMenge]}>
+                {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2 }).format(p.menge)} {p.einheit}
+              </Text>
+              <Text style={[s.tableCell, s.colEP]}>
+                {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.einzelpreis_netto)} EUR
+              </Text>
+              <Text style={[s.tableCell, s.colGP]}>
+                {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.zeilenbetrag_netto)} EUR
+              </Text>
+            </View>
+            {p.bild_url ? <Image src={p.bild_url} style={s.posBild} /> : null}
+          </View>
         </View>
       ))}
     </View>
