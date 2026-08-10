@@ -35,6 +35,18 @@ WICHTIG:
 - Summen, Skonto, Mehrwertsteuer, Endbetrag, Ursprung, ZolltarifNr. NICHT als Position aufnehmen.
 - Nur echte Artikelpositionen extrahieren.`
 
+// Lieferanten-Einheit ("ST", "M", …) auf unsere Einheiten mappen.
+export function mapLieferantEinheit(e: string | null): string {
+  const s = (e ?? '').trim().toLowerCase()
+  if (s.startsWith('st')) return 'Stk'
+  if (s === 'm' || s === 'lfm') return 'lfm'
+  if (s === 'm2' || s === 'm²') return 'm²'
+  if (s === 'kwp') return 'kWp'
+  if (s === 'kwh') return 'kWh'
+  if (['std', 'pausch', 'set'].includes(s)) return s
+  return 'Stk'
+}
+
 export async function lieferantAngebotOcr(base64: string, apiKey: string): Promise<LieferantAngebotOcrResult> {
   const raw = await callOpenRouterPdfJson<LieferantAngebotOcrResult>(base64, apiKey, PROMPT)
   return {

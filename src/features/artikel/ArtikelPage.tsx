@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react'
-import { Package, Plus, Trash2, Pencil, Search } from 'lucide-react'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import { Package, Plus, Trash2, Pencil, Search, Sparkles, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PageTitle } from '@/components/shared/PageTitle'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -10,7 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatEuro, cn } from '@/lib/utils'
 import { EINHEITEN } from '@/features/auftraege/shared/positionenUtils'
-import { useArtikel, useCreateArtikel, useUpdateArtikel, useDeleteArtikel, type ArtikelInput } from './useArtikel'
+import { fileToBase64 } from '@/lib/gemini-ocr'
+import { lieferantAngebotOcr, mapLieferantEinheit } from '@/lib/lieferant-angebot-ocr'
+import { useArtikel, useCreateArtikel, useCreateArtikelBulk, useUpdateArtikel, useDeleteArtikel, type ArtikelInput } from './useArtikel'
 import type { Artikel } from '@/types/database'
 
 const EMPTY: ArtikelInput = { bezeichnung: '', gruppe: null, einheit: 'Stk', vk_netto: 0, ek_netto: null, bestand: null }
@@ -91,12 +93,41 @@ function ArtikelDialog({ open, onClose, initial, onSave, saving }: {
 export function ArtikelPage() {
   const { data: artikel = [], isLoading } = useArtikel()
   const { mutate: create, isPending: creating } = useCreateArtikel()
+  const { mutateAsync: createBulk } = useCreateArtikelBulk()
   const { mutate: update, isPending: updating } = useUpdateArtikel()
   const { mutate: del } = useDeleteArtikel()
 
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Artikel | null>(null)
+  const [importing, setImporting] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
+
+  const handleImport = async (file: File) => {
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
+    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert'); return }
+    setImporting(true)
+    try {
+      toast.info('Lieferanten-Angebot wird analysiert…')
+      const base64 = await fileToBase64(file)
+      const ocr = await lieferantAngebotOcr(base64, apiKey)
+      if (ocr.positionen.length === 0) { toast.error('Keine Positionen erkannt'); return }
+      const items: ArtikelInput[] = ocr.positionen.map(p => ({
+        bezeichnung: p.artikelnummer ? `${p.bezeichnung} (${p.artikelnummer})` : p.bezeichnung,
+        gruppe: ocr.lieferant ?? null,
+        einheit: mapLieferantEinheit(p.einheit),
+        vk_netto: 0,               // Verkaufspreis trägt der Nutzer nach
+        ek_netto: p.ek_einzelpreis ?? null,
+        bestand: null,
+      }))
+      await createBulk(items)
+      toast.success(`${items.length} Artikel importiert — bitte Verkaufspreise ergänzen`)
+    } catch (err) {
+      toast.error(`Import fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
+    } finally {
+      setImporting(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -114,9 +145,26 @@ export function ArtikelPage() {
         title="Artikelliste"
         subtitle={`${artikel.length} Artikel`}
         actions={
-          <button onClick={() => setAddOpen(true)} className="h-9 px-3 inline-flex items-center gap-1.5 text-sm rounded-card-sm bg-ink hover:bg-ink/80 text-white transition-colors">
-            <Plus size={15} /> Neuer Artikel
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) void handleImport(f); e.target.value = '' }}
+            />
+            <button
+              onClick={() => importInputRef.current?.click()}
+              disabled={importing}
+              className="h-9 px-3 inline-flex items-center gap-1.5 text-sm rounded-card-sm border border-border bg-bg-surface text-ink hover:bg-bg-muted transition-colors disabled:opacity-50"
+            >
+              {importing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} className="text-accent-500" />}
+              Angebot importieren
+            </button>
+            <button onClick={() => setAddOpen(true)} className="h-9 px-3 inline-flex items-center gap-1.5 text-sm rounded-card-sm bg-ink hover:bg-ink/80 text-white transition-colors">
+              <Plus size={15} /> Neuer Artikel
+            </button>
+          </div>
         }
       />
 

@@ -37,6 +37,18 @@ export function useCreateArtikel() {
   })
 }
 
+export function useCreateArtikelBulk() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (items: ArtikelInput[]) => {
+      if (items.length === 0) return
+      const { error } = await supabase.from('artikel').insert(items)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['artikel'] }),
+  })
+}
+
 export function useUpdateArtikel() {
   const qc = useQueryClient()
   return useMutation({
