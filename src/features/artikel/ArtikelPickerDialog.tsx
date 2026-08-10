@@ -48,16 +48,18 @@ export function ArtikelPickerDialog({ open, onClose, onSelect }: {
                 <button
                   key={a.id}
                   onClick={() => { onSelect(a); onClose() }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-card-sm hover:bg-bg-muted transition-colors text-left"
+                  className="w-full flex items-start gap-3 px-3 py-2.5 rounded-card-sm hover:bg-bg-muted transition-colors text-left"
                 >
-                  <Package size={14} className="text-ink-subtle flex-shrink-0" />
+                  <Package size={14} className="text-ink-subtle flex-shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-ink truncate">{a.bezeichnung}</div>
-                    <div className="text-xs text-ink-muted font-mono">{a.nummer ?? ''} · {a.einheit}</div>
+                    <div className="text-sm text-ink leading-snug line-clamp-2">{a.bezeichnung}</div>
+                    <div className="text-xs text-ink-muted font-mono mt-0.5">{a.nummer ?? ''} · {a.einheit}</div>
                   </div>
-                  <div className="flex-shrink-0 text-right">
-                    <div className="text-sm font-medium text-ink tabular-nums">VK {formatEuro(a.vk_netto)}</div>
-                    {a.ek_netto != null && <div className="text-xs text-ink-muted tabular-nums">EK {formatEuro(a.ek_netto)}</div>}
+                  <div className="flex-shrink-0 text-right leading-snug">
+                    <div className="text-sm font-medium text-ink tabular-nums">
+                      {a.vk_netto > 0 ? formatEuro(a.vk_netto) : <span className="text-ink-subtle">VK —</span>}
+                    </div>
+                    {a.ek_netto != null && <div className="text-xs text-ink-muted tabular-nums mt-0.5">EK {formatEuro(a.ek_netto)}</div>}
                   </div>
                 </button>
               ))}
