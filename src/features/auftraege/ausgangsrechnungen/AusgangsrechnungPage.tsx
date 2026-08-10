@@ -12,9 +12,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
-import { fileToBase64, normalizeDate, geminiOcrAusgangsrechnung } from '@/lib/gemini-ocr'
+import { fileToBase64, geminiOcrAusgangsrechnung } from '@/lib/gemini-ocr'
+import { createAusgangsrechnungFromOcr } from './importAusgangsrechnung'
 import { buildArRows, writeBmdExcel } from '@/lib/bmd-export'
-import { DEFAULT_KOPF, DEFAULT_FUSS } from '@/features/auftraege/shared/dokumentDefaults'
 import { supabase } from '@/lib/supabase'
 import { useAusgangsrechnungen, useDuplicateAusgangsrechnung } from './useAusgangsrechnungen'
 import type { Ausgangsrechnung, AusgangsrechnungStatus } from '@/types/database'
@@ -75,24 +75,6 @@ function FaelligkeitCell({ date, status }: { date: string | null; status: Ausgan
 
 type FileStatus = 'pending' | 'uploading' | 'ocr' | 'saving' | 'done' | 'error'
 interface FileEntry { id: string; name: string; status: FileStatus; error?: string; info?: string }
-
-async function findOrCreateKunde(name: string | null | undefined): Promise<string | null> {
-  if (!name?.trim()) return null
-  const trimmed = name.trim()
-  const { data: existing } = await supabase
-    .from('kunden')
-    .select('id')
-    .ilike('firmenname', trimmed)
-    .limit(1)
-    .maybeSingle()
-  if (existing) return existing.id
-  const { data: created } = await supabase
-    .from('kunden')
-    .insert({ firmenname: trimmed })
-    .select('id')
-    .single()
-  return created?.id ?? null
-}
 
 function fileStatusLabel(s: FileStatus): string {
   switch (s) {
@@ -159,89 +141,18 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
         continue
       }
 
-      // 3. Find or create Kunde
+      // 3. Kunde + Ausgangsrechnung anlegen (gemeinsamer Helper)
       updateEntry(id, { status: 'saving' })
-      const kundeId = await findOrCreateKunde(ocr.customer_name)
-
-      // 4. Build summen from OCR
-      const netto20 = ocr.net_amount_20 ?? 0
-      const netto10 = ocr.net_amount_10 ?? 0
-      const netto0  = ocr.net_amount_0  ?? 0
-      const ust20   = ocr.tax_amount_20 ?? Math.round(netto20 * 0.20 * 100) / 100
-      const ust10   = ocr.tax_amount_10 ?? Math.round(netto10 * 0.10 * 100) / 100
-      const brutto  = ocr.total_brutto  ?? Math.round((netto20 + netto10 + netto0 + ust20 + ust10) * 100) / 100
-
-      const rechnungsdatum = normalizeDate(ocr.invoice_date) ?? new Date().toISOString().split('T')[0]
-      const zahlungsTage   = ocr.zahlungsziel_tage || 14
-      const faellig = ocr.due_date
-        ? (normalizeDate(ocr.due_date) ?? (() => {
-            const d = new Date(rechnungsdatum); d.setDate(d.getDate() + zahlungsTage); return d.toISOString().split('T')[0]
-          })())
-        : (() => {
-            const d = new Date(rechnungsdatum); d.setDate(d.getDate() + zahlungsTage); return d.toISOString().split('T')[0]
-          })()
-
-      // 5. Insert ausgangsrechnung
-      const rechnungsTyp = ocr.is_stornorechnung
-        ? 'stornorechnung'
-        : ocr.is_schlussrechnung
-          ? 'schlussrechnung'
-          : 'rechnung'
-      const rechnungsStatus = ocr.is_stornorechnung ? 'storniert' : 'entwurf'
-      const { data: newRechnung, error: insertErr } = await supabase
-        .from('ausgangsrechnungen')
-        .insert({
-          typ:                rechnungsTyp,
-          status:             rechnungsStatus,
-          kunde_id:           kundeId,
-          // Echte Rechnungsnummer vom Beleg übernehmen; nur wenn OCR keine findet,
-          // vergibt der DB-Trigger eine fortlaufende RE-Nummer (Fallback).
-          rechnungsnummer:    ocr.invoice_number?.trim() || null,
-          betreff:            ocr.subject ?? null,
-          rechnungsdatum,
-          leistungsdatum:     rechnungsdatum,
-          zahlungsziel_tage:  zahlungsTage,
-          faelligkeitsdatum:  faellig,
-          rabatt_gesamt_prozent: 0,
-          kopftext:           DEFAULT_KOPF,
-          fusstext:           DEFAULT_FUSS,
-          summe_netto_20:     netto20,
-          summe_netto_10:     netto10,
-          summe_netto_0:      netto0,
-          ust_20:             ust20,
-          ust_10:             ust10,
-          summe_brutto:       brutto,
-          mahnstufe:          0,
-        })
-        .select('id')
-        .single()
-
-      if (insertErr) {
-        updateEntry(id, { status: 'error', error: insertErr.message })
+      let newId: string
+      try {
+        newId = await createAusgangsrechnungFromOcr(ocr)
+      } catch (err) {
+        updateEntry(id, { status: 'error', error: err instanceof Error ? err.message : 'Speichern fehlgeschlagen' })
         continue
       }
 
-      // 6. Insert one placeholder position if we have amounts
-      const nettoGesamt = netto20 + netto10 + netto0
-      if (nettoGesamt !== 0 && newRechnung?.id) {
-        const ustSatz = netto20 !== 0 ? 20 : netto10 !== 0 ? 10 : 0
-        await supabase.from('dokument_positionen').insert({
-          dokument_id:       newRechnung.id,
-          dokument_typ:      'rechnung',
-          reihenfolge:       0,
-          bezeichnung:       ocr.subject ?? 'Importierte Position',
-          beschreibung:      null,
-          menge:             1,
-          einheit:           'pausch',
-          einzelpreis_netto: nettoGesamt,
-          ust_satz:          ustSatz,
-          rabatt_prozent:    0,
-          zeilenbetrag_netto: nettoGesamt,
-        })
-      }
-
       updateEntry(id, { status: 'done', info: ocr.customer_name ?? undefined })
-      if (newRechnung?.id) onCreated(newRechnung.id)
+      onCreated(newId)
     }
   }, [updateEntry, onCreated])
 

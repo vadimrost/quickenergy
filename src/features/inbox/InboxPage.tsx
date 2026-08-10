@@ -18,7 +18,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { geminiOcr, fileToBase64, normalizeDate, resolveCard, effectiveNetto } from '@/lib/gemini-ocr'
 import { pairKey } from '@/lib/dismissed-duplikate'
 import { useDismissedKeys } from '@/features/buchung/useBuchung'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
+import { moveRechnungToAusgangsrechnung, isEigeneRechnung } from '@/features/auftraege/ausgangsrechnungen/importAusgangsrechnung'
 import { useRechnungen, useUpdateRechnung } from './useRechnungen'
 import { BulkOcrDialog } from './BulkOcrDialog'
 import { useMitarbeiter } from './useMitarbeiter'
@@ -601,6 +604,42 @@ export function InboxPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const { data: allRechnungen = [], isLoading, isError, refetch } = useRechnungen()
+  const { data: firma } = useFirmaStammdaten()
+  const qc = useQueryClient()
+
+  // Eigene Rechnungen (Lieferant = QuickEnergy) automatisch zu den Ausgangsrechnungen
+  // verschieben — z.B. wenn der Herr seine eigene Rechnung als ER hochlädt/mailt.
+  const movingRef = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
+    const firmaName = firma?.name
+    if (!apiKey || !firmaName) return
+    const eigene = allRechnungen.filter(r =>
+      !movingRef.current.has(r.id) &&
+      r.pdf_url &&
+      r.status === 'eingegangen' &&   // nur neue ER, keine schon gebuchten/bezahlten
+      isEigeneRechnung(r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name, firmaName)
+    )
+    if (eigene.length === 0) return
+    eigene.forEach(r => movingRef.current.add(r.id))
+    ;(async () => {
+      let moved = 0
+      for (const r of eigene) {
+        try {
+          await moveRechnungToAusgangsrechnung(r, apiKey)
+          moved++
+        } catch (err) {
+          // In movingRef belassen → kein Retry-Sturm in dieser Session
+          console.warn('Auto-Move eigene Rechnung fehlgeschlagen:', err)
+        }
+      }
+      if (moved > 0) {
+        toast.success(`${moved} eigene Rechnung${moved === 1 ? '' : 'en'} → zu Ausgangsrechnungen verschoben`)
+        void refetch()
+        void qc.invalidateQueries({ queryKey: ['ausgangsrechnungen'] })
+      }
+    })()
+  }, [allRechnungen, firma, refetch, qc])
 
   async function handleBulkDelete() {
     if (selectedIds.size === 0) return
