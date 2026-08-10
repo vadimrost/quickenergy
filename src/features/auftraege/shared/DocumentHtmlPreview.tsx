@@ -171,10 +171,7 @@ export function DocumentHtmlPreview(input: DocInput) {
       boxSizing: 'border-box',
     }}>
       {/* ── Kopfzeile ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-        <div style={{ fontSize: 7.5, color: '#555', lineHeight: 1.5, maxWidth: 220 }}>
-          {F.name} – {F.strasse} – {F.plzOrt}
-        </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'flex-start', marginBottom: 4 }}>
         <div style={{ textAlign: 'right' }}>
           {F.logoUrl ? (
             <img src={F.logoUrl} alt="Logo" style={{ maxHeight: 44, maxWidth: 140, objectFit: 'contain' }} />
@@ -315,10 +312,10 @@ export function DocumentHtmlPreview(input: DocInput) {
         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 6.5, color: '#555', lineHeight: 1.5, flex: 1 }}>
             {F.name}{'\n'}{F.strasse}, {F.plzOrt}{'\n'}
-            Tel {F.tel}{'\n'}E-Mail {F.email}{'\n'}Web {F.web}
+            E-Mail {F.email}{'\n'}Web {F.web}
           </div>
           <div style={{ fontSize: 6.5, color: '#555', lineHeight: 1.5, flex: 1, paddingLeft: 8, borderLeft: '0.3px solid #ccc', borderRight: '0.3px solid #ccc', paddingRight: 8 }}>
-            Amtsgericht {F.gericht}{'\n'}FN-Nr.: {F.fn}{'\n'}
+            {F.gericht}{'\n'}FN-Nr.: {F.fn}{'\n'}
             USt-ID {F.uid}{'\n'}Steuer-Nr.: {F.steuerNr}{'\n'}
             Geschäftsführung {F.gf}
           </div>

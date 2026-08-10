@@ -202,10 +202,7 @@ function kundenAnschrift(k: Angebot['kunde'] | null | undefined): string[] {
 function Kopfzeile({ firma }: { firma: FirmaConfig }) {
   return (
     <>
-      <View style={s.headerRow}>
-        <Text style={s.firmAdresse}>
-          {firma.name} – {firma.strasse} – {firma.plzOrt}
-        </Text>
+      <View style={[s.headerRow, { justifyContent: 'flex-end' }]}>
         <View style={s.logoBox}>
           {firma.logoUrl ? (
             <Image src={firma.logoUrl} style={{ maxHeight: 44, maxWidth: 140, objectFit: 'contain' }} />
@@ -392,12 +389,11 @@ function Fusszeile({ firma }: { firma: FirmaConfig }) {
         <Text style={s.footerCol}>
           {firma.name}{'\n'}
           {firma.strasse}, {firma.plzOrt}{'\n'}
-          Tel {firma.tel}{'\n'}
           E-Mail {firma.email}{'\n'}
           Web {firma.web}
         </Text>
         <Text style={s.footerColMid}>
-          Amtsgericht {firma.gericht}{'\n'}
+          {firma.gericht}{'\n'}
           FN-Nr.: {firma.fn}{'\n'}
           USt-ID {firma.uid}{'\n'}
           Steuer-Nr.: {firma.steuerNr}{'\n'}
