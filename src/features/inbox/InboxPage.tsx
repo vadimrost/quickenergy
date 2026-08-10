@@ -641,6 +641,9 @@ export function InboxPage() {
     })()
   }, [allRechnungen, firma, refetch, qc])
 
+  // Rechnungen ohne Datum (z.B. n8n-Import) — per OCR nachtragbar
+  const ohneDatum = allRechnungen.filter(r => !r.rechnungsdatum && r.pdf_url)
+
   async function handleBulkDelete() {
     if (selectedIds.size === 0) return
     const confirmed = window.confirm(`${selectedIds.size} Rechnung${selectedIds.size > 1 ? 'en' : ''} wirklich löschen?`)
@@ -789,6 +792,16 @@ export function InboxPage() {
               >
                 {deleting ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                 <span className="hidden sm:inline">Löschen ({selectedIds.size})</span>
+              </button>
+            )}
+            {ohneDatum.length > 0 && selectedIds.size === 0 && (
+              <button
+                onClick={() => { setSelectedIds(new Set(ohneDatum.map(r => r.id))); setBulkOcrOpen(true) }}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-card-sm border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 text-xs font-medium transition-colors"
+                title="Fehlende Rechnungsdaten per OCR aus den PDFs nachtragen"
+              >
+                <Sparkles size={13} />
+                <span className="hidden sm:inline">Datum nachtragen ({ohneDatum.length})</span>
               </button>
             )}
             <button
