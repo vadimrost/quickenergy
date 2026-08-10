@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { supabase } from '@/lib/supabase'
 import { fileToBase64 } from '@/lib/gemini-ocr'
 import { lohnOcr } from '@/lib/lohn-ocr'
-import { useLohnabrechnungen, useDeleteLohnabrechnung, useSetDienstnehmerBezahlt } from './useLohn'
+import { useLohnabrechnungen, useDeleteLohnabrechnung, useSetDienstnehmerBezahlt, useReOcrLohnabrechnung } from './useLohn'
 import type { LohnDienstnehmer } from '@/types/database'
 import { runAutoMatchAllOpen } from '@/features/kontoauszug/useKontoauszug'
 import { formatEuro, cn } from '@/lib/utils'
@@ -213,6 +213,17 @@ export function LohnPage() {
   const { data: abrechnungen = [], isLoading } = useLohnabrechnungen()
   const deleteMutation = useDeleteLohnabrechnung()
   const bezahltMutation = useSetDienstnehmerBezahlt()
+  const reOcrMutation = useReOcrLohnabrechnung()
+
+  const handleReOcr = (abr: Lohnabrechnung) => {
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
+    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert'); return }
+    toast.info('Journal wird neu eingelesen…')
+    reOcrMutation.mutate({ abrechnung: abr, apiKey }, {
+      onSuccess: (n) => toast.success(n > 0 ? `${n} Dienstnehmer nachgetragen` : 'Keine Dienstnehmer im PDF erkannt'),
+      onError: e => toast.error(e instanceof Error ? e.message : 'Fehler beim Einlesen'),
+    })
+  }
 
   const istBezahlt = (d: LohnDienstnehmer) => d.bezahlt || !!d.bank_transaktion_id
 
@@ -515,6 +526,21 @@ export function LohnPage() {
                       </div>
                       )
                     })()}
+
+                    {/* Keine Dienstnehmer-Zeilen erfasst → aus PDF nachtragen */}
+                    {dienstnehmer.length === 0 && abr.pdf_url && (
+                      <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                        <p className="text-sm text-amber-800">Keine Dienstnehmer-Zeilen erfasst — beim Import wurde nur die Summe erkannt.</p>
+                        <button
+                          onClick={() => handleReOcr(abr)}
+                          disabled={reOcrMutation.isPending}
+                          className="shrink-0 inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg bg-ink text-white hover:bg-ink/80 transition-colors disabled:opacity-50"
+                        >
+                          {reOcrMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                          Aus PDF nachtragen
+                        </button>
+                      </div>
+                    )}
 
                     {/* Körperschaften */}
                     {koerperschaften.length > 0 && (
