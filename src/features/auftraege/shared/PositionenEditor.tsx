@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Plus, Trash2, ChevronUp, ChevronDown, ImageIcon } from 'lucide-react'
+import { Plus, Trash2, ChevronUp, ChevronDown, ImageIcon, Package } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { formatEuro } from '@/lib/utils'
 import { type PositionDraft, EINHEITEN, UST_SAETZE, berechneZeilenbetrag, emptyPosition } from './positionenUtils'
 import { BildPickerDialog } from './BildPickerDialog'
+import { ArtikelPickerDialog } from '@/features/artikel/ArtikelPickerDialog'
 
 interface Props {
   positionen: PositionDraft[]
@@ -14,6 +15,17 @@ interface Props {
 
 export function PositionenEditor({ positionen, onChange }: Props) {
   const [bildIndex, setBildIndex] = useState<number | null>(null)
+  const [artikelOpen, setArtikelOpen] = useState(false)
+
+  function addFromArtikel(a: { bezeichnung: string; einheit: string; vk_netto: number }) {
+    const pos: PositionDraft = {
+      ...emptyPosition(positionen.length),
+      bezeichnung: a.bezeichnung,
+      einheit: a.einheit,
+      einzelpreis_netto: a.vk_netto,
+    }
+    onChange([...positionen, { ...pos, zeilenbetrag_netto: berechneZeilenbetrag(pos) }])
+  }
 
   function update(index: number, patch: Partial<PositionDraft>) {
     const next = positionen.map((p, i) => {
@@ -163,10 +175,23 @@ export function PositionenEditor({ positionen, onChange }: Props) {
         onSelect={url => { if (bildIndex !== null) update(bildIndex, { bild_url: url }) }}
       />
 
+      <ArtikelPickerDialog
+        open={artikelOpen}
+        onClose={() => setArtikelOpen(false)}
+        onSelect={a => addFromArtikel(a)}
+      />
+
       <div className="mt-3 flex items-center gap-4">
         <Button type="button" variant="ghost" size="sm" onClick={add} className="text-accent-600 hover:text-accent-700 px-0">
           <Plus size={14} className="mr-1" /> Position hinzufügen
         </Button>
+        <button
+          type="button"
+          onClick={() => setArtikelOpen(true)}
+          className="text-xs text-ink-muted hover:text-accent-600 flex items-center gap-1"
+        >
+          <Package size={12} /> Aus Artikelliste
+        </button>
         {positionen.length > 0 && (
           <button
             type="button"

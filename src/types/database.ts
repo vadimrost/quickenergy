@@ -215,6 +215,18 @@ export interface Bild {
   created_at: string
 }
 
+export interface Artikel {
+  id: string
+  nummer: string | null
+  bezeichnung: string
+  gruppe: string | null
+  einheit: string
+  vk_netto: number
+  ek_netto: number | null
+  bestand: number | null
+  created_at: string
+}
+
 export interface DokumentVorlage {
   id: string
   name: string
@@ -410,6 +422,7 @@ export interface Database {
       ausgangsrechnungen: { Row: Ausgangsrechnung; Insert: Omit<Ausgangsrechnung, 'id' | 'created_at' | 'rechnungsnummer'>; Update: Partial<Ausgangsrechnung> }
       firma_einstellungen: { Row: FirmaStammdaten; Insert: Omit<FirmaStammdaten, 'id' | 'updated_at'>; Update: Partial<FirmaStammdaten> }
       bilder: { Row: Bild; Insert: Omit<Bild, 'id' | 'created_at'>; Update: Partial<Bild> }
+      artikel: { Row: Artikel; Insert: Omit<Artikel, 'id' | 'created_at' | 'nummer'>; Update: Partial<Artikel> }
       leads: { Row: Lead; Insert: Omit<Lead, 'id' | 'created_at' | 'kunde'>; Update: Partial<Omit<Lead, 'id' | 'created_at' | 'kunde'>> }
     }
     Views: Record<string, never>

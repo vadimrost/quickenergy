@@ -24,6 +24,7 @@ import { AusgangsrechnungPage } from '@/features/auftraege/ausgangsrechnungen/Au
 import { AusgangsrechnungFormPage } from '@/features/auftraege/ausgangsrechnungen/AusgangsrechnungFormPage'
 import { MahnwesenPage } from '@/features/auftraege/mahnwesen/MahnwesenPage'
 import { EinstellungenPage } from '@/features/einstellungen/EinstellungenPage'
+import { ArtikelPage } from '@/features/artikel/ArtikelPage'
 import { CrmPage } from '@/features/crm/CrmPage'
 import { LeadDetailPage } from '@/features/crm/LeadDetailPage'
 
@@ -102,6 +103,7 @@ function AppRoutes() {
       <Route path="/angebote"            element={<AdminRoute><AngebotePage /></AdminRoute>} />
       <Route path="/angebote/:id"        element={<AdminRoute><AngebotFormPage /></AdminRoute>} />
       <Route path="/vorlagen"            element={<AdminRoute><VorlagenPage /></AdminRoute>} />
+      <Route path="/artikel"             element={<AdminRoute><ArtikelPage /></AdminRoute>} />
       <Route path="/auftraege"           element={<AdminRoute><AuftragsbestaetigungPage /></AdminRoute>} />
       <Route path="/auftraege/:id"       element={<AdminRoute><AuftragsbestaetigungFormPage /></AdminRoute>} />
       <Route path="/ausgangsrechnungen"  element={<AdminRoute><AusgangsrechnungPage /></AdminRoute>} />
