@@ -402,6 +402,12 @@ export function AusgangsrechnungPage() {
       })
     : byTab
 
+  // Numerischer Wert der Rechnungsnummer (z.B. "RE-1002659" → 1002659)
+  const nummerVal = (r: typeof bySearch[number]) => {
+    const m = (r.rechnungsnummer ?? '').match(/\d+/g)
+    return m ? parseInt(m.join(''), 10) : 0
+  }
+
   const filtered = datumSort
     ? [...bySearch].sort((a, b) => {
         const aD = a.rechnungsdatum ?? '', bD = b.rechnungsdatum ?? ''
@@ -410,7 +416,8 @@ export function AusgangsrechnungPage() {
         if (!bD) return -1
         return datumSort === 'asc' ? aD.localeCompare(bD) : bD.localeCompare(aD)
       })
-    : bySearch
+    // Standard: nach Rechnungsnummer, höchste zuerst
+    : [...bySearch].sort((a, b) => nummerVal(b) - nummerVal(a))
 
   const ueberfaellig = rechnungen.filter(r =>
     r.status === 'offen' && r.faelligkeitsdatum && differenceInDays(parseISO(r.faelligkeitsdatum), today) < 0
