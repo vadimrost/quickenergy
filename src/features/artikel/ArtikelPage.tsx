@@ -116,12 +116,13 @@ export function ArtikelPage() {
         bezeichnung: p.artikelnummer ? `${p.bezeichnung} (${p.artikelnummer})` : p.bezeichnung,
         gruppe: ocr.lieferant ?? null,
         einheit: mapLieferantEinheit(p.einheit),
-        vk_netto: 0,               // Verkaufspreis trägt der Nutzer nach
-        ek_netto: p.ek_einzelpreis ?? null,
+        // Eigenes Angebot → Einzelpreis ist unser VK; Lieferanten-Angebot → EK
+        vk_netto: ocr.ist_eigenes_angebot ? (p.einzelpreis ?? 0) : 0,
+        ek_netto: ocr.ist_eigenes_angebot ? null : (p.einzelpreis ?? null),
         bestand: null,
       }))
       await createBulk(items)
-      toast.success(`${items.length} Artikel importiert — bitte Verkaufspreise ergänzen`)
+      toast.success(`${items.length} Artikel importiert${ocr.ist_eigenes_angebot ? '' : ' — bitte Verkaufspreise ergänzen'}`)
     } catch (err) {
       toast.error(`Import fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
     } finally {

@@ -105,8 +105,9 @@ export function AngebotFormPage() {
           bezeichnung: p.artikelnummer ? `${p.bezeichnung} (${p.artikelnummer})` : p.bezeichnung,
           menge: p.menge || 1,
           einheit: mapEinheit(p.einheit),
-          ek_netto: p.ek_einzelpreis ?? null,
-          einzelpreis_netto: 0, // VK trägt der Nutzer ein
+          // Eigenes Angebot → Einzelpreis ist der VK; Lieferanten-Angebot → EK (VK trägt der Nutzer ein)
+          ek_netto: ocr.ist_eigenes_angebot ? null : (p.einzelpreis ?? null),
+          einzelpreis_netto: ocr.ist_eigenes_angebot ? (p.einzelpreis ?? 0) : 0,
         }
         return { ...pos, zeilenbetrag_netto: berechneZeilenbetrag(pos) }
       })
@@ -115,7 +116,7 @@ export function AngebotFormPage() {
         const alle = [...behalten, ...imported].map((p, i) => ({ ...p, reihenfolge: i }))
         return { ...v, positionen: alle }
       })
-      toast.success(`${imported.length} Position${imported.length === 1 ? '' : 'en'} importiert — bitte Verkaufspreise eintragen`)
+      toast.success(`${imported.length} Position${imported.length === 1 ? '' : 'en'} importiert${ocr.ist_eigenes_angebot ? '' : ' — bitte Verkaufspreise eintragen'}`)
     } catch (err) {
       toast.error(`Import fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
     } finally {
