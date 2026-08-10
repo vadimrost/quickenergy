@@ -17,12 +17,13 @@ export function PositionenEditor({ positionen, onChange }: Props) {
   const [bildIndex, setBildIndex] = useState<number | null>(null)
   const [artikelOpen, setArtikelOpen] = useState(false)
 
-  function addFromArtikel(a: { bezeichnung: string; einheit: string; vk_netto: number }) {
+  function addFromArtikel(a: { bezeichnung: string; einheit: string; vk_netto: number; ek_netto: number | null }) {
     const pos: PositionDraft = {
       ...emptyPosition(positionen.length),
       bezeichnung: a.bezeichnung,
       einheit: a.einheit,
       einzelpreis_netto: a.vk_netto,
+      ek_netto: a.ek_netto,
     }
     onChange([...positionen, { ...pos, zeilenbetrag_netto: berechneZeilenbetrag(pos) }])
   }

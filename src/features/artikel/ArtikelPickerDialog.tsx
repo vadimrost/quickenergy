@@ -55,7 +55,10 @@ export function ArtikelPickerDialog({ open, onClose, onSelect }: {
                     <div className="text-sm text-ink truncate">{a.bezeichnung}</div>
                     <div className="text-xs text-ink-muted font-mono">{a.nummer ?? ''} · {a.einheit}</div>
                   </div>
-                  <div className="text-sm font-medium text-ink tabular-nums flex-shrink-0">{formatEuro(a.vk_netto)}</div>
+                  <div className="flex-shrink-0 text-right">
+                    <div className="text-sm font-medium text-ink tabular-nums">VK {formatEuro(a.vk_netto)}</div>
+                    {a.ek_netto != null && <div className="text-xs text-ink-muted tabular-nums">EK {formatEuro(a.ek_netto)}</div>}
+                  </div>
                 </button>
               ))}
             </div>
