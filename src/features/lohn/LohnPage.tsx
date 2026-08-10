@@ -36,6 +36,19 @@ const TYP_STYLE: Record<string, string> = {
   sonstige: 'bg-gray-100 text-gray-600',
 }
 
+// Summen aus den Einzelzeilen ableiten — die gespeicherten gesamt_* können 0 sein,
+// wenn das OCR die "Summe"-Zeile des Journals nicht gelesen hat (z.B. Juni).
+// Die Einzelzeilen sind die Quelle der Wahrheit; nur wenn keine da sind, Fallback auf gespeichert.
+function sumDienstnehmer(a: Lohnabrechnung): number {
+  return (a.lohn_dienstnehmer ?? []).reduce((s, d) => s + (d.betrag ?? 0), 0) || a.gesamt_dienstnehmer
+}
+function sumKoerperschaften(a: Lohnabrechnung): number {
+  return (a.lohn_koerperschaften ?? []).reduce((s, k) => s + (k.betrag ?? 0), 0) || a.gesamt_koerperschaften
+}
+function sumTotal(a: Lohnabrechnung): number {
+  return sumDienstnehmer(a) + sumKoerperschaften(a)
+}
+
 // ── Export Dialog ─────────────────────────────────────────────────────────────
 
 function LohnExportDialog({ open, onClose, abrechnungen }: {
@@ -83,7 +96,7 @@ function LohnExportDialog({ open, onClose, abrechnungen }: {
       'Name':        'Summe Dienstnehmer',
       'Zahlungsart': '',
       'IBAN':        '',
-      'Betrag (€)':  selected.gesamt_dienstnehmer,
+      'Betrag (€)':  sumDienstnehmer(selected),
     } as any)
 
     const wsDn = XLSX.utils.json_to_sheet(dnRows)
@@ -98,8 +111,8 @@ function LohnExportDialog({ open, onClose, abrechnungen }: {
       'Betrag (€)':  k.betrag,
     }))
     kRows.push(
-      { 'Bezeichnung': 'Summe Körperschaften', 'Typ': '', 'BIC': '', 'IBAN': '', 'Betrag (€)': selected.gesamt_koerperschaften } as any,
-      { 'Bezeichnung': 'GESAMTKOSTEN',         'Typ': '', 'BIC': '', 'IBAN': '', 'Betrag (€)': selected.gesamt_total         } as any,
+      { 'Bezeichnung': 'Summe Körperschaften', 'Typ': '', 'BIC': '', 'IBAN': '', 'Betrag (€)': sumKoerperschaften(selected) } as any,
+      { 'Bezeichnung': 'GESAMTKOSTEN',         'Typ': '', 'BIC': '', 'IBAN': '', 'Betrag (€)': sumTotal(selected)         } as any,
     )
 
     const wsK = XLSX.utils.json_to_sheet(kRows)
@@ -152,15 +165,15 @@ function LohnExportDialog({ open, onClose, abrechnungen }: {
             <div className="rounded-card border border-border bg-bg-muted/40 p-3.5 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-ink-muted">Dienstnehmer</span>
-                <span className="text-xs font-medium text-ink">{dienstnehmer.length} Personen · {formatEuro(selected.gesamt_dienstnehmer)}</span>
+                <span className="text-xs font-medium text-ink">{dienstnehmer.length} Personen · {formatEuro(sumDienstnehmer(selected))}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-ink-muted">Körperschaften</span>
-                <span className="text-xs font-medium text-ink">{koerperschaften.length} Positionen · {formatEuro(selected.gesamt_koerperschaften)}</span>
+                <span className="text-xs font-medium text-ink">{koerperschaften.length} Positionen · {formatEuro(sumKoerperschaften(selected))}</span>
               </div>
               <div className="flex items-center justify-between border-t border-border/50 pt-2 mt-1">
                 <span className="text-xs text-ink-muted">Gesamtkosten</span>
-                <span className="text-sm font-semibold text-ink">{formatEuro(selected.gesamt_total)}</span>
+                <span className="text-sm font-semibold text-ink">{formatEuro(sumTotal(selected))}</span>
               </div>
             </div>
           )}
@@ -210,9 +223,9 @@ export function LohnPage() {
     })
   }
 
-  const totalLohnkosten   = abrechnungen.reduce((s, a) => s + a.gesamt_total, 0)
-  const totalDienstnehmer = abrechnungen.reduce((s, a) => s + a.gesamt_dienstnehmer, 0)
-  const totalAbgaben      = abrechnungen.reduce((s, a) => s + a.gesamt_koerperschaften, 0)
+  const totalLohnkosten   = abrechnungen.reduce((s, a) => s + sumTotal(a), 0)
+  const totalDienstnehmer = abrechnungen.reduce((s, a) => s + sumDienstnehmer(a), 0)
+  const totalAbgaben      = abrechnungen.reduce((s, a) => s + sumKoerperschaften(a), 0)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -238,14 +251,19 @@ export function LohnPage() {
 
       if (!ocr.monat || !ocr.jahr) throw new Error('Monat/Jahr konnte nicht erkannt werden')
 
+      // Summen aus den Einzelzeilen berechnen (zuverlässiger als die OCR-Summenzeile),
+      // Fallback auf die OCR-Summe, falls keine Zeilen erkannt wurden.
+      const gesamtDn  = ocr.dienstnehmer.reduce((s, d) => s + (d.betrag ?? 0), 0) || (ocr.gesamt_dienstnehmer ?? 0)
+      const gesamtKoe = ocr.koerperschaften.reduce((s, k) => s + (k.betrag ?? 0), 0) || (ocr.gesamt_koerperschaften ?? 0)
+
       const { data: abrechnung, error: abrError } = await supabase
         .from('lohnabrechnungen')
         .insert({
           monat:                  ocr.monat,
           jahr:                   ocr.jahr,
-          gesamt_dienstnehmer:    ocr.gesamt_dienstnehmer    ?? 0,
-          gesamt_koerperschaften: ocr.gesamt_koerperschaften ?? 0,
-          gesamt_total:           ocr.gesamt_total           ?? 0,
+          gesamt_dienstnehmer:    gesamtDn,
+          gesamt_koerperschaften: gesamtKoe,
+          gesamt_total:           gesamtDn + gesamtKoe,
           pdf_url:                publicUrl,
         })
         .select()
@@ -378,13 +396,13 @@ export function LohnPage() {
                     <div>
                       <p className="font-semibold text-ink">{MONAT_NAMEN[abr.monat]} {abr.jahr}</p>
                       <p className="text-sm text-ink-muted">
-                        {dienstnehmer.length} Dienstnehmer · {formatEuro(abr.gesamt_total)}
+                        {dienstnehmer.length} Dienstnehmer · {formatEuro(sumTotal(abr))}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-base font-semibold text-ink hidden md:block">
-                      {formatEuro(abr.gesamt_total)}
+                      {formatEuro(sumTotal(abr))}
                     </span>
                     <button
                       onClick={e => {
@@ -410,15 +428,15 @@ export function LohnPage() {
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <div className="bg-bg-muted rounded-xl p-3">
                         <p className="label-caps mb-1">Nettolöhne</p>
-                        <p className="text-base font-semibold text-ink">{formatEuro(abr.gesamt_dienstnehmer)}</p>
+                        <p className="text-base font-semibold text-ink">{formatEuro(sumDienstnehmer(abr))}</p>
                       </div>
                       <div className="bg-bg-muted rounded-xl p-3">
                         <p className="label-caps mb-1">Abgaben</p>
-                        <p className="text-base font-semibold text-ink">{formatEuro(abr.gesamt_koerperschaften)}</p>
+                        <p className="text-base font-semibold text-ink">{formatEuro(sumKoerperschaften(abr))}</p>
                       </div>
                       <div className="bg-accent-50 rounded-xl p-3 col-span-2 md:col-span-1">
                         <p className="label-caps mb-1">Gesamt</p>
-                        <p className="text-base font-semibold text-accent-600">{formatEuro(abr.gesamt_total)}</p>
+                        <p className="text-base font-semibold text-accent-600">{formatEuro(sumTotal(abr))}</p>
                       </div>
                     </div>
 
@@ -489,7 +507,7 @@ export function LohnPage() {
                                     {anzahlBezahlt}/{dienstnehmer.length} bezahlt
                                   </span>
                                 </td>
-                                <td className="px-4 py-2.5 text-right font-bold text-ink tabular-nums">{formatEuro(abr.gesamt_dienstnehmer)}</td>
+                                <td className="px-4 py-2.5 text-right font-bold text-ink tabular-nums">{formatEuro(sumDienstnehmer(abr))}</td>
                               </tr>
                             </tfoot>
                           </table>
@@ -529,7 +547,7 @@ export function LohnPage() {
                             <tfoot>
                               <tr className="border-t-2 border-border bg-bg-muted">
                                 <td colSpan={2} className="px-4 py-2.5 text-xs font-medium text-ink-muted">Summe Abgaben</td>
-                                <td className="px-4 py-2.5 text-right font-bold text-ink tabular-nums">{formatEuro(abr.gesamt_koerperschaften)}</td>
+                                <td className="px-4 py-2.5 text-right font-bold text-ink tabular-nums">{formatEuro(sumKoerperschaften(abr))}</td>
                               </tr>
                             </tfoot>
                           </table>
