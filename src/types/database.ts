@@ -205,6 +205,7 @@ export interface DokumentPosition {
   rabatt_prozent: number
   zeilenbetrag_netto: number
   bild_url: string | null
+  ek_netto: number | null
   created_at: string
 }
 

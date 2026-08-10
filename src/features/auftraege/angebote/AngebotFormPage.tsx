@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Trash2, ArrowRightLeft, Receipt, FileCheck } from 'lucide-react'
+import { ArrowLeft, Trash2, ArrowRightLeft, Receipt, FileCheck, Sparkles, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { PageTitle } from '@/components/shared/PageTitle'
@@ -11,7 +11,9 @@ import { DokumentForm, type DokumentFormValues } from '@/features/auftraege/shar
 import { PdfButton } from '@/features/auftraege/shared/PdfButton'
 import { PdfLivePreview } from '@/features/auftraege/shared/PdfLivePreview'
 import { VorlagenControls } from '@/features/auftraege/shared/VorlagenControls'
-import { berechneSummen, emptyPosition } from '@/features/auftraege/shared/positionenUtils'
+import { berechneSummen, emptyPosition, berechneZeilenbetrag, type PositionDraft } from '@/features/auftraege/shared/positionenUtils'
+import { fileToBase64 } from '@/lib/gemini-ocr'
+import { lieferantAngebotOcr } from '@/lib/lieferant-angebot-ocr'
 import { useAngebot, useUpsertAngebot, useUpdateAngebotStatus, useDeleteAngebot } from './useAngebote'
 import { useConvertAngebotToAb } from '../auftragsbestatigungen/useAuftragsbestatigungen'
 import { supabase } from '@/lib/supabase'
@@ -76,6 +78,50 @@ export function AngebotFormPage() {
 
   const [gueltigBis, setGueltigBis] = useState('')
   const [referenz, setReferenz] = useState('')
+  const [importing, setImporting] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
+
+  const mapEinheit = (e: string | null): string => {
+    const s = (e ?? '').trim().toLowerCase()
+    if (s.startsWith('st')) return 'Stk'
+    if (s === 'm' || s === 'lfm') return 'lfm'
+    if (s === 'm2' || s === 'm²') return 'm²'
+    if (['std', 'kwp', 'kwh', 'pausch', 'set'].includes(s)) return s === 'kwp' ? 'kWp' : s === 'kwh' ? 'kWh' : s
+    return 'Stk'
+  }
+
+  const handleLieferantImport = async (file: File) => {
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
+    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert'); return }
+    setImporting(true)
+    try {
+      toast.info('Lieferanten-Angebot wird analysiert…')
+      const base64 = await fileToBase64(file)
+      const ocr = await lieferantAngebotOcr(base64, apiKey)
+      if (ocr.positionen.length === 0) { toast.error('Keine Positionen erkannt'); return }
+      const imported: PositionDraft[] = ocr.positionen.map((p, i) => {
+        const pos: PositionDraft = {
+          ...emptyPosition(i),
+          bezeichnung: p.artikelnummer ? `${p.bezeichnung} (${p.artikelnummer})` : p.bezeichnung,
+          menge: p.menge || 1,
+          einheit: mapEinheit(p.einheit),
+          ek_netto: p.ek_einzelpreis ?? null,
+          einzelpreis_netto: 0, // VK trägt der Nutzer ein
+        }
+        return { ...pos, zeilenbetrag_netto: berechneZeilenbetrag(pos) }
+      })
+      setValues(v => {
+        const behalten = v.positionen.filter(p => p.bezeichnung.trim() || p.einzelpreis_netto > 0)
+        const alle = [...behalten, ...imported].map((p, i) => ({ ...p, reihenfolge: i }))
+        return { ...v, positionen: alle }
+      })
+      toast.success(`${imported.length} Position${imported.length === 1 ? '' : 'en'} importiert — bitte Verkaufspreise eintragen`)
+    } catch (err) {
+      toast.error(`Import fehlgeschlagen: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`)
+    } finally {
+      setImporting(false)
+    }
+  }
 
   useEffect(() => {
     if (existing) {
@@ -184,6 +230,7 @@ export function AngebotFormPage() {
             rabatt_prozent: 0,
             zeilenbetrag_netto: 0,
             bild_url: null,
+            ek_netto: null,
           }],
           rabattGesamt: 0,
         },
@@ -245,6 +292,19 @@ export function AngebotFormPage() {
               hasContent={values.positionen.some(p => p.bezeichnung.trim() || p.einzelpreis_netto > 0)}
               onLoad={p => setValues(v => ({ ...v, ...p }))}
             />
+
+            {/* KI-Import Lieferanten-Angebot */}
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) void handleLieferantImport(f); e.target.value = '' }}
+            />
+            <Button variant="outline" size="sm" onClick={() => importInputRef.current?.click()} disabled={importing}>
+              {importing ? <Loader2 size={13} className="mr-1.5 animate-spin" /> : <Sparkles size={13} className="mr-1.5 text-accent-500" />}
+              Angebot importieren
+            </Button>
 
             {/* Status */}
             {isEdit && existing && (

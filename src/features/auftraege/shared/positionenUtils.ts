@@ -56,5 +56,6 @@ export function emptyPosition(reihenfolge = 0): PositionDraft {
     rabatt_prozent: 0,
     zeilenbetrag_netto: 0,
     bild_url: null,
+    ek_netto: null,
   }
 }

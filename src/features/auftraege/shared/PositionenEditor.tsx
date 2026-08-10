@@ -3,7 +3,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown, ImageIcon, Package } from 'lucide
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { formatEuro } from '@/lib/utils'
+import { formatEuro, cn } from '@/lib/utils'
 import { type PositionDraft, EINHEITEN, UST_SAETZE, berechneZeilenbetrag, emptyPosition } from './positionenUtils'
 import { BildPickerDialog } from './BildPickerDialog'
 import { ArtikelPickerDialog } from '@/features/artikel/ArtikelPickerDialog'
@@ -55,8 +55,8 @@ export function PositionenEditor({ positionen, onChange }: Props) {
   return (
     <div>
       {/* Header */}
-      <div className="grid grid-cols-[2fr_65px_72px_90px_52px_48px_105px_28px] gap-2 mb-2 px-1">
-        {(['Bezeichnung', 'Menge', 'Einheit', 'EP netto', 'USt%', 'Rab%', 'Betrag netto', ''] as const).map(h => (
+      <div className="grid grid-cols-[2fr_58px_64px_82px_82px_46px_42px_92px_24px] gap-2 mb-2 px-1">
+        {(['Bezeichnung', 'Menge', 'Einheit', 'EK netto', 'VK netto', 'USt%', 'Rab%', 'Betrag netto', ''] as const).map(h => (
           <span key={h} className="text-xs font-medium text-ink-muted uppercase tracking-wide">{h}</span>
         ))}
       </div>
@@ -64,7 +64,7 @@ export function PositionenEditor({ positionen, onChange }: Props) {
       <div className="space-y-1.5">
         {positionen.map((p, i) => (
           <div key={i}>
-          <div className="grid grid-cols-[2fr_65px_72px_90px_52px_48px_105px_28px] gap-2 items-center group">
+          <div className="grid grid-cols-[2fr_58px_64px_82px_82px_46px_42px_92px_24px] gap-2 items-center group">
             {/* Bezeichnung */}
             <Input
               value={p.bezeichnung}
@@ -93,7 +93,18 @@ export function PositionenEditor({ positionen, onChange }: Props) {
               </SelectContent>
             </Select>
 
-            {/* EP netto */}
+            {/* EK netto */}
+            <Input
+              type="number"
+              min={0}
+              step={0.01}
+              value={p.ek_netto ?? ''}
+              onChange={e => update(i, { ek_netto: e.target.value === '' ? null : parseFloat(e.target.value) || 0 })}
+              placeholder="—"
+              className="h-8 text-sm text-right text-ink-muted"
+            />
+
+            {/* VK netto (Einzelpreis) */}
             <Input
               type="number"
               min={0}
@@ -164,6 +175,15 @@ export function PositionenEditor({ positionen, onChange }: Props) {
                 <ImageIcon size={12} /> Bild hinzufügen
               </button>
             )}
+            {p.ek_netto != null && p.einzelpreis_netto > 0 && (() => {
+              const marge = Math.round((p.einzelpreis_netto - p.ek_netto) * 100) / 100
+              const pct = Math.round((marge / p.einzelpreis_netto) * 100)
+              return (
+                <span className={cn('text-xs ml-auto', marge >= 0 ? 'text-green-600' : 'text-red-600')}>
+                  Marge {formatEuro(marge)} ({pct}%)
+                </span>
+              )
+            })()}
           </div>
           </div>
         ))}
