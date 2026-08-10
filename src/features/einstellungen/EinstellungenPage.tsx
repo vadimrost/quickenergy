@@ -26,6 +26,35 @@ const EMPTY: FormState = {
   bank: '', iban: '', bic: '', konto: '', blz: '',
 }
 
+// SVG in PNG rastern (react-pdf kann kein SVG darstellen)
+async function svgToPng(file: File): Promise<Blob> {
+  const svgText = await file.text()
+  const url = URL.createObjectURL(new Blob([svgText], { type: 'image/svg+xml' }))
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error('SVG konnte nicht geladen werden'))
+      el.src = url
+    })
+    const targetH = 240
+    const ratio = (img.naturalWidth || 1) / (img.naturalHeight || 1)
+    const h = targetH
+    const w = Math.max(1, Math.round(targetH * ratio))
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Canvas nicht verfügbar')
+    ctx.drawImage(img, 0, 0, w, h)
+    return await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob(b => (b ? resolve(b) : reject(new Error('PNG-Export fehlgeschlagen'))), 'image/png'),
+    )
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
 function Field({
   label, value, onChange, placeholder,
 }: {
@@ -80,11 +109,19 @@ export function EinstellungenPage() {
     }
     setLogoUploading(true)
     try {
-      const ext = file.name.split('.').pop() ?? 'png'
+      // react-pdf kann kein SVG rendern → SVG in PNG umwandeln
+      let uploadData: Blob = file
+      let ext = (file.name.split('.').pop() ?? 'png').toLowerCase()
+      let contentType = file.type
+      if (file.type === 'image/svg+xml' || ext === 'svg') {
+        uploadData = await svgToPng(file)
+        ext = 'png'
+        contentType = 'image/png'
+      }
       const path = `firma/logo.${ext}`
       const { error: upErr } = await supabase.storage
         .from('rechnungen')
-        .upload(path, file, { upsert: true, contentType: file.type })
+        .upload(path, uploadData, { upsert: true, contentType })
       if (upErr) throw new Error(upErr.message)
 
       const { data: { publicUrl } } = supabase.storage.from('rechnungen').getPublicUrl(path)
