@@ -846,6 +846,12 @@ export function KontoauszugPage() {
 
   const luecken = useMemo(() => computeLuecken(kontoauszuege), [kontoauszuege])
 
+  // Chronologisch nach Auszugsdatum sortieren (neueste zuerst) statt nach Upload-Zeit
+  const sortedKontoauszuege = useMemo(
+    () => [...kontoauszuege].sort((a, b) => (b.von_datum ?? '').localeCompare(a.von_datum ?? '')),
+    [kontoauszuege],
+  )
+
   const handleFileSelect = async (file: File) => {
     setUploadFileName(file.name)
     setUploadResult(undefined)
@@ -949,7 +955,7 @@ export function KontoauszugPage() {
         />
       ) : (
         <div className="space-y-3">
-          {kontoauszuege.map(konto => (
+          {sortedKontoauszuege.map(konto => (
             <KontoauszugCard
               key={konto.id}
               konto={konto}
