@@ -18,9 +18,10 @@ import type { Artikel } from '@/types/database'
 const EMPTY: ArtikelInput = { bezeichnung: '', gruppe: null, einheit: 'Stk', vk_netto: 0, ek_netto: null, bestand: null }
 
 function margeInfo(vk: number, ek: number | null): { abs: number | null; pct: number | null } {
-  if (ek === null || ek === undefined) return { abs: null, pct: null }
+  // Ohne EK oder ohne gesetzten VK ist die Marge nicht aussagekräftig
+  if (ek === null || ek === undefined || vk <= 0) return { abs: null, pct: null }
   const abs = Math.round((vk - ek) * 100) / 100
-  const pct = vk > 0 ? Math.round((abs / vk) * 100) : null
+  const pct = Math.round((abs / vk) * 100)
   return { abs, pct }
 }
 
@@ -114,7 +115,8 @@ export function ArtikelPage() {
       if (ocr.positionen.length === 0) { toast.error('Keine Positionen erkannt'); return }
       const items: ArtikelInput[] = ocr.positionen.map(p => ({
         bezeichnung: p.artikelnummer ? `${p.bezeichnung} (${p.artikelnummer})` : p.bezeichnung,
-        gruppe: ocr.lieferant ?? null,
+        // Bei eigenen Angeboten ist "Quick Energy" keine sinnvolle Gruppe → leer lassen
+        gruppe: ocr.ist_eigenes_angebot ? null : (ocr.lieferant ?? null),
         einheit: mapLieferantEinheit(p.einheit),
         // Eigenes Angebot → Einzelpreis ist unser VK; Lieferanten-Angebot → EK
         vk_netto: ocr.ist_eigenes_angebot ? (p.einzelpreis ?? 0) : 0,
