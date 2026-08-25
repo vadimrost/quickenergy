@@ -92,18 +92,27 @@ Deno.serve(async (req) => {
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? '40')))
     const zuVerarbeiten = testModus ? offen.slice(-1) : offen.slice(-limit).reverse()
 
-    let angelegt = 0, uebersprungen = 0
+    let angelegt = 0, uebersprungen = 0, ohneDaten = 0, nichtGeladen = 0, gefiltert = 0
+    const fehler: string[] = []
+    const ohneDatenBetreff: string[] = []
     const beispiele: unknown[] = []
 
     for (const uid of zuVerarbeiten) {
       const mail = await client.fetchMail(uid)
-      if (!mail) continue
-      if (!/neuer lead/i.test(mail.subject) && !/perspective/i.test(mail.from)) continue
+      if (!mail) { nichtGeladen++; continue }
+      if (!/neuer lead/i.test(mail.subject) && !/perspective/i.test(mail.from)) { gefiltert++; continue }
 
       const text = extractBody(mail.body)
       const lead = parsePerspectiveLeadEmail(text)
       const name = [lead.vorname, lead.nachname].filter(Boolean).join(' ')
-      if (!lead.email && !lead.telefon && !name) { uebersprungen++; continue }
+      if (!lead.email && !lead.telefon && !name) {
+        ohneDaten++
+        // Betreff mitgeben, damit erkennbar ist, ob hier echte Leads verloren gehen
+        if (ohneDatenBetreff.length < 15) {
+          ohneDatenBetreff.push(`${mail.date?.slice(0, 16) ?? '?'} — ${mail.subject || '(kein Betreff)'}`)
+        }
+        continue
+      }
 
       if (testModus) {
         const { felder, ...rest } = lead
@@ -128,14 +137,29 @@ Deno.serve(async (req) => {
       if (error) {
         // 23505 = unique violation → Lead gab es schon, das ist der Normalfall
         if (error.code === '23505') uebersprungen++
-        else console.error('leads insert:', error.message)
+        else {
+          console.error('leads insert:', error.message)
+          const txt = `${error.code ?? '?'}: ${error.message}`
+          if (!fehler.includes(txt)) fehler.push(txt)
+        }
       } else {
         angelegt++
       }
     }
 
     await client.close()
-    return json({ ok: true, testModus, schritte, gefunden: uids.length, angelegt, uebersprungen, ...(testModus ? { beispiele } : {}) })
+    return json({
+      ok: fehler.length === 0,
+      testModus, schritte,
+      gefunden: uids.length,
+      verarbeitet: zuVerarbeiten.length,
+      angelegt, uebersprungen,
+      ...(ohneDaten ? { ohneDaten, ohneDatenBetreff } : {}),
+      ...(nichtGeladen ? { nichtGeladen } : {}),
+      ...(gefiltert ? { gefiltert } : {}),
+      ...(fehler.length ? { fehler } : {}),
+      ...(testModus ? { beispiele } : {}),
+    })
   } catch (e) {
     await client.close()
     return json({ ok: false, schritte, error: e instanceof Error ? e.message : String(e) }, 500)
