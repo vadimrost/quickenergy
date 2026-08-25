@@ -253,7 +253,7 @@ DATUM — beide Felder IMMER im JSON zurückgeben (Format YYYY-MM-DD):
 card_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.
 supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).
 
-GUTSCHRIFT (is_gutschrift) — WICHTIG für die Buchhaltung:
+GUTSCHRIFT (is_gutschrift) — PFLICHTFELD, IMMER im JSON zurückgeben (true oder false):
 - is_gutschrift = true, wenn das Dokument eine LIEFERANTEN-GUTSCHRIFT ist: "Gutschrift", "Retourengutschrift", "Gutschriftsnummer", "Rückrechnung", "Warenrücknahme", "Retoure", "Storno zur Rechnung".
 - Erkennungsmerkmale: eine "Gutschriftsnummer"/"Retourennummer" statt Rechnungsnummer, ein Retouren-/Rücknahmegrund, oder eine ausdrückliche Bezeichnung als Gutschrift.
 - Achtung: Eine "Gutschrift" ist KEINE normale Rechnung — sie erstattet uns Geld zurück.

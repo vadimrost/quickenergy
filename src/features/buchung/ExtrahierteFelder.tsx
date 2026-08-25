@@ -154,7 +154,8 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
     })
   }, [rechnung])
 
-  const hasBreakdown = parseFloat(form.betrag_10 || '0') > 0 || parseFloat(form.betrag_20 || '0') > 0
+  // !== 0 statt > 0, damit Gutschriften (negative Beträge) die Aufschlüsselung behalten
+  const hasBreakdown = parseFloat(form.betrag_10 || '0') !== 0 || parseFloat(form.betrag_20 || '0') !== 0
   const n10 = parseFloat(form.betrag_10 || '0')
   const n20 = parseFloat(form.betrag_20 || '0')
   // 0%-Feld ist das Trinkgeld — nur bei Bewirtung berücksichtigen. Bei anderen
@@ -171,8 +172,28 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const singleMwst = storedSingleMwst
     ?? Math.round(parseFloat(form.betrag || '0') * parseFloat(form.ust_satz || '0') / 100 * 100) / 100
 
+  // Gutschrift = alle erfassten Beträge sind negativ (Gegenbuchung zur Rechnung)
+  const istGutschrift = parseFloat(form.betrag || '0') < 0
+
+  // Vorzeichen aller Betragsfelder umdrehen — deterministisch, unabhängig vom OCR
+  const toggleGutschrift = () => {
+    const flip = (v: string) => {
+      const n = parseFloat(v || '')
+      return isNaN(n) || n === 0 ? v : String(istGutschrift ? Math.abs(n) : -Math.abs(n))
+    }
+    setForm(f => ({
+      ...f,
+      betrag:    flip(f.betrag),
+      betrag_10: flip(f.betrag_10),
+      betrag_20: flip(f.betrag_20),
+      betrag_0:  flip(f.betrag_0),
+      mwst_10:   flip(f.mwst_10),
+      mwst_20:   flip(f.mwst_20),
+    }))
+  }
+
   const ustSatzNum = parseFloat(form.ust_satz || '0')
-  const brutto = hasBreakdown && breakdownBrutto > 0
+  const brutto = hasBreakdown && breakdownBrutto !== 0
     ? breakdownBrutto
     : ustSatzNum > 0
       ? Math.round((parseFloat(form.betrag || '0') + singleMwst) * 100) / 100
@@ -199,9 +220,13 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
         betrag_0: form.rechnungstyp === 'bewirtung' && form.betrag_0 ? parseFloat(form.betrag_0) : null,
         mwst_10: form.mwst_10 ? parseFloat(form.mwst_10) : null,
         mwst_20: form.mwst_20 ? parseFloat(form.mwst_20) : null,
+        // Negative Beträge = Gutschrift → Badge/Kennzeichnung mitführen
+        dokument_art: istGutschrift
+          ? 'gutschrift'
+          : (rechnung.dokument_art === 'gutschrift' ? 'rechnung' : rechnung.dokument_art),
       },
     })
-    toast.success('Rechnung gespeichert')
+    toast.success(istGutschrift ? 'Als Gutschrift gespeichert' : 'Rechnung gespeichert')
   }
 
   const handleExport = (ziel: ExportZiel) => {
@@ -343,6 +368,32 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
             <span className="text-base font-semibold text-ink">€ {brutto.toFixed(2)}</span>
           </div>
 
+          {/* Gutschrift: Vorzeichen aller Beträge umdrehen (Gegenbuchung) */}
+          <div className="col-span-2 flex items-center justify-between gap-3 rounded-card-sm border border-border px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-ink">
+                {istGutschrift ? 'Als Gutschrift gebucht' : 'Gutschrift / Retoure?'}
+              </p>
+              <p className="text-[11px] text-ink-muted">
+                {istGutschrift
+                  ? 'Beträge sind negativ — reduzieren Aufwand und Vorsteuer.'
+                  : 'Dreht alle Beträge ins Minus (Gegenbuchung zur Rechnung).'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleGutschrift}
+              className={cn(
+                'shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors',
+                istGutschrift
+                  ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                  : 'border-border text-ink hover:bg-bg-muted',
+              )}
+            >
+              {istGutschrift ? 'Zurück zu Rechnung' : 'Als Gutschrift buchen'}
+            </button>
+          </div>
+
           {/* MwSt-Aufschlüsselung: Bewirtung + Tanken */}
           {hasBreakdown && (() => {
             const totalNetto  = Math.round((n10 + n20 + n0) * 100) / 100
@@ -366,10 +417,10 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                       className="pl-5 font-mono text-xs h-8 text-right" placeholder="—" />
                   </div>
                   <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink-muted">
-                    {n10 > 0 ? `€ ${t10.toFixed(2)}` : '—'}
+                    {n10 !== 0 ? `€ ${t10.toFixed(2)}` : '—'}
                   </div>
                   <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink">
-                    {n10 > 0 ? `€ ${(n10 + t10).toFixed(2)}` : '—'}
+                    {n10 !== 0 ? `€ ${(n10 + t10).toFixed(2)}` : '—'}
                   </div>
                 </div>
                 {/* 20% row */}
@@ -382,10 +433,10 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                       className="pl-5 font-mono text-xs h-8 text-right" placeholder="—" />
                   </div>
                   <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink-muted">
-                    {n20 > 0 ? `€ ${t20.toFixed(2)}` : '—'}
+                    {n20 !== 0 ? `€ ${t20.toFixed(2)}` : '—'}
                   </div>
                   <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink">
-                    {n20 > 0 ? `€ ${(n20 + t20).toFixed(2)}` : '—'}
+                    {n20 !== 0 ? `€ ${(n20 + t20).toFixed(2)}` : '—'}
                   </div>
                 </div>
                 {/* 0% row — nur Bewirtung (Trinkgeld) */}
@@ -400,12 +451,12 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
                     </div>
                     <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink-muted">—</div>
                     <div className="h-8 flex items-center justify-end px-2 bg-bg-muted rounded-card-sm text-xs font-mono text-ink">
-                      {n0 > 0 ? `€ ${n0.toFixed(2)}` : '—'}
+                      {n0 !== 0 ? `€ ${n0.toFixed(2)}` : '—'}
                     </div>
                   </div>
                 )}
                 {/* Summenzeile */}
-                {(n10 > 0 || n20 > 0 || n0 > 0) && (
+                {(n10 !== 0 || n20 !== 0 || n0 !== 0) && (
                   <div className="grid grid-cols-4 gap-1 mt-1 pt-1 border-t border-border/50">
                     <span className="label-caps text-ink">Σ</span>
                     <div className="text-right px-2 text-xs font-mono font-semibold text-ink">€ {totalNetto.toFixed(2)}</div>
