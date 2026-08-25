@@ -128,7 +128,14 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
 
         // Gutschrift: bereits positiv gespeicherte Altfälle aktiv auf negativ drehen.
         // (Die obigen Zweige füllen nur leere Felder — ein falsches Vorzeichen bliebe sonst stehen.)
-        if (ocr.is_gutschrift) {
+        // Auch eine bereits gekennzeichnete/negative Rechnung gilt als Gutschrift, damit ein
+        // erneuter Lauf eine manuelle Korrektur nicht auf positiv zurückdreht.
+        const istGutschriftBeleg =
+          ocr.is_gutschrift === true ||
+          ocr.document_kind === 'gutschrift' ||
+          r.dokument_art === 'gutschrift' ||
+          (r.betrag ?? 0) < 0
+        if (istGutschriftBeleg) {
           const negIfPos = (stored: number | null | undefined, fresh: number | null | undefined) => {
             const val = fresh ?? stored
             return val == null ? null : -Math.abs(val)
@@ -139,6 +146,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           updates.betrag    = negIfPos(r.betrag, netto) ?? 0
           if (r.betrag_10 != null || ocr.net_amount_10 != null) updates.betrag_10 = negIfPos(r.betrag_10, ocr.net_amount_10)
           if (r.betrag_20 != null || ocr.net_amount_20 != null) updates.betrag_20 = negIfPos(r.betrag_20, ocr.net_amount_20)
+          updates.dokument_art = 'gutschrift'
           if (r.mwst_10   != null || ocr.tax_amount_10 != null) updates.mwst_10   = negIfPos(r.mwst_10, ocr.tax_amount_10)
           if (r.mwst_20   != null || ocr.tax_amount_20 != null) updates.mwst_20   = negIfPos(r.mwst_20, ocr.tax_amount_20)
           if (korrigiert) updated.push('Gutschrift → negativ')

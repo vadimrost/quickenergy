@@ -56,10 +56,19 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
       const validTypes = kategorien.map(k => k.wert)
       setForm(f => {
         const next = { ...f }
+        // Gutschrift: entweder vom OCR erkannt ODER bereits so gekennzeichnet/erfasst.
+        // Verhindert, dass ein erneuter OCR-Lauf eine manuelle Korrektur auf positiv
+        // zurückdreht, wenn das Modell is_gutschrift mal nicht liefert.
+        const istGutschriftBeleg =
+          ocr.is_gutschrift === true ||
+          ocr.document_kind === 'gutschrift' ||
+          rechnung.dokument_art === 'gutschrift' ||
+          parseFloat(f.betrag || '0') < 0
+        const sign = (v: number) => (istGutschriftBeleg ? -Math.abs(v) : v)
         if (ocr.invoice_date) { next.rechnungsdatum = normalizeDate(ocr.invoice_date) ?? f.rechnungsdatum; updated.push('Rechnungsdatum') }
         if (ocr.due_date)     { next.faelligkeit    = normalizeDate(ocr.due_date)     ?? f.faelligkeit;    updated.push('Fälligkeit') }
         if (ocr.invoice_number?.trim()) { next.rechnungsnr = ocr.invoice_number.trim(); updated.push('Rechnungs-Nr.') }
-        const netto = effectiveNetto(ocr); if (netto) { next.betrag = String(netto); updated.push('Betrag') }
+        const netto = effectiveNetto(ocr); if (netto) { next.betrag = String(sign(netto)); updated.push('Betrag') }
 
         if (ocr.is_proforma) {
           // Proforma: keine MwSt
@@ -69,15 +78,16 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
           updated.push('Proforma (0% USt.)')
         } else {
           if (ocr.tax_rate)     { next.ust_satz = String(ocr.tax_rate); updated.push('USt.') }
-          if (ocr.net_amount_10 != null) { next.betrag_10 = String(ocr.net_amount_10); updated.push('Netto 10%') }
-          if (ocr.net_amount_20 != null) { next.betrag_20 = String(ocr.net_amount_20); updated.push('Netto 20%') }
+          if (ocr.net_amount_10 != null) { next.betrag_10 = String(sign(ocr.net_amount_10)); updated.push('Netto 10%') }
+          if (ocr.net_amount_20 != null) { next.betrag_20 = String(sign(ocr.net_amount_20)); updated.push('Netto 20%') }
           // 0%-Tipp ist OCR-maßgeblich: gesetzt bei Bewirtung, sonst aktiv leeren
           // (verhindert stehengebliebene Phantom-Tipps aus früheren Läufen)
-          next.betrag_0 = ocr.net_amount_0 != null ? String(ocr.net_amount_0) : ''
+          next.betrag_0 = ocr.net_amount_0 != null ? String(sign(ocr.net_amount_0)) : ''
           if (ocr.net_amount_0 != null) updated.push('Trinkgeld')
-          if (ocr.tax_amount_10 != null) { next.mwst_10 = String(ocr.tax_amount_10) }
-          if (ocr.tax_amount_20 != null) { next.mwst_20 = String(ocr.tax_amount_20) }
+          if (ocr.tax_amount_10 != null) { next.mwst_10 = String(sign(ocr.tax_amount_10)) }
+          if (ocr.tax_amount_20 != null) { next.mwst_20 = String(sign(ocr.tax_amount_20)) }
         }
+        if (istGutschriftBeleg) updated.push('Gutschrift (negativ)')
 
         if (ocr.invoice_type && validTypes.includes(ocr.invoice_type)) {
           next.rechnungstyp = ocr.invoice_type as Rechnungstyp
