@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
 import { fileToBase64, geminiOcrAusgangsrechnung } from '@/lib/gemini-ocr'
-import { createAusgangsrechnungFromOcr } from './importAusgangsrechnung'
+import { createAusgangsrechnungFromOcrDetailed } from './importAusgangsrechnung'
 import { buildArRows, writeBmdExcel } from '@/lib/bmd-export'
 import { supabase } from '@/lib/supabase'
 import { useAusgangsrechnungen, useDuplicateAusgangsrechnung } from './useAusgangsrechnungen'
@@ -145,13 +145,25 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
       updateEntry(id, { status: 'saving' })
       let newId: string
       try {
-        newId = await createAusgangsrechnungFromOcr(ocr)
+        const res = await createAusgangsrechnungFromOcrDetailed(ocr)
+        newId = res.id
+        if (res.warnung) {
+          const { positionenNetto, belegNetto } = res.warnung
+          toast.warning(
+            `${file.name}: Positionssumme (${positionenNetto.toFixed(2)} €) weicht vom Gesamtbetrag netto (${belegNetto.toFixed(2)} €) ab — bitte Positionen prüfen.`,
+            { duration: 10000 },
+          )
+        }
       } catch (err) {
         updateEntry(id, { status: 'error', error: err instanceof Error ? err.message : 'Speichern fehlgeschlagen' })
         continue
       }
 
-      updateEntry(id, { status: 'done', info: ocr.customer_name ?? undefined })
+      const anzahlPos = ocr.positionen?.length ?? 0
+      updateEntry(id, {
+        status: 'done',
+        info: [ocr.customer_name, anzahlPos > 0 ? `${anzahlPos} Positionen` : null].filter(Boolean).join(' · ') || undefined,
+      })
       onCreated(newId)
     }
   }, [updateEntry, onCreated])

@@ -345,11 +345,27 @@ export async function geminiOcr(base64: string, apiKey: string, kategorien?: Kat
   return result
 }
 
+export interface AusgangsrechnungPosition {
+  bezeichnung:  string
+  beschreibung: string | null
+  menge:        number | null
+  einheit:      string | null
+  einzelpreis:  number | null
+  ust_satz:     number | null
+}
+
 export interface AusgangsrechnungOcrResult {
   invoice_number:        string | null
   invoice_date:          string | null
   due_date:              string | null
+  leistungsdatum:        string | null
   customer_name:         string | null
+  customer_adresse:      string | null
+  customer_plz:          string | null
+  customer_ort:          string | null
+  customer_land:         string | null
+  customer_uid:          string | null
+  positionen:            AusgangsrechnungPosition[] | null
   subject:               string | null
   net_amount_20:         number | null
   net_amount_10:         number | null
@@ -366,11 +382,32 @@ export interface AusgangsrechnungOcrResult {
 const AUSGANGSRECHNUNG_PROMPT = `Du analysierst eine AUSGANGSRECHNUNG (eine Rechnung, die wir an einen Kunden gestellt haben).
 Extrahiere alle Felder als JSON.
 
-WICHTIG — RECHNUNGSEMPFÄNGER (customer_name):
+WICHTIG — RECHNUNGSEMPFÄNGER (customer_*):
 - Das ist der KUNDE / EMPFÄNGER der Rechnung, NICHT der Aussteller
-- Suche nach "An:", "Rechnungsempfänger:", "Kunde:", "Auftraggeber:", Adressblock oben rechts oder Mitte
-- Der Aussteller (unser Unternehmen, z.B. "Quick Energy") ist NICHT der customer_name
-- customer_name = Firmenname oder Vor-/Nachname des Empfängers
+- Suche den Adressblock links/oben (unter der kleinen Absenderzeile "Quick Energy Handels GmbH - Sieveringerstraße 56A - 1190 Wien")
+- Der Aussteller (unser Unternehmen "Quick Energy") ist NIEMALS der customer_name
+- customer_name    = Firmenname ODER Vor- und Nachname des Empfängers (erste Zeile des Adressblocks)
+- customer_adresse = Straße + Hausnummer (zweite Zeile)
+- customer_plz     = nur die Postleitzahl (z.B. "8010")
+- customer_ort     = nur der Ort (z.B. "Graz")
+- customer_land    = Land falls angegeben (z.B. "Österreich"), sonst null
+- customer_uid     = "Ihre USt-Id." / UID des KUNDEN falls angegeben (z.B. "ATU76927239"), sonst null. NICHT unsere eigene ATU78058389!
+
+POSITIONEN (positionen[]) — ALLE Zeilen der Positionstabelle einzeln erfassen:
+Die Tabelle hat die Spalten "Pos. | Beschreibung | Menge | Einzelpreis | Gesamtpreis".
+Für JEDE nummerierte Position (1., 2., 3., …) ein Objekt:
+- bezeichnung:  die ERSTE (fett gedruckte) Zeile der Beschreibung, z.B. "Zählerkasten EVN", "40% Teilrechnung aus Angebot AN-1080"
+- beschreibung: ALLE weiteren Zeilen dieser Position als EIN Text mit Zeilenumbrüchen (\\n) — inkl. Aufzählungen wie "- Alten Kasten Demontieren". Wenn es keine weiteren Zeilen gibt: null
+- menge:        Zahl aus der Menge-Spalte. Steht dort "pauschal"/"pausch" → 1
+- einheit:      "pauschal"/"pausch" → "pausch"; "Stk"/"ST" → "Stk"; "m"/"lfm" → "lfm"; sonst "Stk"
+- einzelpreis:  Netto-Einzelpreis aus der Spalte "Einzelpreis" (z.B. "1.350,00 EUR" → 1350.00)
+- ust_satz:     der USt-Satz dieser Position: 20, 10 oder 0. Bei "zzgl. Umsatzsteuer 20%" → 20. Bei "Übergang der Steuerschuld"/"Reverse Charge"/"zzgl. Umsatzsteuer 0%" → 0
+WICHTIG zu den Positionen:
+- Positionen mit Betrag 0,00 (z.B. "Prüfbefund") TROTZDEM erfassen.
+- Zusammenfassungszeilen NICHT als Position aufnehmen: "Gesamtbetrag netto", "zzgl. Umsatzsteuer", "Gesamtbetrag brutto", "Verrechnung der Teilrechnungen", "Summe Teilrechnungen", "Summe Schlussrechnung brutto", "Verbleibende Restforderung".
+- Die Reihenfolge der Positionen beibehalten.
+
+DATUM (leistungsdatum): "Lieferdatum" oder "Leistungsdatum" → YYYY-MM-DD, sonst null.
 
 BETREFF / SUBJECT:
 - Suche nach "Betreff:", "Re:", "Leistungsbeschreibung:", Überschrift unter dem Dokument
@@ -418,11 +455,27 @@ DATUM — beide Felder IMMER im JSON zurückgeben (Format YYYY-MM-DD):
 - due_date: das FÄLLIGKEITSDATUM ("zahlbar bis", "Zahlungsziel", "fällig am"). Nur ausfüllen wenn explizit angegeben, sonst null.
 invoice_number: formale Rechnungsnummer.`
 
+// Zusammenfassungszeilen, die das Modell manchmal fälschlich als Position liefert
+const SUMMEN_ZEILEN = /^(gesamtbetrag|zzgl\.?\s*umsatzsteuer|summe\s|verbleibende\s+restforderung|verrechnung\s+der|zwischensumme|nettobetrag\s*$)/i
+
 export async function geminiOcrAusgangsrechnung(base64: string, apiKey: string): Promise<AusgangsrechnungOcrResult> {
   const result = await callOpenRouterPdfJson<AusgangsrechnungOcrResult>(base64, apiKey, AUSGANGSRECHNUNG_PROMPT)
+  const positionen = (result.positionen ?? [])
+    .filter(p => p && typeof p.bezeichnung === 'string' && p.bezeichnung.trim())
+    .filter(p => !SUMMEN_ZEILEN.test(p.bezeichnung.trim()))
+    .map(p => ({
+      bezeichnung:  p.bezeichnung.trim(),
+      beschreibung: p.beschreibung?.trim() || null,
+      menge:        p.menge ?? 1,
+      einheit:      p.einheit ?? null,
+      einzelpreis:  p.einzelpreis ?? 0,
+      ust_satz:     p.ust_satz ?? null,
+    }))
   return {
     ...result,
-    invoice_date: normalizeDate(result.invoice_date),
-    due_date:     normalizeDate(result.due_date),
+    invoice_date:   normalizeDate(result.invoice_date),
+    due_date:       normalizeDate(result.due_date),
+    leistungsdatum: normalizeDate(result.leistungsdatum),
+    positionen,
   }
 }

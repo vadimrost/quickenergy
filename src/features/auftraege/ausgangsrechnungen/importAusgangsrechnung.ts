@@ -8,7 +8,18 @@ import {
 import { DEFAULT_KOPF, DEFAULT_FUSS } from '@/features/auftraege/shared/dokumentDefaults'
 import type { Rechnung } from '@/types/database'
 
-export async function findOrCreateKunde(name: string | null | undefined): Promise<string | null> {
+interface KundeDaten {
+  adresse?: string | null
+  plz?: string | null
+  ort?: string | null
+  land?: string | null
+  uid_nr?: string | null
+}
+
+export async function findOrCreateKunde(
+  name: string | null | undefined,
+  daten?: KundeDaten,
+): Promise<string | null> {
   if (!name?.trim()) return null
   const trimmed = name.trim()
   const { data: existing } = await supabase
@@ -18,9 +29,25 @@ export async function findOrCreateKunde(name: string | null | undefined): Promis
     .limit(1)
     .maybeSingle()
   if (existing) return existing.id
+
+  // Privatpersonen ohne Firmennamen: "Vorname Nachname" aufteilen, damit die
+  // Anschrift im Dokument korrekt erscheint.
+  const istFirma = /\b(gmbh|ag|kg|og|e\.?u\.?|ges\.?m\.?b\.?h|gesmbh|co|ltd|inc|verein|stiftung)\b/i.test(trimmed)
+  const teile = trimmed.split(/\s+/)
+  const namensFelder = !istFirma && teile.length >= 2
+    ? { firmenname: null, vorname: teile.slice(0, -1).join(' '), nachname: teile[teile.length - 1] }
+    : { firmenname: trimmed }
+
   const { data: created } = await supabase
     .from('kunden')
-    .insert({ firmenname: trimmed })
+    .insert({
+      ...namensFelder,
+      adresse: daten?.adresse?.trim() || null,
+      plz:     daten?.plz?.trim() || null,
+      ort:     daten?.ort?.trim() || null,
+      ...(daten?.land?.trim() ? { land: daten.land.trim() } : {}),
+      uid_nr:  daten?.uid_nr?.trim() || null,
+    })
     .select('id')
     .single()
   return created?.id ?? null
@@ -28,8 +55,28 @@ export async function findOrCreateKunde(name: string | null | undefined): Promis
 
 // Legt aus einem Ausgangsrechnungs-OCR-Ergebnis eine Ausgangsrechnung (Entwurf) an.
 // Gibt die neue ID zurück.
+export interface ImportWarnung {
+  positionenNetto: number
+  belegNetto:      number
+}
+
+export interface ImportErgebnis {
+  id:       string
+  warnung?: ImportWarnung
+}
+
 export async function createAusgangsrechnungFromOcr(ocr: AusgangsrechnungOcrResult): Promise<string> {
-  const kundeId = await findOrCreateKunde(ocr.customer_name)
+  return (await createAusgangsrechnungFromOcrDetailed(ocr)).id
+}
+
+export async function createAusgangsrechnungFromOcrDetailed(ocr: AusgangsrechnungOcrResult): Promise<ImportErgebnis> {
+  const kundeId = await findOrCreateKunde(ocr.customer_name, {
+    adresse: ocr.customer_adresse,
+    plz:     ocr.customer_plz,
+    ort:     ocr.customer_ort,
+    land:    ocr.customer_land,
+    uid_nr:  ocr.customer_uid,
+  })
 
   const netto20 = ocr.net_amount_20 ?? 0
   const netto10 = ocr.net_amount_10 ?? 0
@@ -61,7 +108,7 @@ export async function createAusgangsrechnungFromOcr(ocr: AusgangsrechnungOcrResu
       rechnungsnummer:    ocr.invoice_number?.trim() || null,
       betreff:            ocr.subject ?? null,
       rechnungsdatum,
-      leistungsdatum:     rechnungsdatum,
+      leistungsdatum:     normalizeDate(ocr.leistungsdatum) ?? rechnungsdatum,
       zahlungsziel_tage:  zahlungsTage,
       faelligkeitsdatum:  faellig,
       rabatt_gesamt_prozent: 0,
@@ -81,10 +128,55 @@ export async function createAusgangsrechnungFromOcr(ocr: AusgangsrechnungOcrResu
   if (insertErr) throw new Error(insertErr.message)
   const newId = newRechnung!.id as string
 
-  // Platzhalter-Position, wenn Beträge vorhanden
   const nettoGesamt = netto20 + netto10 + netto0
-  if (nettoGesamt !== 0) {
-    const ustSatz = netto20 !== 0 ? 20 : netto10 !== 0 ? 10 : 0
+  // Vorherrschender USt-Satz als Fallback, falls eine Position keinen eigenen hat
+  const fallbackUst: 0 | 10 | 20 = netto20 !== 0 ? 20 : netto10 !== 0 ? 10 : 0
+  const mapEinheit = (e: string | null): string => {
+    const s = (e ?? '').trim().toLowerCase()
+    if (s.startsWith('pausch')) return 'pausch'
+    if (s.startsWith('st')) return 'Stk'
+    if (s === 'm' || s === 'lfm') return 'lfm'
+    if (s === 'm2' || s === 'm²') return 'm²'
+    if (s === 'kwp') return 'kWp'
+    if (s === 'kwh') return 'kWh'
+    if (s === 'std') return 'Std'
+    return 'Stk'
+  }
+  const normUst = (v: number | null): 0 | 10 | 20 =>
+    v === 20 ? 20 : v === 10 ? 10 : v === 0 ? 0 : fallbackUst
+
+  let warnung: ImportWarnung | undefined
+  const ocrPositionen = ocr.positionen ?? []
+  if (ocrPositionen.length > 0) {
+    // Echte Positionen aus dem PDF übernehmen (bearbeitbar in der Maske)
+    const rows = ocrPositionen.map((p, i) => {
+      const menge = p.menge ?? 1
+      const ep    = p.einzelpreis ?? 0
+      return {
+        dokument_id:        newId,
+        dokument_typ:       'rechnung' as const,
+        reihenfolge:        i,
+        bezeichnung:        p.bezeichnung,
+        beschreibung:       p.beschreibung,
+        menge,
+        einheit:            mapEinheit(p.einheit),
+        einzelpreis_netto:  ep,
+        ust_satz:           normUst(p.ust_satz),
+        rabatt_prozent:     0,
+        zeilenbetrag_netto: Math.round(menge * ep * 100) / 100,
+      }
+    })
+    const { error: posErr } = await supabase.from('dokument_positionen').insert(rows)
+    if (posErr) throw new Error(`Positionen: ${posErr.message}`)
+
+    // Positionssumme mit dem Gesamtbetrag des Belegs abgleichen. Weicht sie ab
+    // (z.B. weil die Positionspreise brutto sind), melden statt still zu übernehmen.
+    const posNetto = Math.round(rows.reduce((s, r) => s + r.zeilenbetrag_netto, 0) * 100) / 100
+    if (nettoGesamt !== 0 && Math.abs(posNetto - nettoGesamt) > 0.02) {
+      warnung = { positionenNetto: posNetto, belegNetto: nettoGesamt }
+    }
+  } else if (nettoGesamt !== 0) {
+    // Fallback: keine Positionen erkannt → eine Sammelposition mit der Gesamtsumme
     await supabase.from('dokument_positionen').insert({
       dokument_id:       newId,
       dokument_typ:      'rechnung',
@@ -94,13 +186,13 @@ export async function createAusgangsrechnungFromOcr(ocr: AusgangsrechnungOcrResu
       menge:             1,
       einheit:           'pausch',
       einzelpreis_netto: nettoGesamt,
-      ust_satz:          ustSatz,
+      ust_satz:          fallbackUst,
       rabatt_prozent:    0,
       zeilenbetrag_netto: nettoGesamt,
     })
   }
 
-  return newId
+  return { id: newId, warnung }
 }
 
 // Verschiebt eine (fälschlich als Eingangsrechnung erfasste) eigene Rechnung zu den
