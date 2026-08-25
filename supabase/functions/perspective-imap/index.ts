@@ -129,6 +129,7 @@ Deno.serve(async (req) => {
         ...rest,
         status: 'neu',
         notiz: [funnel ? `Funnel: ${funnel}` : null, ...notizZeilen].filter(Boolean).join('\n') || null,
+        kampagne: funnel,
         quelle: 'perspective',
         quelle_ref: mail.messageId ?? `uid:${uid}`,
         raw_payload: { uid, funnel, felder, betreff: mail.subject, datum: mail.date },

@@ -32,6 +32,7 @@ export function PerspectiveImportDialog({ open, onClose }: { open: boolean; onCl
         notiz: notiz || null,
         termin_datum: null,
         kunde_id: null,
+        kampagne: funnel,
         quelle: 'perspective',
         raw_payload: { funnel, felder },
       } as any)

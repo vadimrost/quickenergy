@@ -380,6 +380,10 @@ export interface Lead {
   strasse: string | null
   hausnummer: string | null
   ort: string | null
+  kampagne: string | null
+  quelle: string | null
+  quelle_ref: string | null
+  raw_payload: unknown | null
   kunde?: Kunde | null
 }
 

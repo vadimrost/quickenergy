@@ -9,7 +9,7 @@ import { de } from 'date-fns/locale'
 import {
   Plus, ChevronLeft, ChevronRight, Phone, Mail, Calendar, Zap,
   BarChart2, MapPin, CheckCircle, AlertCircle, XCircle,
-  LayoutGrid, List, Search, User, Trash2, Pencil, ClipboardPaste,
+  LayoutGrid, List, Search, User, Trash2, Pencil, ClipboardPaste, Megaphone,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -226,6 +226,12 @@ function KanbanCard({
           {lead.anlagengroesse && (
             <p className="text-[11px] text-slate-400 flex items-center gap-1">
               <Zap size={9} className="shrink-0 text-amber-400" />{lead.anlagengroesse}
+            </p>
+          )}
+          {lead.kampagne && (
+            <p className="text-[11px] text-slate-400 flex items-center gap-1" title={lead.kampagne}>
+              <Megaphone size={9} className="shrink-0 text-violet-400" />
+              <span className="truncate">{lead.kampagne}</span>
             </p>
           )}
         </div>
@@ -965,6 +971,13 @@ export function CrmPage() {
   const [view, setView] = useState<View>('kanban')
   const [importOpen, setImportOpen] = useState(false)
   const [setterFilter, setSetterFilter] = useState('alle')
+  const [kampagneFilter, setKampagneFilter] = useState('alle')
+
+  // Vorhandene Kampagnen (Funnel-Namen) fuer den Filter
+  const kampagnen = useMemo(
+    () => [...new Set(leads.map(l => l.kampagne).filter(Boolean) as string[])].sort(),
+    [leads],
+  )
   const [search, setSearch] = useState('')
 
   function handleAssign(id: string, name: string | null) {
@@ -993,6 +1006,8 @@ export function CrmPage() {
   if (isAdmin) {
     if (setterFilter === 'unzugewiesen') filtered = filtered.filter(l => !l.zugewiesen_an)
     else if (setterFilter !== 'alle') filtered = filtered.filter(l => l.zugewiesen_an === setterFilter)
+    if (kampagneFilter === 'ohne') filtered = filtered.filter(l => !l.kampagne)
+    else if (kampagneFilter !== 'alle') filtered = filtered.filter(l => l.kampagne === kampagneFilter)
   }
   if (search.trim()) {
     const q = search.toLowerCase()
@@ -1078,6 +1093,20 @@ export function CrmPage() {
             className="pl-9 h-8 text-sm w-full sm:w-52 bg-white border-slate-200"
           />
         </div>
+        {kampagnen.length > 0 && (
+          <select
+            value={kampagneFilter}
+            onChange={e => setKampagneFilter(e.target.value)}
+            title="Nach Kampagne filtern"
+            className="h-8 px-2.5 text-xs font-medium rounded-lg border border-slate-200 bg-white text-slate-600 max-w-[15rem] focus:outline-none focus:ring-1 focus:ring-accent-400"
+          >
+            <option value="alle">Alle Kampagnen ({leads.length})</option>
+            {kampagnen.map(k => (
+              <option key={k} value={k}>{k} ({leads.filter(l => l.kampagne === k).length})</option>
+            ))}
+            <option value="ohne">Ohne Kampagne ({leads.filter(l => !l.kampagne).length})</option>
+          </select>
+        )}
         {isAdmin && (
           <div className="flex gap-1.5 flex-wrap">
             {[
