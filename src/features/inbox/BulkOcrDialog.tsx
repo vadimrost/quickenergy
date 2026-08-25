@@ -126,6 +126,24 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           if (ocr.tax_amount_20 != null && (forceAll || !r.mwst_20)) updates.mwst_20 = Number(ocr.tax_amount_20)
         }
 
+        // Gutschrift: bereits positiv gespeicherte Altfälle aktiv auf negativ drehen.
+        // (Die obigen Zweige füllen nur leere Felder — ein falsches Vorzeichen bliebe sonst stehen.)
+        if (ocr.is_gutschrift) {
+          const negIfPos = (stored: number | null | undefined, fresh: number | null | undefined) => {
+            const val = fresh ?? stored
+            return val == null ? null : -Math.abs(val)
+          }
+          const korrigiert =
+            (r.betrag ?? 0) > 0 || (r.betrag_10 ?? 0) > 0 || (r.betrag_20 ?? 0) > 0 ||
+            (r.mwst_10 ?? 0) > 0 || (r.mwst_20 ?? 0) > 0
+          updates.betrag    = negIfPos(r.betrag, netto) ?? 0
+          if (r.betrag_10 != null || ocr.net_amount_10 != null) updates.betrag_10 = negIfPos(r.betrag_10, ocr.net_amount_10)
+          if (r.betrag_20 != null || ocr.net_amount_20 != null) updates.betrag_20 = negIfPos(r.betrag_20, ocr.net_amount_20)
+          if (r.mwst_10   != null || ocr.tax_amount_10 != null) updates.mwst_10   = negIfPos(r.mwst_10, ocr.tax_amount_10)
+          if (r.mwst_20   != null || ocr.tax_amount_20 != null) updates.mwst_20   = negIfPos(r.mwst_20, ocr.tax_amount_20)
+          if (korrigiert) updated.push('Gutschrift → negativ')
+        }
+
         // Kategorie
         const validTypes = ['bewirtung', 'dienstleistung', 'tanken_diesel', 'tanken_super']
         if (ocr.invoice_type && validTypes.includes(ocr.invoice_type) && (forceAll || !r.rechnungstyp)) {
@@ -138,6 +156,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
           updates.dokument_art = ocr.document_kind
           let hinweis: string | null = null
           if (ocr.document_kind === 'angebot') hinweis = 'Angebot erkannt – keine Eingangsrechnung. Nicht als ER buchen.'
+          else if (ocr.document_kind === 'gutschrift') hinweis = 'Gutschrift erkannt – Beträge werden negativ verbucht (Gegenbuchung).'
           else if (ocr.document_kind === 'mahnung') hinweis = 'Mahnung erkannt – Original-Rechnung bereits erfasst? Nicht doppelt buchen.'
           else if (ocr.document_kind === 'lieferschein') hinweis = 'Lieferschein erkannt – keine Rechnung.'
           else if (ocr.seiten_vollstaendig === false) hinweis = 'Dokument evtl. unvollständig – fehlende Seiten prüfen.'

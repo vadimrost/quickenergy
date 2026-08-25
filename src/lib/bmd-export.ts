@@ -142,7 +142,8 @@ export function buildErRows(rechnungen: Rechnung[]): BmdRow[] {
     const belegdatum = toYYYYMMDD(r.rechnungsdatum)
     const konto   = ER_KONTO_BY_TYP[r.rechnungstyp ?? ''] ?? ER_KONTO_DEFAULT
 
-    if ((r.betrag_20 ?? 0) > 0) {
+    // !== 0 statt > 0: Gutschriften haben negative Beträge und müssen exportiert werden
+    if ((r.betrag_20 ?? 0) !== 0) {
       rows.push({
         konto,
         buchcode:   ER_BUCHCODE,
@@ -158,7 +159,7 @@ export function buildErRows(rechnungen: Rechnung[]): BmdRow[] {
         text,
       })
     }
-    if ((r.betrag_10 ?? 0) > 0) {
+    if ((r.betrag_10 ?? 0) !== 0) {
       rows.push({
         konto,
         buchcode:   ER_BUCHCODE,
@@ -175,7 +176,7 @@ export function buildErRows(rechnungen: Rechnung[]): BmdRow[] {
       })
     }
     // Fallback: single tax rate from betrag field
-    if ((r.betrag_20 ?? 0) === 0 && (r.betrag_10 ?? 0) === 0 && r.betrag > 0) {
+    if ((r.betrag_20 ?? 0) === 0 && (r.betrag_10 ?? 0) === 0 && r.betrag !== 0) {
       const pct = r.ust_satz ?? 20
       rows.push({
         konto,

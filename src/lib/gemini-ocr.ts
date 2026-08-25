@@ -8,7 +8,8 @@ export const CARD_MAP: Record<string, string> = {
 export function effectiveNetto(ocr: Pick<GeminiOcrResult, 'net_amount' | 'net_amount_10' | 'net_amount_20' | 'net_amount_0'>): number | null {
   // Prefer breakdown sum when available — net_amount can be wrong (brutto mistaken for netto)
   const sum = (ocr.net_amount_10 ?? 0) + (ocr.net_amount_20 ?? 0) + (ocr.net_amount_0 ?? 0)
-  if (sum > 0) return Math.round(sum * 100) / 100
+  // !== 0 statt > 0, damit auch Gutschriften (negative Summen) die Aufschlüsselung nutzen
+  if (sum !== 0) return Math.round(sum * 100) / 100
   return ocr.net_amount ?? null
 }
 
@@ -156,8 +157,10 @@ export interface GeminiOcrResult {
   skonto_prozent: number | null
   skonto_tage:    number | null
   skonto_datum:   string | null
+  // Lieferanten-Gutschrift (Retoure/Rückvergütung) → Beträge werden negativ verbucht
+  is_gutschrift:  boolean | null
   // Dokumenttyp-Erkennung (Steuerberaterin): Angebote/Mahnungen sind keine Eingangsrechnungen
-  document_kind:  string | null   // 'rechnung' | 'angebot' | 'mahnung' | 'lieferschein' | 'proforma' | 'sonstige'
+  document_kind:  string | null   // 'rechnung' | 'gutschrift' | 'angebot' | 'mahnung' | 'lieferschein' | 'proforma' | 'sonstige'
   // Vollständigkeit mehrseitiger Dokumente: false = laut Seitenangaben fehlen Seiten
   seiten_vollstaendig: boolean | null
 }
@@ -250,15 +253,24 @@ DATUM — beide Felder IMMER im JSON zurückgeben (Format YYYY-MM-DD):
 card_last_four: letzte 4 Ziffern der Karte falls sichtbar, sonst null.
 supplier_name: Firmenname des Rechnungsstellers (oberster Firmenname auf dem Beleg).
 
+GUTSCHRIFT (is_gutschrift) — WICHTIG für die Buchhaltung:
+- is_gutschrift = true, wenn das Dokument eine LIEFERANTEN-GUTSCHRIFT ist: "Gutschrift", "Retourengutschrift", "Gutschriftsnummer", "Rückrechnung", "Warenrücknahme", "Retoure", "Storno zur Rechnung".
+- Erkennungsmerkmale: eine "Gutschriftsnummer"/"Retourennummer" statt Rechnungsnummer, ein Retouren-/Rücknahmegrund, oder eine ausdrückliche Bezeichnung als Gutschrift.
+- Achtung: Eine "Gutschrift" ist KEINE normale Rechnung — sie erstattet uns Geld zurück.
+- Die Beträge auf einer Gutschrift stehen meist POSITIV auf dem Beleg. Gib sie GENAU SO an, wie sie gedruckt sind (positiv) — das Vorzeichen wird intern gesetzt. NICHT selbst negieren.
+- is_gutschrift = false bei allen normalen Rechnungen/Kassenbons.
+
 DOKUMENTTYP (document_kind) — WICHTIG für die Buchhaltung:
 Klassifiziere, um welche Art von Dokument es sich handelt:
 - "rechnung"     → echte Rechnung / Faktura / Kassenbon / Quittung (enthält Rechnungsnummer + zu zahlenden Betrag für bereits erbrachte Leistung)
+- "gutschrift"   → Gutschrift / Retourengutschrift / Warenrücknahme (siehe oben) — Geld kommt an UNS zurück
 - "angebot"      → Angebot, Kostenvoranschlag, Offert, "unverbindliches Angebot", Preisauskunft (NOCH KEINE Zahlungsverpflichtung) — z.B. Versicherungsangebote
 - "mahnung"      → Mahnung, Zahlungserinnerung, "1./2./3. Mahnung", Mahnspesen, "überfällig" — verweist auf eine bereits bestehende Rechnung
 - "lieferschein" → Lieferschein, Packliste (keine Preise / kein Rechnungsbetrag)
 - "proforma"     → Proforma-Rechnung
 - "sonstige"     → alles andere
 Im Zweifel "rechnung". Ein Dokument mit dem Wort "Angebot"/"Offert" im Titel ist "angebot", KEINE Rechnung.
+Wenn is_gutschrift = true, muss document_kind = "gutschrift" sein.
 
 SEITEN-VOLLSTÄNDIGKEIT (seiten_vollstaendig):
 - Prüfe Seitenangaben wie "Seite X von Y", "X/Y", "Blatt X von Y".
@@ -288,7 +300,25 @@ function sanitizeOcr(result: GeminiOcrResult): GeminiOcrResult {
       result = { ...result, skonto_datum: d.toISOString().split('T')[0] }
     }
   }
+  // Gutschrift (Retoure): Beträge stehen positiv auf dem Beleg, werden aber als
+  // Gegenbuchung negativ verbucht — Aufwand und Vorsteuer werden dadurch reduziert.
+  if (result.is_gutschrift || result.document_kind === 'gutschrift') {
+    result = { ...result, is_gutschrift: true, document_kind: 'gutschrift', ...negateBetraege(result) }
+  }
   return result
+}
+
+// Alle Betragsfelder auf negativ zwingen (idempotent — bereits negative bleiben negativ)
+function negateBetraege(r: GeminiOcrResult): Partial<GeminiOcrResult> {
+  const neg = (v: number | null | undefined) => (v == null ? v ?? null : -Math.abs(v))
+  return {
+    net_amount:    neg(r.net_amount),
+    net_amount_10: neg(r.net_amount_10),
+    net_amount_20: neg(r.net_amount_20),
+    net_amount_0:  neg(r.net_amount_0),
+    tax_amount_10: neg(r.tax_amount_10),
+    tax_amount_20: neg(r.tax_amount_20),
+  }
 }
 
 function hasInvoiceOcrData(result: GeminiOcrResult): boolean {

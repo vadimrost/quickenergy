@@ -375,6 +375,7 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       const dokumentArt = ocr?.document_kind ?? null
       let pruefHinweis: string | null = null
       if (dokumentArt === 'angebot') pruefHinweis = 'Angebot erkannt – keine Eingangsrechnung. Nicht als ER buchen.'
+      else if (dokumentArt === 'gutschrift') pruefHinweis = 'Gutschrift erkannt – Beträge werden negativ verbucht (Gegenbuchung).'
       else if (dokumentArt === 'mahnung') pruefHinweis = 'Mahnung erkannt – Original-Rechnung bereits erfasst? Nicht doppelt buchen.'
       else if (dokumentArt === 'lieferschein') pruefHinweis = 'Lieferschein erkannt – keine Rechnung.'
       else if (ocr && ocr.seiten_vollstaendig === false) pruefHinweis = 'Dokument evtl. unvollständig – fehlende Seiten prüfen.'
@@ -1497,7 +1498,15 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
                     <span className="text-sm font-medium text-ink truncate max-w-[160px]">
                       {r.lieferant?.name ?? (r.ocr_json as any)?.supplier_name ?? '—'}
                     </span>
-                    {r.pruef_hinweis && (
+                    {r.dokument_art === 'gutschrift' && (
+                      <span
+                        title="Gutschrift — Beträge sind negativ (Gegenbuchung)"
+                        className="shrink-0 text-[11px] text-blue-700 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded"
+                      >
+                        Gutschrift
+                      </span>
+                    )}
+                    {r.pruef_hinweis && r.dokument_art !== 'gutschrift' && (
                       <span
                         title={r.pruef_hinweis}
                         className="shrink-0 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded cursor-help"
