@@ -167,6 +167,8 @@ export function parsePerspectiveLeadEmail(raw: string): PerspectiveLead {
     if (!wert || STOP.some(re => re.test(wert))) continue
     // Überschriften/Fließtext aussortieren: echte Labels sind kurz
     if (label.length > 90) continue
+    // Reste des IMAP-Protokolls bzw. MIME-Grenzen sind keine Felder
+    if (/^[)(\-.]+$/.test(label) || /^(a\d+ (OK|NO|BAD)|--)/i.test(label) || /^a\d+ (OK|NO|BAD)/i.test(wert)) continue
     felder[label] = wert
   }
 

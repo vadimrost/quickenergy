@@ -100,9 +100,12 @@ export class ImapClient {
   /** Mail per UID holen (ohne sie als gelesen zu markieren — BODY.PEEK) */
   async fetchMail(uid: string): Promise<ImapMail | null> {
     const res = await this.send(`UID FETCH ${uid} (BODY.PEEK[])`, 30000)
-    const start = res.indexOf('}\r\n')
-    if (start === -1) return null
-    const roh = res.slice(start + 3)
+    // IMAP kündigt die Länge als Literal an: "... BODY[] {12345}\r\n<genau 12345 Bytes>"
+    // Exakt diese Länge nehmen, sonst hängen ")" und "aN OK ..." mit im Body.
+    const lit = res.match(/\{(\d+)\}\r?\n/)
+    if (!lit) return null
+    const start = res.indexOf(lit[0]) + lit[0].length
+    const roh = res.slice(start, start + Number(lit[1]))
     const kopfEnde = roh.search(/\r?\n\r?\n/)
     const kopf = kopfEnde === -1 ? roh : roh.slice(0, kopfEnde)
     const kopfUnfold = kopf.replace(/\r?\n[ \t]+/g, ' ')

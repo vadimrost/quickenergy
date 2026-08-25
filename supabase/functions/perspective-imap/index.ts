@@ -67,13 +67,30 @@ Deno.serve(async (req) => {
       return json({ ok: true, testModus, schritte, gefunden: 0, angelegt: 0 })
     }
 
-    // Im Testmodus nur die neueste Mail ansehen und nichts schreiben
-    const zuVerarbeiten = testModus ? uids.slice(-1) : uids.slice(-50)
-
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
+
+    // Bereits verarbeitete UIDs überspringen. Ohne das würde jeder Lauf dieselben
+    // neuesten Mails ansehen und ältere nie erreichen (beim Erstimport relevant).
+    const { data: bekannt } = await supabase
+      .from('leads')
+      .select('raw_payload')
+      .eq('quelle', 'perspective')
+      .limit(5000)
+    const bekannteUids = new Set(
+      (bekannt ?? [])
+        .map(r => (r.raw_payload as { uid?: string } | null)?.uid)
+        .filter(Boolean) as string[],
+    )
+
+    const offen = uids.filter(u => !bekannteUids.has(u))
+    schritte.push(`${offen.length} davon noch nicht verarbeitet`)
+
+    // Neueste zuerst (aktuelle Leads zuerst im CRM), pro Lauf begrenzt
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? '40')))
+    const zuVerarbeiten = testModus ? offen.slice(-1) : offen.slice(-limit).reverse()
 
     let angelegt = 0, uebersprungen = 0
     const beispiele: unknown[] = []
@@ -105,7 +122,7 @@ Deno.serve(async (req) => {
         notiz: [funnel ? `Funnel: ${funnel}` : null, ...notizZeilen].filter(Boolean).join('\n') || null,
         quelle: 'perspective',
         quelle_ref: mail.messageId ?? `uid:${uid}`,
-        raw_payload: { funnel, felder, betreff: mail.subject, datum: mail.date },
+        raw_payload: { uid, funnel, felder, betreff: mail.subject, datum: mail.date },
       })
 
       if (error) {
