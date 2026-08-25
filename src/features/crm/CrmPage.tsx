@@ -9,7 +9,7 @@ import { de } from 'date-fns/locale'
 import {
   Plus, ChevronLeft, ChevronRight, Phone, Mail, Calendar, Zap,
   BarChart2, MapPin, CheckCircle, AlertCircle, XCircle,
-  LayoutGrid, List, Search, User, Trash2, Pencil,
+  LayoutGrid, List, Search, User, Trash2, Pencil, ClipboardPaste,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useLeads, useUpdateLead, useDeleteLead, LEAD_STATUS_COLORS, PIPELINE_STAGES } from './useLeads'
+import { PerspectiveImportDialog } from './PerspectiveImportDialog'
 import { useStageLabels } from './useStageLabels'
 import { SvgFunnel } from './SvgFunnel'
 import { useRole } from '@/contexts/RoleContext'
@@ -962,6 +963,7 @@ export function CrmPage() {
   const { data: mitarbeiter = [] } = useMitarbeiterAll()
   const { mutate: createBenachrichtigung } = useCreateBenachrichtigung()
   const [view, setView] = useState<View>('kanban')
+  const [importOpen, setImportOpen] = useState(false)
   const [setterFilter, setSetterFilter] = useState('alle')
   const [search, setSearch] = useState('')
 
@@ -1049,13 +1051,21 @@ export function CrmPage() {
             ))}
           </div>
           {isAdmin && (
-            <Button size="sm" onClick={() => navigate('/crm/neu')} className="shadow-sm px-2 sm:px-3">
-              <Plus size={14} className="sm:mr-1.5" />
-              <span className="hidden sm:inline">Neuer Lead</span>
-            </Button>
+            <>
+              <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="px-2 sm:px-3">
+                <ClipboardPaste size={14} className="sm:mr-1.5" />
+                <span className="hidden sm:inline">Aus Mail</span>
+              </Button>
+              <Button size="sm" onClick={() => navigate('/crm/neu')} className="shadow-sm px-2 sm:px-3">
+                <Plus size={14} className="sm:mr-1.5" />
+                <span className="hidden sm:inline">Neuer Lead</span>
+              </Button>
+            </>
           )}
         </div>
       </div>
+
+      <PerspectiveImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
 
       {/* Search + Setter filter */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-4">
