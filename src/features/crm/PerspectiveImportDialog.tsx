@@ -21,7 +21,7 @@ export function PerspectiveImportDialog({ open, onClose }: { open: boolean; onCl
     if (!parsed || !kannAnlegen) return
     const { felder, funnel, ...rest } = parsed
     const notizZeilen = Object.entries(felder)
-      .filter(([k]) => !/^(Deine|Ihre|Ihr) (E-Mail|Telefonnummer|Name)/i.test(k) && !/^UTM|^Utm/i.test(k))
+      .filter(([k]) => !/^(Deine|Ihre|Ihr) (E-Mail|Telefonnummer|Name)/i.test(k) && !/^UTM|^Utm/i.test(k) && !/^funnel$/i.test(k.trim()))
       .map(([k, v]) => `${k}: ${v}`)
     const notiz = [funnel ? `Funnel: ${funnel}` : null, ...notizZeilen].filter(Boolean).join('\n')
 

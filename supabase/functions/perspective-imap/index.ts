@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
 
       const { felder, funnel, ...rest } = lead
       const notizZeilen = Object.entries(felder)
-        .filter(([k]) => !/^(Deine|Ihre|Ihr) (E-Mail|Telefonnummer|Name)/i.test(k) && !/^utm/i.test(k))
+        .filter(([k]) => !/^(Deine|Ihre|Ihr) (E-Mail|Telefonnummer|Name)/i.test(k) && !/^utm/i.test(k) && !/^funnel$/i.test(k.trim()))
         .map(([k, v]) => `${k}: ${v}`)
 
       const { error } = await supabase.from('leads').insert({
