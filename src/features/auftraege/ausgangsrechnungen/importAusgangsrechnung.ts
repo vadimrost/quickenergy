@@ -125,7 +125,17 @@ export async function createAusgangsrechnungFromOcrDetailed(ocr: Ausgangsrechnun
     .select('id')
     .single()
 
-  if (insertErr) throw new Error(insertErr.message)
+  if (insertErr) {
+    // 23505 = unique violation auf rechnungsnummer -> Beleg ist bereits erfasst
+    if (insertErr.code === '23505') {
+      const nr = ocr.invoice_number?.trim()
+      throw new Error(
+        nr ? `Rechnung ${nr} ist bereits erfasst — nicht erneut importiert.`
+           : 'Diese Rechnungsnummer ist bereits erfasst — nicht erneut importiert.',
+      )
+    }
+    throw new Error(insertErr.message)
+  }
   const newId = newRechnung!.id as string
 
   const nettoGesamt = netto20 + netto10 + netto0
