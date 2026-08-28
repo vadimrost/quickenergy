@@ -381,7 +381,14 @@ export function AusgangsrechnungPage() {
   const { data: rechnungen = [], isLoading, isError, refetch } = useAusgangsrechnungen()
   const [tab, setTab] = useState<Tab>('alle')
   const [search, setSearch] = useState('')
-  const [datumSort, setDatumSort] = useState<'asc' | 'desc' | null>(null)
+  const [sortFeld, setSortFeld] = useState<'nummer' | 'datum'>('nummer')
+  const [sortRichtung, setSortRichtung] = useState<'asc' | 'desc'>('desc')
+
+  // Klick auf eine Spalte: gleiche Spalte -> Richtung umkehren, sonst neue Spalte absteigend
+  const toggleSort = (feld: 'nummer' | 'datum') => {
+    if (sortFeld === feld) setSortRichtung(r => (r === 'desc' ? 'asc' : 'desc'))
+    else { setSortFeld(feld); setSortRichtung('desc') }
+  }
   const [uploadOpen, setUploadOpen] = useState(false)
   const [bmdOpen, setBmdOpen] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -420,16 +427,15 @@ export function AusgangsrechnungPage() {
     return m ? parseInt(m.join(''), 10) : 0
   }
 
-  const filtered = datumSort
-    ? [...bySearch].sort((a, b) => {
-        const aD = a.rechnungsdatum ?? '', bD = b.rechnungsdatum ?? ''
-        if (!aD && !bD) return 0
-        if (!aD) return 1
-        if (!bD) return -1
-        return datumSort === 'asc' ? aD.localeCompare(bD) : bD.localeCompare(aD)
-      })
-    // Standard: nach Rechnungsnummer, höchste zuerst
-    : [...bySearch].sort((a, b) => nummerVal(b) - nummerVal(a))
+  const filtered = [...bySearch].sort((a, b) => {
+    const vz = sortRichtung === 'asc' ? 1 : -1
+    if (sortFeld === 'nummer') return (nummerVal(a) - nummerVal(b)) * vz
+    const aD = a.rechnungsdatum ?? '', bD = b.rechnungsdatum ?? ''
+    if (!aD && !bD) return 0
+    if (!aD) return 1
+    if (!bD) return -1
+    return aD.localeCompare(bD) * vz
+  })
 
   const ueberfaellig = rechnungen.filter(r =>
     r.status === 'offen' && r.faelligkeitsdatum && differenceInDays(parseISO(r.faelligkeitsdatum), today) < 0
@@ -640,19 +646,23 @@ export function AusgangsrechnungPage() {
                           (h === 'Netto' || h === 'Brutto') && 'text-right'
                         )}
                       >
-                        {h === 'Datum' ? (
-                          <button
-                            onClick={() => setDatumSort(s => s === null ? 'desc' : s === 'desc' ? 'asc' : null)}
-                            className="inline-flex items-center gap-1 hover:text-ink transition-colors"
-                          >
-                            Datum
-                            {datumSort === 'asc'
-                              ? <ChevronUp size={12} className="text-ink" />
-                              : datumSort === 'desc'
-                                ? <ChevronDown size={12} className="text-ink" />
+                        {h === 'Datum' || h === 'Rechnungs-Nr.' ? (() => {
+                          const feld = h === 'Datum' ? 'datum' : 'nummer'
+                          const aktiv = sortFeld === feld
+                          return (
+                            <button
+                              onClick={() => toggleSort(feld)}
+                              className="inline-flex items-center gap-1 hover:text-ink transition-colors"
+                            >
+                              {h}
+                              {aktiv
+                                ? (sortRichtung === 'asc'
+                                    ? <ChevronUp size={12} className="text-ink" />
+                                    : <ChevronDown size={12} className="text-ink" />)
                                 : <ChevronDown size={12} className="opacity-30" />}
-                          </button>
-                        ) : h}
+                            </button>
+                          )
+                        })() : h}
                       </th>
                     ))}
                   </tr>
