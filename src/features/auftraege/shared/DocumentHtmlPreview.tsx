@@ -1,4 +1,4 @@
-import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, Kunde, FirmaStammdaten } from '@/types/database'
+import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, Lieferschein, DokumentPosition, Kunde, FirmaStammdaten } from '@/types/database'
 
 type TtMark = { type: 'bold' | 'italic' | 'underline' }
 type TtNode = { type: string; text?: string; marks?: TtMark[]; content?: TtNode[] }
@@ -85,23 +85,28 @@ type DocInput =
   | { typ: 'angebot'; doc: Angebot; firma?: FirmaStammdaten | null }
   | { typ: 'auftragsbestaetigung'; doc: Auftragsbestaetigung; firma?: FirmaStammdaten | null }
   | { typ: 'rechnung'; doc: Ausgangsrechnung; firma?: FirmaStammdaten | null }
+  | { typ: 'lieferschein'; doc: Lieferschein; firma?: FirmaStammdaten | null }
 
 function getNummerLabel(typ: DocInput['typ']) {
+  if (typ === 'lieferschein') return 'Lieferschein-Nr.'
   if (typ === 'angebot') return 'Angebots-Nr.'
   if (typ === 'auftragsbestaetigung') return 'Auftrags-Nr.'
   return 'Rechnungs-Nr.'
 }
 function getNummer(input: DocInput) {
+  if (input.typ === 'lieferschein') return input.doc.lieferschein_nr
   if (input.typ === 'angebot') return input.doc.angebotsnummer
   if (input.typ === 'auftragsbestaetigung') return input.doc.ab_nummer
   return input.doc.rechnungsnummer
 }
 function getDatum(input: DocInput) {
+  if (input.typ === 'lieferschein') return input.doc.lieferdatum
   if (input.typ === 'angebot') return input.doc.angebotsdatum
   if (input.typ === 'auftragsbestaetigung') return input.doc.ab_datum
   return input.doc.rechnungsdatum
 }
 function getExtraInfo(input: DocInput): [string, string][] {
+  if (input.typ === 'lieferschein') return []
   if (input.typ === 'angebot') {
     const a = input.doc
     const rows: [string, string][] = []
@@ -125,6 +130,7 @@ function getExtraInfo(input: DocInput): [string, string][] {
   return rows
 }
 function getTitel(input: DocInput) {
+  if (input.typ === 'lieferschein') return 'Lieferschein'
   if (input.typ === 'angebot') return 'Angebot'
   if (input.typ === 'auftragsbestaetigung') return 'Auftragsbestätigung'
   const r = input.doc
@@ -274,26 +280,38 @@ export function DocumentHtmlPreview(input: DocInput) {
         </tbody>
       </table>
 
-      {/* ── Summen ── */}
+      {/* ── Summen — beim Lieferschein bewusst keine Betraege ── */}
+      {input.typ !== 'lieferschein' && (
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
         <div style={{ width: 210 }}>
           <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
-          {doc.summe_netto_20 > 0 && <SumRow label="Netto (20% USt)" value={fmt(doc.summe_netto_20)} />}
-          {doc.summe_netto_10 > 0 && <SumRow label="Netto (10% USt)" value={fmt(doc.summe_netto_10)} />}
-          {doc.summe_netto_0 > 0 && <SumRow label="Netto (0% USt)" value={fmt(doc.summe_netto_0)} />}
-          {doc.rabatt_gesamt_prozent > 0 && (
-            <SumRow label={`Gesamtrabatt (${doc.rabatt_gesamt_prozent}%)`} value={`– ${fmt((doc.summe_netto_20 + doc.summe_netto_10 + doc.summe_netto_0) * doc.rabatt_gesamt_prozent / 100)}`} />
+          {(doc as Angebot).summe_netto_20 > 0 && <SumRow label="Netto (20% USt)" value={fmt((doc as Angebot).summe_netto_20)} />}
+          {(doc as Angebot).summe_netto_10 > 0 && <SumRow label="Netto (10% USt)" value={fmt((doc as Angebot).summe_netto_10)} />}
+          {(doc as Angebot).summe_netto_0 > 0 && <SumRow label="Netto (0% USt)" value={fmt((doc as Angebot).summe_netto_0)} />}
+          {(doc as Angebot).rabatt_gesamt_prozent > 0 && (
+            <SumRow label={`Gesamtrabatt (${(doc as Angebot).rabatt_gesamt_prozent}%)`} value={`– ${fmt(((doc as Angebot).summe_netto_20 + (doc as Angebot).summe_netto_10 + (doc as Angebot).summe_netto_0) * (doc as Angebot).rabatt_gesamt_prozent / 100)}`} />
           )}
           <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
-          {doc.ust_20 > 0 && <SumRow label="zzgl. USt 20%" value={fmt(doc.ust_20)} />}
-          {doc.ust_10 > 0 && <SumRow label="zzgl. USt 10%" value={fmt(doc.ust_10)} />}
+          {(doc as Angebot).ust_20 > 0 && <SumRow label="zzgl. USt 20%" value={fmt((doc as Angebot).ust_20)} />}
+          {(doc as Angebot).ust_10 > 0 && <SumRow label="zzgl. USt 10%" value={fmt((doc as Angebot).ust_10)} />}
           <div style={{ borderTop: '1px solid #1a1a1a', margin: '3px 0' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
             <span style={{ fontWeight: 700, fontSize: 10 }}>Gesamtbetrag brutto</span>
-            <span style={{ fontWeight: 700, fontSize: 10 }}>{fmt(doc.summe_brutto)}</span>
+            <span style={{ fontWeight: 700, fontSize: 10 }}>{fmt((doc as Angebot).summe_brutto)}</span>
           </div>
         </div>
       </div>
+      )}
+
+      {/* Lieferadresse — nur Lieferschein */}
+      {input.typ === 'lieferschein' && input.doc.lieferadresse && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: 9, marginBottom: 2 }}>Lieferadresse</div>
+          {input.doc.lieferadresse.split('\n').map((z, i) => (
+            <div key={i} style={{ fontSize: 8.5, lineHeight: 1.5 }}>{z}</div>
+          ))}
+        </div>
+      )}
 
       {/* ── Rechnungsübersicht (nur Schlussrechnung) ── */}
       {input.typ === 'rechnung' && input.doc.typ === 'schlussrechnung' && (
@@ -304,6 +322,16 @@ export function DocumentHtmlPreview(input: DocInput) {
       {doc.fusstext && (
         <div style={{ fontSize: 8.5, lineHeight: 1.6, marginTop: 16 }}>
           {renderRichHtml(doc.fusstext)}
+        </div>
+      )}
+
+      {/* Lieferadresse — nur Lieferschein */}
+      {input.typ === 'lieferschein' && input.doc.lieferadresse && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ fontWeight: 700, fontSize: 9, marginBottom: 2 }}>Lieferadresse</div>
+          {input.doc.lieferadresse.split('\n').map((z, i) => (
+            <div key={i} style={{ fontSize: 8.5, lineHeight: 1.5 }}>{z}</div>
+          ))}
         </div>
       )}
 

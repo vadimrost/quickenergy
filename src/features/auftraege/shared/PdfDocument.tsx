@@ -545,6 +545,9 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
           firma={F}
         />
 
+        {/* Dokumenttitel */}
+        <Text style={s.docTitle}>{titel}</Text>
+
         {/* Kopftext + Betreff */}
         {doc.kopftext && renderRichText(doc.kopftext, s.bodyText)}
         {stornoHinweis && (
@@ -572,27 +575,13 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
           />
         )}
 
-        {/* Lieferadresse + Unterschriftsfeld */}
-        {istLieferschein && (
-          <View style={{ marginTop: 18 }} wrap={false}>
-            {(input.doc as Lieferschein).lieferadresse && (
-              <>
-                <Text style={[s.bodyText, { fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>Lieferadresse</Text>
-                {(input.doc as Lieferschein).lieferadresse!.split('\n').map((z, i) => (
-                  <Text key={i} style={s.bodyText}>{z}</Text>
-                ))}
-              </>
-            )}
-            <View style={{ marginTop: 28, flexDirection: 'row', justifyContent: 'space-between' }}>
-              <View style={{ width: 200 }}>
-                <View style={{ borderTopWidth: 0.5, borderTopColor: '#888', marginBottom: 3 }} />
-                <Text style={{ fontSize: 7.5, color: '#555' }}>Datum, Unterschrift Uebergeber</Text>
-              </View>
-              <View style={{ width: 200 }}>
-                <View style={{ borderTopWidth: 0.5, borderTopColor: '#888', marginBottom: 3 }} />
-                <Text style={{ fontSize: 7.5, color: '#555' }}>Datum, Unterschrift Empfaenger</Text>
-              </View>
-            </View>
+        {/* Lieferadresse */}
+        {istLieferschein && (input.doc as Lieferschein).lieferadresse && (
+          <View style={{ marginTop: 14 }} wrap={false}>
+            <Text style={[s.bodyText, { fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>Lieferadresse</Text>
+            {(input.doc as Lieferschein).lieferadresse!.split('\n').map((z, i) => (
+              <Text key={i} style={[s.bodyText, { marginBottom: 0 }]}>{z}</Text>
+            ))}
           </View>
         )}
 
@@ -603,6 +592,20 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
         {doc.fusstext && (
           <View style={{ marginTop: 16 }} wrap={false}>
             {renderRichText(doc.fusstext, s.bodyText)}
+          </View>
+        )}
+
+        {/* Unterschriften — nur Lieferschein, am Ende des Inhalts */}
+        {istLieferschein && (
+          <View style={{ marginTop: 30, flexDirection: 'row', justifyContent: 'space-between' }} wrap={false}>
+            <View style={{ width: 200 }}>
+              <View style={{ borderTopWidth: 0.5, borderTopColor: '#888', marginBottom: 3 }} />
+              <Text style={{ fontSize: 7.5, color: '#555' }}>Datum, Unterschrift Übergeber</Text>
+            </View>
+            <View style={{ width: 200 }}>
+              <View style={{ borderTopWidth: 0.5, borderTopColor: '#888', marginBottom: 3 }} />
+              <Text style={{ fontSize: 7.5, color: '#555' }}>Datum, Unterschrift Empfänger</Text>
+            </View>
           </View>
         )}
 

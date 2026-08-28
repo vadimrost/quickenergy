@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PdfButton } from '@/features/auftraege/shared/PdfButton'
+import { DocumentHtmlPreview } from '@/features/auftraege/shared/DocumentHtmlPreview'
+import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
 import { useLieferschein, useUpdateLieferschein } from './useLieferscheine'
 import type { LieferscheinStatus } from '@/types/database'
 
@@ -22,6 +24,7 @@ export function LieferscheinDetailPage() {
   const navigate = useNavigate()
   const { data: ls, isLoading } = useLieferschein(id)
   const { mutate: update, isPending } = useUpdateLieferschein()
+  const { data: firma } = useFirmaStammdaten()
 
   const [form, setForm] = useState({ betreff: '', lieferdatum: '', lieferadresse: '', status: 'entwurf' as LieferscheinStatus })
 
@@ -52,7 +55,8 @@ export function LieferscheinDetailPage() {
   const positionen = ls.positionen ?? []
 
   return (
-    <div className="max-w-3xl">
+    <div className="xl:flex xl:gap-6 xl:items-start">
+      <div className="flex-1 min-w-0">
       <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/lieferscheine')} className="text-ink-muted hover:text-ink transition-colors">
@@ -124,6 +128,25 @@ export function LieferscheinDetailPage() {
           </table>
         )}
       </SectionCard>
+      </div>
+
+      {/* Live-Vorschau */}
+      <div className="hidden xl:block w-[420px] shrink-0 sticky top-6">
+        <div className="rounded-card border border-border shadow-card overflow-hidden bg-white">
+          <div className="px-4 py-2.5 border-b border-border bg-white">
+            <span className="label-caps">Vorschau</span>
+          </div>
+          <div className="bg-[#e8eaed] p-4 max-h-[80vh] overflow-y-auto">
+            <div className="mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]" style={{ maxWidth: 520 }}>
+              <DocumentHtmlPreview
+                typ="lieferschein"
+                doc={{ ...ls, ...form, positionen }}
+                firma={firma ?? null}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
