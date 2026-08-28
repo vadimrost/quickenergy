@@ -191,14 +191,10 @@ export function DocumentHtmlPreview(input: DocInput) {
           )}
         </div>
       </div>
-      <div style={{ borderTop: '1.5px solid #1a1a1a', margin: '6px 0' }} />
 
       {/* ── Empfänger + Dokumentinfo ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ maxWidth: 230 }}>
-          <div style={{ fontSize: 7, color: '#888', marginBottom: 4 }}>
-            {F.name} – {F.strasse} – {F.plzOrt}
-          </div>
           {kunde ? (
             <>
               <div style={{ fontWeight: 700, fontSize: 9.5, marginBottom: 1 }}>{kundenName(kunde)}</div>
@@ -247,14 +243,14 @@ export function DocumentHtmlPreview(input: DocInput) {
             <th style={{ ...th, width: 20 }}>Pos.</th>
             <th style={{ ...th }}>Beschreibung</th>
             <th style={{ ...th, width: 60, textAlign: 'right' }}>Menge</th>
-            <th style={{ ...th, width: 80, textAlign: 'right' }}>Einzelpreis</th>
-            <th style={{ ...th, width: 80, textAlign: 'right' }}>Gesamtpreis</th>
+            {input.typ !== 'lieferschein' && <th style={{ ...th, width: 80, textAlign: 'right' }}>Einzelpreis</th>}
+            {input.typ !== 'lieferschein' && <th style={{ ...th, width: 80, textAlign: 'right' }}>Gesamtpreis</th>}
           </tr>
         </thead>
         <tbody>
           {positionen.length === 0 ? (
             <tr>
-              <td colSpan={5} style={{ ...td, color: '#bbb', fontStyle: 'italic', textAlign: 'center', padding: '8px 0' }}>
+              <td colSpan={input.typ === 'lieferschein' ? 3 : 5} style={{ ...td, color: '#bbb', fontStyle: 'italic', textAlign: 'center', padding: '8px 0' }}>
                 Keine Positionen
               </td>
             </tr>
@@ -268,13 +264,17 @@ export function DocumentHtmlPreview(input: DocInput) {
               <td style={{ ...td, textAlign: 'right' }}>
                 {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2 }).format(p.menge)} {p.einheit}
               </td>
+              {input.typ !== 'lieferschein' && (
               <td style={{ ...td, textAlign: 'right' }}>
                 {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.einzelpreis_netto)} EUR
               </td>
+              )}
+              {input.typ !== 'lieferschein' && (
               <td style={{ ...td, textAlign: 'right', verticalAlign: 'top' }}>
                 {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.zeilenbetrag_netto)} EUR
                 {p.bild_url ? <img src={p.bild_url} alt="" style={{ marginTop: 4, maxWidth: 150, maxHeight: 100, objectFit: 'contain', display: 'block', marginLeft: 'auto' }} /> : null}
               </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -322,16 +322,6 @@ export function DocumentHtmlPreview(input: DocInput) {
       {doc.fusstext && (
         <div style={{ fontSize: 8.5, lineHeight: 1.6, marginTop: 16 }}>
           {renderRichHtml(doc.fusstext)}
-        </div>
-      )}
-
-      {/* Lieferadresse — nur Lieferschein */}
-      {input.typ === 'lieferschein' && input.doc.lieferadresse && (
-        <div style={{ marginTop: 14 }}>
-          <div style={{ fontWeight: 700, fontSize: 9, marginBottom: 2 }}>Lieferadresse</div>
-          {input.doc.lieferadresse.split('\n').map((z, i) => (
-            <div key={i} style={{ fontSize: 8.5, lineHeight: 1.5 }}>{z}</div>
-          ))}
         </div>
       )}
 

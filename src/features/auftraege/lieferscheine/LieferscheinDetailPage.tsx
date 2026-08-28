@@ -131,13 +131,13 @@ export function LieferscheinDetailPage() {
       </div>
 
       {/* Live-Vorschau */}
-      <div className="hidden xl:block w-[420px] shrink-0 sticky top-6">
+      <div className="hidden xl:block w-[620px] shrink-0 sticky top-6">
         <div className="rounded-card border border-border shadow-card overflow-hidden bg-white">
           <div className="px-4 py-2.5 border-b border-border bg-white">
             <span className="label-caps">Vorschau</span>
           </div>
           <div className="bg-[#e8eaed] p-4 max-h-[80vh] overflow-y-auto">
-            <div className="mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]" style={{ maxWidth: 520 }}>
+            <div className="mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]" style={{ maxWidth: 700 }}>
               <DocumentHtmlPreview
                 typ="lieferschein"
                 doc={{ ...ls, ...form, positionen }}

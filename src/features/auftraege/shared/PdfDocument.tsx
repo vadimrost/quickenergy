@@ -214,7 +214,6 @@ function Kopfzeile({ firma }: { firma: FirmaConfig }) {
           )}
         </View>
       </View>
-      <View style={s.hrThick} />
     </>
   )
 }
@@ -242,7 +241,6 @@ function EmpfaengerDocInfo({
   return (
     <View style={s.adressInfoRow}>
       <View style={s.empfaengerBox}>
-        <Text style={s.empfaengerLabel}>{firma.name} – {firma.strasse} – {firma.plzOrt}</Text>
         <Text style={s.empfaengerName}>{name}</Text>
         {anschrift.map((l, i) => <Text key={i} style={s.empfaengerText}>{l}</Text>)}
         {kunde?.uid_nr && <Text style={[s.empfaengerText, { color: '#666', marginTop: 3 }]}>UID: {kunde.uid_nr}</Text>}

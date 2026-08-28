@@ -121,7 +121,7 @@ export function PdfLivePreview(props: PdfLivePreviewProps & { className?: string
       <div className="flex-1 overflow-y-auto bg-[#e8eaed] p-4" style={{ scrollbarWidth: 'thin' }}>
         <div
           className="mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18),0_4px_16px_rgba(0,0,0,0.08)]"
-          style={{ maxWidth: 520 }}
+          style={{ maxWidth: 700 }}
         >
           <DocumentHtmlPreview {...docInput} firma={firma ?? null} />
         </div>
