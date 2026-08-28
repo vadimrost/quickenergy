@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LogOut, ReceiptText, Banknote,
   Landmark, MoreHorizontal, X, FileText, ClipboardCheck, Receipt,
-  UserSquare2, Briefcase, ChevronDown, LayoutDashboard, BellRing, Settings, ContactRound, LayoutTemplate, Package,
+  UserSquare2, Briefcase, ChevronDown, LayoutDashboard, BellRing, Settings, ContactRound, LayoutTemplate, Package, Truck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -35,6 +35,7 @@ const AUFTRAEGE_CHILDREN = [
   { icon: LayoutTemplate, path: '/vorlagen',           label: 'Vorlagen'           },
   { icon: ClipboardCheck, path: '/auftraege',           label: 'Auftragsb.'         },
   { icon: Receipt,       path: '/ausgangsrechnungen',  label: 'Rechnungen'         },
+  { icon: Truck,         path: '/lieferscheine',       label: 'Lieferscheine'      },
   { icon: BellRing,      path: '/mahnwesen',           label: 'Mahnwesen'          },
   { icon: UserSquare2,   path: '/kunden',              label: 'Kunden'             },
 ]

@@ -189,7 +189,7 @@ export interface Kunde {
   created_at: string
 }
 
-export type DokumentTyp = 'angebot' | 'auftragsbestaetigung' | 'rechnung'
+export type DokumentTyp = 'angebot' | 'auftragsbestaetigung' | 'rechnung' | 'lieferschein'
 
 export interface DokumentPosition {
   id: string
@@ -287,6 +287,25 @@ export interface Auftragsbestaetigung {
   ust_20: number
   ust_10: number
   summe_brutto: number
+  created_at: string
+  kunde?: Kunde | null
+  positionen?: DokumentPosition[]
+}
+
+export type LieferscheinStatus = 'entwurf' | 'geliefert' | 'storniert'
+
+export interface Lieferschein {
+  id: string
+  lieferschein_nr: string
+  status: LieferscheinStatus
+  kunde_id: string | null
+  angebot_id: string | null
+  ab_id: string | null
+  betreff: string | null
+  lieferdatum: string
+  lieferadresse: string | null
+  kopftext: string | null
+  fusstext: string | null
   created_at: string
   kunde?: Kunde | null
   positionen?: DokumentPosition[]
@@ -428,6 +447,7 @@ export interface Database {
       firma_einstellungen: { Row: FirmaStammdaten; Insert: Omit<FirmaStammdaten, 'id' | 'updated_at'>; Update: Partial<FirmaStammdaten> }
       bilder: { Row: Bild; Insert: Omit<Bild, 'id' | 'created_at'>; Update: Partial<Bild> }
       artikel: { Row: Artikel; Insert: Omit<Artikel, 'id' | 'created_at' | 'nummer'>; Update: Partial<Artikel> }
+      lieferscheine: { Row: Lieferschein; Insert: Omit<Lieferschein, 'id' | 'created_at' | 'lieferschein_nr'>; Update: Partial<Lieferschein> }
       leads: { Row: Lead; Insert: Omit<Lead, 'id' | 'created_at' | 'kunde'>; Update: Partial<Omit<Lead, 'id' | 'created_at' | 'kunde'>> }
     }
     Views: Record<string, never>

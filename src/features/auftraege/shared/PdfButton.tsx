@@ -5,14 +5,16 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { QuickEnergyPdf } from './PdfDocument'
 import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
-import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung } from '@/types/database'
+import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, Lieferschein } from '@/types/database'
 
 type Input =
   | { typ: 'angebot'; doc: Angebot }
   | { typ: 'auftragsbestaetigung'; doc: Auftragsbestaetigung }
   | { typ: 'rechnung'; doc: Ausgangsrechnung }
+  | { typ: 'lieferschein'; doc: Lieferschein }
 
 function dateiname(input: Input): string {
+  if (input.typ === 'lieferschein') return `Lieferschein_${(input.doc as Lieferschein).lieferschein_nr}.pdf`
   if (input.typ === 'angebot') return `Angebot_${(input.doc as Angebot).angebotsnummer}.pdf`
   if (input.typ === 'auftragsbestaetigung') return `AB_${(input.doc as Auftragsbestaetigung).ab_nummer}.pdf`
   return `Rechnung_${(input.doc as Ausgangsrechnung).rechnungsnummer}.pdf`

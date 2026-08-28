@@ -25,6 +25,8 @@ import { AusgangsrechnungFormPage } from '@/features/auftraege/ausgangsrechnunge
 import { MahnwesenPage } from '@/features/auftraege/mahnwesen/MahnwesenPage'
 import { EinstellungenPage } from '@/features/einstellungen/EinstellungenPage'
 import { ArtikelPage } from '@/features/artikel/ArtikelPage'
+import { LieferscheinPage } from '@/features/auftraege/lieferscheine/LieferscheinPage'
+import { LieferscheinDetailPage } from '@/features/auftraege/lieferscheine/LieferscheinDetailPage'
 import { CrmPage } from '@/features/crm/CrmPage'
 import { LeadDetailPage } from '@/features/crm/LeadDetailPage'
 
@@ -108,6 +110,8 @@ function AppRoutes() {
       <Route path="/auftraege/:id"       element={<AdminRoute><AuftragsbestaetigungFormPage /></AdminRoute>} />
       <Route path="/ausgangsrechnungen"  element={<AdminRoute><AusgangsrechnungPage /></AdminRoute>} />
       <Route path="/ausgangsrechnungen/:id" element={<AdminRoute><AusgangsrechnungFormPage /></AdminRoute>} />
+      <Route path="/lieferscheine"       element={<AdminRoute><LieferscheinPage /></AdminRoute>} />
+      <Route path="/lieferscheine/:id"   element={<AdminRoute><LieferscheinDetailPage /></AdminRoute>} />
       <Route path="/mahnwesen"           element={<AdminRoute><MahnwesenPage /></AdminRoute>} />
       <Route path="/einstellungen"       element={<AdminRoute><EinstellungenPage /></AdminRoute>} />
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Trash2, ArrowRightLeft, Receipt, FileCheck, Sparkles, Loader2 } from 'lucide-react'
+import { ArrowLeft, Trash2, ArrowRightLeft, Receipt, FileCheck, Sparkles, Loader2, Truck } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { PageTitle } from '@/components/shared/PageTitle'
@@ -16,6 +16,7 @@ import { fileToBase64 } from '@/lib/gemini-ocr'
 import { lieferantAngebotOcr } from '@/lib/lieferant-angebot-ocr'
 import { useAngebot, useUpsertAngebot, useUpdateAngebotStatus, useDeleteAngebot } from './useAngebote'
 import { useConvertAngebotToAb } from '../auftragsbestatigungen/useAuftragsbestatigungen'
+import { useCreateLieferscheinAusAngebot } from '../lieferscheine/useLieferscheine'
 import { supabase } from '@/lib/supabase'
 import type { AngebotStatus, Kunde } from '@/types/database'
 
@@ -65,6 +66,7 @@ export function AngebotFormPage() {
   const { mutate: updateStatus, isPending: statusPending } = useUpdateAngebotStatus()
   const { mutate: deleteAngebot, isPending: deletePending } = useDeleteAngebot()
   const { mutate: convertToAb, isPending: convertPending } = useConvertAngebotToAb()
+  const { mutate: createLieferschein, isPending: lieferscheinPending } = useCreateLieferscheinAusAngebot()
 
   const [values, setValues] = useState<DokumentFormValues>({
     kunde: leadKunde ?? null,
@@ -206,6 +208,17 @@ export function AngebotFormPage() {
     })
   }
 
+  function handleLieferschein() {
+    if (!existing) return
+    createLieferschein(existing, {
+      onSuccess: (lsId) => {
+        toast.success('Lieferschein erstellt')
+        navigate(`/lieferscheine/${lsId}`)
+      },
+      onError: e => toast.error(String(e)),
+    })
+  }
+
   const angebotNetto = existing
     ? (existing.summe_netto_20 ?? 0) + (existing.summe_netto_10 ?? 0) + (existing.summe_netto_0 ?? 0)
     : 0
@@ -326,6 +339,14 @@ export function AngebotFormPage() {
                   ))}
                 </SelectContent>
               </Select>
+            )}
+
+            {/* Lieferschein erzeugen */}
+            {isEdit && existing && (existing.positionen?.length ?? 0) > 0 && (
+              <Button variant="outline" size="sm" onClick={handleLieferschein} disabled={lieferscheinPending}>
+                <Truck size={13} className="mr-1.5" />
+                Lieferschein
+              </Button>
             )}
 
             {/* In AB umwandeln */}

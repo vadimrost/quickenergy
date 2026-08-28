@@ -6,7 +6,7 @@ import {
   Image,
   StyleSheet,
 } from '@react-pdf/renderer'
-import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, FirmaStammdaten } from '@/types/database'
+import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, Lieferschein, FirmaStammdaten } from '@/types/database'
 
 // ─── Rich-text → react-pdf ────────────────────────────────────────────────────
 // Parses TipTap JSON (or falls back to plain text).
@@ -306,6 +306,35 @@ function Positionen({ positionen }: { positionen: DokumentPosition[] }) {
   )
 }
 
+// Lieferschein: nur Mengen, keine Preise
+function PositionenOhnePreise({ positionen }: { positionen: DokumentPosition[] }) {
+  return (
+    <View>
+      <View style={s.tableHeader}>
+        <Text style={[s.tableHeaderText, s.colPos]}>Pos.</Text>
+        <Text style={[s.tableHeaderText, s.colBez]}>Beschreibung</Text>
+        <Text style={[s.tableHeaderText, s.colMenge]}>Menge</Text>
+        <Text style={[s.tableHeaderText, { width: 60, textAlign: 'right' }]}>Einheit</Text>
+      </View>
+
+      {positionen.map((p, i) => (
+        <View key={p.id ?? i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]} wrap={false}>
+          <Text style={[s.tableCell, s.colPos]}>{i + 1}.</Text>
+          <View style={s.colBez}>
+            <Text style={s.tableCell}>{p.bezeichnung}</Text>
+            {p.beschreibung ? <Text style={s.tableCellMuted}>{p.beschreibung}</Text> : null}
+            {p.bild_url ? <Image src={p.bild_url} style={{ marginTop: 4, maxWidth: 120, maxHeight: 80, objectFit: 'contain' }} /> : null}
+          </View>
+          <Text style={[s.tableCell, s.colMenge]}>
+            {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2 }).format(p.menge)}
+          </Text>
+          <Text style={[s.tableCell, { width: 60, textAlign: 'right' }]}>{p.einheit}</Text>
+        </View>
+      ))}
+    </View>
+  )
+}
+
 function Summen({
   netto20, netto10, netto0, ust20, ust10, brutto, rabatt,
 }: {
@@ -417,8 +446,10 @@ type DokumentInput =
   | { typ: 'angebot'; doc: Angebot }
   | { typ: 'auftragsbestaetigung'; doc: Auftragsbestaetigung }
   | { typ: 'rechnung'; doc: Ausgangsrechnung }
+  | { typ: 'lieferschein'; doc: Lieferschein }
 
 function getTitel(input: DokumentInput): string {
+  if (input.typ === 'lieferschein') return 'Lieferschein'
   if (input.typ === 'angebot') return 'Angebot'
   if (input.typ === 'auftragsbestaetigung') return 'Auftragsbestätigung'
   const r = input.doc as Ausgangsrechnung
@@ -429,18 +460,21 @@ function getTitel(input: DokumentInput): string {
 }
 
 function getNummer(input: DokumentInput): string {
+  if (input.typ === 'lieferschein') return (input.doc as Lieferschein).lieferschein_nr
   if (input.typ === 'angebot') return (input.doc as Angebot).angebotsnummer
   if (input.typ === 'auftragsbestaetigung') return (input.doc as Auftragsbestaetigung).ab_nummer
   return (input.doc as Ausgangsrechnung).rechnungsnummer
 }
 
 function getNummerLabel(input: DokumentInput): string {
+  if (input.typ === 'lieferschein') return 'Lieferschein-Nr.'
   if (input.typ === 'angebot') return 'Angebots-Nr.'
   if (input.typ === 'auftragsbestaetigung') return 'Auftrags-Nr.'
   return 'Rechnungs-Nr.'
 }
 
 function getDatum(input: DokumentInput): string {
+  if (input.typ === 'lieferschein') return (input.doc as Lieferschein).lieferdatum
   if (input.typ === 'angebot') return (input.doc as Angebot).angebotsdatum
   if (input.typ === 'auftragsbestaetigung') return (input.doc as Auftragsbestaetigung).ab_datum
   return (input.doc as Ausgangsrechnung).rechnungsdatum
@@ -448,6 +482,11 @@ function getDatum(input: DokumentInput): string {
 
 function getExtraInfo(input: DokumentInput): Array<[string, string]> {
   const extra: Array<[string, string]> = []
+  if (input.typ === 'lieferschein') {
+    const ls = input.doc as Lieferschein
+    if (ls.angebot_id) extra.push(['Bezug', 'Angebot'])
+    return extra
+  }
   if (input.typ === 'angebot') {
     const a = input.doc as Angebot
     if (a.gueltig_bis) extra.push(['Gültig bis', fmtDate(a.gueltig_bis)])
@@ -479,6 +518,7 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
   const nummerLabel = getNummerLabel(input)
   const datum = getDatum(input)
   const extra = getExtraInfo(input)
+  const istLieferschein = input.typ === 'lieferschein'
   const _ar = input.typ === 'rechnung' ? (input.doc as Ausgangsrechnung) : null
   const _stornoRef = _ar?.storno_zu_rechnung
   const _stornoNr = Array.isArray(_stornoRef) ? _stornoRef[0]?.rechnungsnummer : _stornoRef?.rechnungsnummer
@@ -514,19 +554,47 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
           <Text style={[s.bodyText, s.betreffLabel]}>Betreff: {doc.betreff}</Text>
         )}
 
-        {/* Positionen */}
-        <Positionen positionen={positionen} />
+        {/* Positionen — Lieferschein ohne Preise */}
+        {istLieferschein
+          ? <PositionenOhnePreise positionen={positionen} />
+          : <Positionen positionen={positionen} />}
 
-        {/* Summen */}
-        <Summen
-          netto20={doc.summe_netto_20}
-          netto10={doc.summe_netto_10}
-          netto0={doc.summe_netto_0}
-          ust20={doc.ust_20}
-          ust10={doc.ust_10}
-          brutto={doc.summe_brutto}
-          rabatt={doc.rabatt_gesamt_prozent}
-        />
+        {/* Summen — auf dem Lieferschein bewusst keine Betraege */}
+        {!istLieferschein && (
+          <Summen
+            netto20={(doc as Angebot).summe_netto_20}
+            netto10={(doc as Angebot).summe_netto_10}
+            netto0={(doc as Angebot).summe_netto_0}
+            ust20={(doc as Angebot).ust_20}
+            ust10={(doc as Angebot).ust_10}
+            brutto={(doc as Angebot).summe_brutto}
+            rabatt={(doc as Angebot).rabatt_gesamt_prozent}
+          />
+        )}
+
+        {/* Lieferadresse + Unterschriftsfeld */}
+        {istLieferschein && (
+          <View style={{ marginTop: 18 }} wrap={false}>
+            {(input.doc as Lieferschein).lieferadresse && (
+              <>
+                <Text style={[s.bodyText, { fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>Lieferadresse</Text>
+                {(input.doc as Lieferschein).lieferadresse!.split('\n').map((z, i) => (
+                  <Text key={i} style={s.bodyText}>{z}</Text>
+                ))}
+              </>
+            )}
+            <View style={{ marginTop: 28, flexDirection: 'row', justifyContent: 'space-between' }}>
+              <View style={{ width: 200 }}>
+                <View style={{ borderTopWidth: 0.5, borderTopColor: '#888', marginBottom: 3 }} />
+                <Text style={{ fontSize: 7.5, color: '#555' }}>Datum, Unterschrift Uebergeber</Text>
+              </View>
+              <View style={{ width: 200 }}>
+                <View style={{ borderTopWidth: 0.5, borderTopColor: '#888', marginBottom: 3 }} />
+                <Text style={{ fontSize: 7.5, color: '#555' }}>Datum, Unterschrift Empfaenger</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Rechnungsübersicht (nur Schlussrechnung) */}
         {_ar?.typ === 'schlussrechnung' && <RechnungsUebersicht r={_ar} />}
