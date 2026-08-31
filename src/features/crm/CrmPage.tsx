@@ -21,7 +21,6 @@ import { useLeads, useUpdateLead, useDeleteLead, LEAD_STATUS_COLORS, PIPELINE_ST
 import { PerspectiveImportDialog } from './PerspectiveImportDialog'
 import { useStageLabels } from './useStageLabels'
 import { SvgFunnel } from './SvgFunnel'
-import { useRole } from '@/contexts/RoleContext'
 import { useMitarbeiterAll } from '@/features/mitarbeiter/useMitarbeiterCrud'
 import { useCreateBenachrichtigung } from './useBenachrichtigungen'
 import type { Lead, LeadStatus, Mitarbeiter } from '@/types/database'
@@ -693,8 +692,6 @@ const FUNNEL_STAGE_ORDER: LeadStatus[] = ['neu', 'kontaktiert', 'termin', 'angeb
 
 
 function AnalyticsView({ leads, labels }: { leads: Lead[]; labels: Record<LeadStatus, string> }) {
-  const { isAdmin } = useRole()
-
   // Available months from lead data
   const months = useMemo(() => {
     const set = new Set(leads.map(l => l.created_at?.slice(0, 7)).filter(Boolean))
@@ -790,7 +787,7 @@ function AnalyticsView({ leads, labels }: { leads: Lead[]; labels: Record<LeadSt
             ))}
           </SelectContent>
         </Select>
-        {isAdmin && setters.length > 0 && (
+        {setters.length > 0 && (
           <Select value={setter} onValueChange={setSetter}>
             <SelectTrigger className="h-8 text-xs w-40 bg-white border-slate-200">
               <SelectValue placeholder="Setter" />
@@ -961,8 +958,8 @@ function AnalyticsView({ leads, labels }: { leads: Lead[]; labels: Record<LeadSt
 
 export function CrmPage() {
   const navigate = useNavigate()
-  const { isAdmin, isSetter, setterName } = useRole()
-  const { data: leads = [], isLoading } = useLeads(isSetter ? setterName : null)
+  // Setter sehen dasselbe CRM wie Admins: alle Leads, alle Filter, alle Aktionen.
+  const { data: leads = [], isLoading } = useLeads(null)
   const { mutate: updateLead } = useUpdateLead()
   const { mutate: deleteLead } = useDeleteLead()
   const { labels, updateLabel } = useStageLabels()
@@ -1002,13 +999,10 @@ export function CrmPage() {
   const setter = Array.from(new Set(leads.map(l => l.zugewiesen_an).filter(Boolean))) as string[]
 
   let filtered = leads
-  // Admin-Filter nur für Admins sichtbar
-  if (isAdmin) {
-    if (setterFilter === 'unzugewiesen') filtered = filtered.filter(l => !l.zugewiesen_an)
-    else if (setterFilter !== 'alle') filtered = filtered.filter(l => l.zugewiesen_an === setterFilter)
-    if (kampagneFilter === 'ohne') filtered = filtered.filter(l => !l.kampagne)
-    else if (kampagneFilter !== 'alle') filtered = filtered.filter(l => l.kampagne === kampagneFilter)
-  }
+  if (setterFilter === 'unzugewiesen') filtered = filtered.filter(l => !l.zugewiesen_an)
+  else if (setterFilter !== 'alle') filtered = filtered.filter(l => l.zugewiesen_an === setterFilter)
+  if (kampagneFilter === 'ohne') filtered = filtered.filter(l => !l.kampagne)
+  else if (kampagneFilter !== 'alle') filtered = filtered.filter(l => l.kampagne === kampagneFilter)
   if (search.trim()) {
     const q = search.toLowerCase()
     filtered = filtered.filter(l =>
@@ -1039,8 +1033,8 @@ export function CrmPage() {
     { key: 'kanban' as View,   icon: LayoutGrid, label: 'Kanban'    },
     { key: 'liste' as View,    icon: List,       label: 'Liste'     },
     { key: 'kalender' as View, icon: Calendar,   label: 'Kalender'  },
-    { key: 'analytics' as View, icon: BarChart2, label: 'Analytics', adminOnly: true },
-  ].filter(v => !v.adminOnly || isAdmin)
+    { key: 'analytics' as View, icon: BarChart2, label: 'Analytics' },
+  ]
 
   return (
     <div>
@@ -1065,18 +1059,14 @@ export function CrmPage() {
               </button>
             ))}
           </div>
-          {isAdmin && (
-            <>
-              <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="px-2 sm:px-3">
-                <ClipboardPaste size={14} className="sm:mr-1.5" />
-                <span className="hidden sm:inline">Aus Mail</span>
-              </Button>
-              <Button size="sm" onClick={() => navigate('/crm/neu')} className="shadow-sm px-2 sm:px-3">
-                <Plus size={14} className="sm:mr-1.5" />
-                <span className="hidden sm:inline">Neuer Lead</span>
-              </Button>
-            </>
-          )}
+          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)} className="px-2 sm:px-3">
+            <ClipboardPaste size={14} className="sm:mr-1.5" />
+            <span className="hidden sm:inline">Aus Mail</span>
+          </Button>
+          <Button size="sm" onClick={() => navigate('/crm/neu')} className="shadow-sm px-2 sm:px-3">
+            <Plus size={14} className="sm:mr-1.5" />
+            <span className="hidden sm:inline">Neuer Lead</span>
+          </Button>
         </div>
       </div>
 
@@ -1107,29 +1097,27 @@ export function CrmPage() {
             <option value="ohne">Ohne Kampagne ({leads.filter(l => !l.kampagne).length})</option>
           </select>
         )}
-        {isAdmin && (
-          <div className="flex gap-1.5 flex-wrap">
-            {[
-              { value: 'alle', label: 'Alle', icon: false },
-              { value: 'unzugewiesen', label: 'Nicht zugewiesen', icon: false },
-              ...setter.map(s => ({ value: s, label: s, icon: true })),
-            ].map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => setSetterFilter(opt.value)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border',
-                  setterFilter === opt.value
-                    ? 'bg-accent-500 text-white border-accent-500 shadow-sm'
-                    : 'bg-white text-slate-500 border-slate-200 hover:border-accent-300 hover:text-slate-700',
-                )}
-              >
-                {opt.icon && <Avatar name={opt.value} size="sm" />}
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex gap-1.5 flex-wrap">
+          {[
+            { value: 'alle', label: 'Alle', icon: false },
+            { value: 'unzugewiesen', label: 'Nicht zugewiesen', icon: false },
+            ...setter.map(s => ({ value: s, label: s, icon: true })),
+          ].map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setSetterFilter(opt.value)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border',
+                setterFilter === opt.value
+                  ? 'bg-accent-500 text-white border-accent-500 shadow-sm'
+                  : 'bg-white text-slate-500 border-slate-200 hover:border-accent-300 hover:text-slate-700',
+              )}
+            >
+              {opt.icon && <Avatar name={opt.value} size="sm" />}
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Stage stats */}
