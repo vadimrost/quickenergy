@@ -373,7 +373,10 @@ function TotalsRow({ label, value }: { label: string; value: string }) {
 // Schlussrechnung: Übersicht aller Teilrechnungen + Restbetrag (wie RE-1002641)
 function RechnungsUebersicht({ r }: { r: Ausgangsrechnung }) {
   const prior = r.rechnungsuebersicht ?? []
-  if (prior.length === 0 && r.restbetrag_netto == null) return null
+  // Nur anzeigen, wenn es tatsaechlich Teilrechnungen gibt. Sonst stand hier
+  // "Restbetrag netto (offen)" als letzte Zahl und Kunden ueberwiesen netto statt brutto.
+  const hatTeilrechnungen = prior.length > 0 || (r.bereits_berechnet_netto ?? 0) > 0
+  if (!hatTeilrechnungen) return null
 
   const zeilen = [
     ...prior,
@@ -452,7 +455,10 @@ function getTitel(input: DokumentInput): string {
   if (input.typ === 'auftragsbestaetigung') return 'Auftragsbestätigung'
   const r = input.doc as Ausgangsrechnung
   if (r.typ === 'teilrechnung') return `${r.teilrechnungs_prozent ?? ''}% Teilrechnung`
-  if (r.typ === 'schlussrechnung') return 'Schlussrechnung'
+  if (r.typ === 'schlussrechnung') {
+    const hatTeil = (r.rechnungsuebersicht ?? []).length > 0 || (r.bereits_berechnet_netto ?? 0) > 0
+    return hatTeil ? 'Schlussrechnung' : 'Rechnung'
+  }
   if (r.typ === 'stornorechnung') return `Stornorechnung`
   return 'Rechnung'
 }

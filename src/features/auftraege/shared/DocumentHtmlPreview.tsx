@@ -135,7 +135,10 @@ function getTitel(input: DocInput) {
   if (input.typ === 'auftragsbestaetigung') return 'Auftragsbestätigung'
   const r = input.doc
   if (r.typ === 'teilrechnung') return `${r.teilrechnungs_prozent ?? ''}% Teilrechnung`
-  if (r.typ === 'schlussrechnung') return 'Schlussrechnung'
+  if (r.typ === 'schlussrechnung') {
+    const hatTeil = (r.rechnungsuebersicht ?? []).length > 0 || (r.bereits_berechnet_netto ?? 0) > 0
+    return hatTeil ? 'Schlussrechnung' : 'Rechnung'
+  }
   if (r.typ === 'stornorechnung') return 'Stornorechnung'
   return 'Rechnung'
 }
@@ -358,7 +361,9 @@ function SumRow({ label, value }: { label: string; value: string }) {
 
 function RechnungsUebersichtHtml({ r }: { r: Ausgangsrechnung }) {
   const prior = r.rechnungsuebersicht ?? []
-  if (prior.length === 0 && r.restbetrag_netto == null) return null
+  // Nur bei echten Teilrechnungen — sonst las der Kunde "Restbetrag netto" als Zahlbetrag
+  const hatTeilrechnungen = prior.length > 0 || (r.bereits_berechnet_netto ?? 0) > 0
+  if (!hatTeilrechnungen) return null
 
   const zeilen = [
     ...prior,
