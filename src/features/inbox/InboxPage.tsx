@@ -624,18 +624,24 @@ export function InboxPage() {
     if (eigene.length === 0) return
     eigene.forEach(r => movingRef.current.add(r.id))
     ;(async () => {
-      let moved = 0
+      let neu = 0
+      let bereits = 0
+      const fehler: string[] = []
       for (const r of eigene) {
         try {
-          await moveRechnungToAusgangsrechnung(r, apiKey)
-          moved++
+          const res = await moveRechnungToAusgangsrechnung(r, apiKey)
+          if (res.bereitsVorhanden) bereits++
+          else neu++
         } catch (err) {
           // In movingRef belassen → kein Retry-Sturm in dieser Session
-          console.warn('Auto-Move eigene Rechnung fehlgeschlagen:', err)
+          fehler.push(`${r.rechnungsnr}: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
-      if (moved > 0) {
-        toast.success(`${moved} eigene Rechnung${moved === 1 ? '' : 'en'} → zu Ausgangsrechnungen verschoben`)
+      if (neu > 0) toast.success(`${neu} eigene Rechnung${neu === 1 ? '' : 'en'} → zu Ausgangsrechnungen verschoben`)
+      if (bereits > 0) toast.info(`${bereits} Beleg${bereits === 1 ? '' : 'e'} entfernt — bereits als Ausgangsrechnung erfasst`)
+      // Fehler sichtbar machen, sonst bleibt die Rechnung stumm im Posteingang liegen
+      fehler.forEach(m => toast.error(`Eigene Rechnung nicht verschoben — ${m}`))
+      if (neu > 0 || bereits > 0) {
         void refetch()
         void qc.invalidateQueries({ queryKey: ['ausgangsrechnungen'] })
       }

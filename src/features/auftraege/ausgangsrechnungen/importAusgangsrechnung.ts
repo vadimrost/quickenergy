@@ -205,17 +205,58 @@ export async function createAusgangsrechnungFromOcrDetailed(ocr: Ausgangsrechnun
   return { id: newId, warnung }
 }
 
+export interface MoveErgebnis {
+  ausgangsrechnungId: string
+  /** true = die Rechnung war bereits als Ausgangsrechnung erfasst, es wurde nur der Beleg entfernt */
+  bereitsVorhanden:   boolean
+}
+
+async function findAusgangsrechnungByNummer(nr: string | null | undefined): Promise<string | null> {
+  const trimmed = nr?.trim()
+  if (!trimmed) return null
+  const { data } = await supabase
+    .from('ausgangsrechnungen')
+    .select('id')
+    .eq('rechnungsnummer', trimmed)
+    .limit(1)
+    .maybeSingle()
+  return data?.id ?? null
+}
+
+async function deleteEingangsrechnung(id: string): Promise<void> {
+  const { error } = await supabase.from('rechnungen').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
 // Verschiebt eine (fälschlich als Eingangsrechnung erfasste) eigene Rechnung zu den
 // Ausgangsrechnungen: PDF erneut mit dem AR-OCR lesen, Ausgangsrechnung anlegen,
-// die Eingangsrechnung löschen. Gibt die neue Ausgangsrechnungs-ID zurück.
-export async function moveRechnungToAusgangsrechnung(rechnung: Rechnung, apiKey: string): Promise<string> {
+// die Eingangsrechnung löschen.
+export async function moveRechnungToAusgangsrechnung(rechnung: Rechnung, apiKey: string): Promise<MoveErgebnis> {
   if (!rechnung.pdf_url) throw new Error('Keine PDF zur Rechnung vorhanden')
+
+  // Der Normalfall: die Rechnung wurde in der App erstellt und kommt nur per Mail
+  // zurück in den Posteingang. Dann existiert die Ausgangsrechnung längst — hier
+  // darf kein zweiter Import versucht werden (Rechnungsnummer ist unique), es
+  // reicht, den falsch einsortierten Beleg zu entfernen.
+  const vorhanden = await findAusgangsrechnungByNummer(rechnung.rechnungsnr)
+  if (vorhanden) {
+    await deleteEingangsrechnung(rechnung.id)
+    return { ausgangsrechnungId: vorhanden, bereitsVorhanden: true }
+  }
+
   const base64 = await pdfUrlToBase64(rechnung.pdf_url)
   const ocr = await geminiOcrAusgangsrechnung(base64, apiKey)
+
+  // Die Nummer aus dem PDF kann von der im Beleg erfassten abweichen — noch einmal prüfen.
+  const vorhandenNachOcr = await findAusgangsrechnungByNummer(ocr.invoice_number)
+  if (vorhandenNachOcr) {
+    await deleteEingangsrechnung(rechnung.id)
+    return { ausgangsrechnungId: vorhandenNachOcr, bereitsVorhanden: true }
+  }
+
   const newId = await createAusgangsrechnungFromOcr(ocr)
-  const { error } = await supabase.from('rechnungen').delete().eq('id', rechnung.id)
-  if (error) throw new Error(error.message)
-  return newId
+  await deleteEingangsrechnung(rechnung.id)
+  return { ausgangsrechnungId: newId, bereitsVorhanden: false }
 }
 
 // Erkennt, ob der Lieferantenname zur eigenen Firma gehört (→ eigene Rechnung).
