@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { CreditCard, X, AlertTriangle, ArrowUpFromLine, Sparkles, Loader2, Landmark } from 'lucide-react'
+import { CreditCard, X, AlertTriangle, Sparkles, Loader2, Landmark } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { useUpdateRechnung, useDeleteRechnung } from '@/features/inbox/useRechnungen'
-import { useTriggerExport } from '@/features/exports/useExports'
 import { geminiOcr, pdfUrlToBase64, normalizeDate, resolveCard, effectiveNetto } from '@/lib/gemini-ocr'
 import { useKategorien } from '@/features/kategorien/useKategorien'
 import { supabase } from '@/lib/supabase'
-import type { Rechnung, RechnungStatus, ExportZiel, Rechnungstyp } from '@/types/database'
+import type { Rechnung, RechnungStatus, Rechnungstyp } from '@/types/database'
 import { formatDate, cn } from '@/lib/utils'
 
 interface ExtrahierteFelder_Props {
@@ -38,9 +37,7 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
   const navigate = useNavigate()
   const { mutate: updateRechnung, isPending } = useUpdateRechnung()
   const { mutate: deleteRechnung, isPending: isDeleting } = useDeleteRechnung()
-  const { mutate: triggerExport, isPending: isExporting } = useTriggerExport()
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [confirmingZiel, setConfirmingZiel] = useState<ExportZiel | null>(null)
   const [ocrLoading, setOcrLoading] = useState(false)
   const { data: kategorien = [] } = useKategorien()
 
@@ -237,23 +234,6 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
       },
     })
     toast.success(istGutschrift ? 'Als Gutschrift gespeichert' : 'Rechnung gespeichert')
-  }
-
-  const handleExport = (ziel: ExportZiel) => {
-    if (confirmingZiel !== ziel) {
-      setConfirmingZiel(ziel)
-      setTimeout(() => setConfirmingZiel(null), 3000)
-      return
-    }
-    setConfirmingZiel(null)
-    triggerExport(
-      { rechnungIds: [rechnung.id], ziel },
-      {
-        onSuccess: () => {
-          updateRechnung({ id: rechnung.id, updates: { status: 'gebucht' } })
-        },
-      }
-    )
   }
 
   const handleStatusAdvance = () => {
@@ -613,24 +593,6 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
           </div>
         </div>
       )}
-
-      {/* Export */}
-      <div className="card-base p-5">
-        <p className="label-caps mb-3">Export</p>
-        <button
-          onClick={() => handleExport('lexoffice')}
-          disabled={isExporting}
-          className={cn(
-            'w-full flex items-center justify-center gap-1.5 py-2.5 rounded-card-sm text-sm font-medium transition-all disabled:opacity-40',
-            confirmingZiel === 'lexoffice'
-              ? 'bg-status-warning text-white'
-              : 'bg-accent-500 hover:bg-accent-600 text-white'
-          )}
-        >
-          <ArrowUpFromLine size={13} />
-          {confirmingZiel === 'lexoffice' ? 'Bestätigen?' : '→ sevDesk'}
-        </button>
-      </div>
 
       {/* Action buttons */}
       <div className="flex flex-col gap-2 pb-8">

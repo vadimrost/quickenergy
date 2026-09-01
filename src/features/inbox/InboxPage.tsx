@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, ChevronUp, Building2, FileSpreadsheet, Sparkles, Trash2, Camera, X, Check } from 'lucide-react'
+import { Search, Clock, AlertTriangle, Inbox, CheckCircle, Upload, FileText, Loader2, ChevronDown, ChevronUp, FileSpreadsheet, Sparkles, Trash2, Camera, X, Check } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { toast } from 'sonner'
 import { buildErRows, writeBmdExcel } from '@/lib/bmd-export'
@@ -26,9 +26,8 @@ import { useRechnungen, useUpdateRechnung } from './useRechnungen'
 import { BulkOcrDialog } from './BulkOcrDialog'
 import { useMitarbeiter } from './useMitarbeiter'
 import { useKategorien } from '@/features/kategorien/useKategorien'
-import { useTriggerExport } from '@/features/exports/useExports'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
-import type { Rechnung, RechnungStatus, ExportZiel } from '@/types/database'
+import type { Rechnung, RechnungStatus } from '@/types/database'
 
 const ACCEPTED_TYPES = '.pdf,.heic,.heif,.jpg,.jpeg,.png,.webp'
 
@@ -1247,58 +1246,6 @@ function ExcelExportDialog({ open, onClose, rechnungen }: {
   )
 }
 
-function ActionMenu({
-  rechnungId,
-  status,
-  onClose,
-  onBezahlt,
-  onExport,
-}: {
-  rechnungId: string
-  status: RechnungStatus
-  onClose: () => void
-  onBezahlt: (e: React.MouseEvent, id: string) => void
-  onExport: (e: React.MouseEvent, id: string, ziel: ExportZiel) => void
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [onClose])
-
-  return (
-    <div
-      ref={ref}
-      className="absolute right-0 top-full mt-1 z-50 w-52 rounded-card border border-border bg-white shadow-lg py-1"
-      onClick={e => e.stopPropagation()}
-    >
-      <button
-        onClick={e => onExport(e, rechnungId, 'lexoffice')}
-        className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-ink hover:bg-bg-muted transition-colors text-left"
-      >
-        <Building2 size={13} className="text-ink-muted flex-shrink-0" />
-        Zu sevDesk schicken
-      </button>
-      {status !== 'bezahlt' && (
-        <>
-          <div className="my-1 border-t border-border/50" />
-          <button
-            onClick={e => onBezahlt(e, rechnungId)}
-            className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-status-active hover:bg-bg-muted transition-colors text-left"
-          >
-            <CheckCircle size={13} className="flex-shrink-0" />
-            Als bezahlt markieren
-          </button>
-        </>
-      )}
-    </div>
-  )
-}
-
 function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll, datumSort, onDatumSort }: {
   rows: Rechnung[]
   onRowClick: (id: string) => void
@@ -1308,24 +1255,15 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
   datumSort: 'asc' | 'desc' | null
   onDatumSort: () => void
 }) {
-  const [openMenu, setOpenMenu] = useState<string | null>(null)
   const { mutate: updateRechnung } = useUpdateRechnung()
-  const { mutate: triggerExport } = useTriggerExport()
   const { data: mitarbeiter = [] } = useMitarbeiter()
 
   const handleBezahlt = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
-    setOpenMenu(null)
     updateRechnung(
       { id, updates: { status: 'bezahlt' } },
       { onSuccess: () => toast.success('Rechnung als bezahlt markiert') }
     )
-  }
-
-  const handleExport = (e: React.MouseEvent, id: string, ziel: ExportZiel) => {
-    e.stopPropagation()
-    setOpenMenu(null)
-    triggerExport({ rechnungIds: [id], ziel })
   }
 
   const handleMitarbeiter = (e: React.ChangeEvent<HTMLSelectElement>, id: string) => {
@@ -1420,25 +1358,16 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
                 </select>
               </div>
 
-              {/* Zeile 2: Aktionen gleichmäßig verteilt */}
-              <div className={cn('grid gap-1.5', r.status !== 'bezahlt' ? 'grid-cols-2' : 'grid-cols-1')}>
+              {/* Zeile 2: Aktion */}
+              {r.status !== 'bezahlt' && (
                 <button
-                  onClick={e => handleExport(e, r.id, 'lexoffice')}
-                  className="inline-flex items-center justify-center gap-1 h-8 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
+                  onClick={e => handleBezahlt(e, r.id)}
+                  className="w-full inline-flex items-center justify-center gap-1 h-8 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors"
                 >
-                  <Building2 size={11} />
-                  sevDesk
+                  <CheckCircle size={11} />
+                  Bezahlt
                 </button>
-                {r.status !== 'bezahlt' && (
-                  <button
-                    onClick={e => handleBezahlt(e, r.id)}
-                    className="inline-flex items-center justify-center gap-1 h-8 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors"
-                  >
-                    <CheckCircle size={11} />
-                    Bezahlt
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           </div>
         ))}
@@ -1573,24 +1502,15 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
                   </select>
                 </td>
                 <td onClick={e => e.stopPropagation()}>
-                  <div className="relative inline-block">
+                  {r.status !== 'bezahlt' && (
                     <button
-                      onClick={e => { e.stopPropagation(); setOpenMenu(openMenu === r.id ? null : r.id) }}
-                      className="inline-flex items-center gap-1.5 px-3 h-7 rounded-card-sm border border-border/60 text-ink-muted hover:bg-bg-muted text-xs font-medium transition-colors"
+                      onClick={e => handleBezahlt(e, r.id)}
+                      className="inline-flex items-center gap-1.5 px-3 h-7 rounded-card-sm bg-status-active/10 text-status-active hover:bg-status-active/20 text-xs font-medium transition-colors"
                     >
-                      Aktionen
-                      <ChevronDown size={12} className={cn('transition-transform', openMenu === r.id && 'rotate-180')} />
+                      <CheckCircle size={12} />
+                      Bezahlt
                     </button>
-                    {openMenu === r.id && (
-                      <ActionMenu
-                        rechnungId={r.id}
-                        status={r.status}
-                        onClose={() => setOpenMenu(null)}
-                        onBezahlt={handleBezahlt}
-                        onExport={handleExport}
-                      />
-                    )}
-                  </div>
+                  )}
                 </td>
                 <td onClick={e => e.stopPropagation()} className="pl-2">
                   <button
