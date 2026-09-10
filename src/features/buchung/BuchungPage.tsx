@@ -17,15 +17,17 @@ import type { RechnungStatus } from '@/types/database'
 
 const STATUS_VARIANT: Record<RechnungStatus, Parameters<typeof StatusBadge>[0]['variant']> = {
   eingegangen: 'info',
-  geprüft: 'warning',
-  gebucht: 'active',
+  geprüft: 'info',
+  gebucht: 'info',
   bezahlt: 'done',
 }
 
+// Nur zwei Zustaende sind noch in Gebrauch: offen und bezahlt. 'geprueft' und
+// 'gebucht' sind Altbestand und werden ebenfalls als offen ausgewiesen.
 const STATUS_LABEL: Record<RechnungStatus, string> = {
-  eingegangen: 'Eingegangen',
-  geprüft: 'Geprüft',
-  gebucht: 'Gebucht',
+  eingegangen: 'Neu',
+  geprüft: 'Neu',
+  gebucht: 'Neu',
   bezahlt: 'Bezahlt',
 }
 

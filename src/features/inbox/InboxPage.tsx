@@ -567,14 +567,14 @@ const TABS: { key: FilterTab; label: string }[] = [
 
 const STATUS_VARIANT: Record<RechnungStatus, Parameters<typeof StatusBadge>[0]['variant']> = {
   eingegangen: 'info',
-  geprüft: 'warning',
-  gebucht: 'active',
+  geprüft: 'info',
+  gebucht: 'info',
   bezahlt: 'done',
 }
 const STATUS_LABEL: Record<RechnungStatus, string> = {
   eingegangen: 'Neu',
-  geprüft: 'In Prüfung',
-  gebucht: 'Gebucht',
+  geprüft: 'Neu',
+  gebucht: 'Neu',
   bezahlt: 'Bezahlt',
 }
 
@@ -667,7 +667,7 @@ export function InboxPage() {
 
   const today = isoToday()
 
-  const kpiEingegangen = allRechnungen.filter(r => r.status === 'eingegangen').length
+  const kpiEingegangen = allRechnungen.filter(r => r.status !== 'bezahlt').length
   const kpiBezahlt = allRechnungen.filter(r => r.status === 'bezahlt').length
   const kpiHeuteFaellig = allRechnungen.filter(r => r.faelligkeit && r.faelligkeit <= today && r.status !== 'bezahlt').length
   const kpiSkontoAlarm = allRechnungen.filter(r => {
@@ -713,6 +713,8 @@ export function InboxPage() {
       if (!(d >= 0 && d <= 3)) return false
     } else {
       if (activeTab === 'duplikate') { if (!duplikateIds.has(r.id)) return false }
+      // 'Neu' umfasst alles Unbezahlte (auch die Alt-Stadien geprueft/gebucht)
+      else if (activeTab === 'eingegangen') { if (r.status === 'bezahlt') return false }
       else if (activeTab !== 'alle' && r.status !== activeTab) return false
     }
     if (selectedMonth && r.rechnungsdatum?.slice(0, 7) !== selectedMonth) return false

@@ -98,7 +98,7 @@ export function useDeleteKontoauszug() {
       const rechnungIds = txAll.map(t => t.rechnung_id).filter(Boolean) as string[]
       if (rechnungIds.length > 0) {
         await supabase.from('rechnungen').update({
-          status: 'gebucht',
+          status: 'eingegangen',
           bank_transaktion_id: null,
           bezahlt_am: null,
           bezahlt_konto: null,
@@ -352,7 +352,7 @@ export function useRejectMatch() {
         const ausBankabgleich = !!r?.bezahlt_konto
         await supabase.from('rechnungen').update({
           bank_transaktion_id: null,
-          ...(ausBankabgleich ? { status: 'gebucht', bezahlt_am: null, bezahlt_konto: null } : {}),
+          ...(ausBankabgleich ? { status: 'eingegangen', bezahlt_am: null, bezahlt_konto: null } : {}),
         }).eq('id', tx.rechnung_id)
       }
       if (tx.lohn_id) {

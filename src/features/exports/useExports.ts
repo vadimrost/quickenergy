@@ -34,6 +34,8 @@ export function useTriggerExport() {
   return useMutation({
     mutationFn: async ({ rechnungIds, ziel }: { rechnungIds: string[]; ziel: ExportZiel }) => {
       await triggerSevdesk(rechnungIds)
+      // Kein Status-Schreiben mehr: der Export hat hier fruehen 'gebucht' gesetzt
+      // und damit bezahlte Rechnungen wieder auf unbezahlt zurueckgestuft.
       await Promise.all([
         supabase.from('export_log').insert({
           rechnung_ids_json: rechnungIds,
@@ -41,7 +43,6 @@ export function useTriggerExport() {
           exported_at: new Date().toISOString(),
           success: true,
         }),
-        supabase.from('rechnungen').update({ status: 'gebucht' }).in('id', rechnungIds),
       ])
     },
     onSuccess: () => {

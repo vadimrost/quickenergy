@@ -65,7 +65,7 @@ export function Sidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const { data: rechnungen = [] } = useRechnungen()
-  const pendingCount = rechnungen.filter(r => r.status === 'eingegangen').length
+  const pendingCount = rechnungen.filter(r => r.status !== 'bezahlt').length
   const [moreOpen, setMoreOpen] = useState(false)
 
   const TOP_ITEMS = isSetter ? SETTER_TOP_ITEMS : ADMIN_TOP_ITEMS
