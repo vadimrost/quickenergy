@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -16,7 +16,10 @@ export interface DokumentFormValues {
   kopftext: string
   fusstext: string
   positionen: PositionDraft[]
+  /** Gesamtrabatt in Prozent — 0, wenn stattdessen ein Festbetrag gesetzt ist */
   rabattGesamt: number
+  /** Gesamtrabatt als fester Euro-Betrag — 0, wenn stattdessen prozentual gerabattet wird */
+  rabattGesamtBetrag: number
 }
 
 interface Props {
@@ -32,7 +35,18 @@ interface Props {
 }
 
 export function DokumentForm({ values, onChange, onSave, onCancel, saving, titel, nummer, onNummerChange, extraFelder }: Props) {
-  const summen = berechneSummen(values.positionen, values.rabattGesamt)
+  const summen = berechneSummen(values.positionen, values.rabattGesamt, values.rabattGesamtBetrag)
+
+  // Ohne Klick wird der Typ aus den Werten abgeleitet (wichtig, weil ein bestehendes
+  // Dokument erst nach dem Mount geladen wird); ein Klick hat dann Vorrang.
+  const [typWahl, setTypWahl] = useState<'prozent' | 'betrag' | null>(null)
+  const rabattTyp = typWahl ?? (values.rabattGesamtBetrag > 0 ? 'betrag' : 'prozent')
+
+  function wechselRabattTyp(t: 'prozent' | 'betrag') {
+    setTypWahl(t)
+    // Immer nur eines der beiden Felder darf gesetzt sein
+    onChange(t === 'betrag' ? { rabattGesamt: 0 } : { rabattGesamtBetrag: 0 })
+  }
 
   return (
     <div className="space-y-5 max-w-5xl">
@@ -106,23 +120,48 @@ export function DokumentForm({ values, onChange, onSave, onCancel, saving, titel
           onChange={p => onChange({ positionen: p })}
         />
 
-        {/* Gesamtrabatt */}
+        {/* Gesamtrabatt — prozentual oder als fester Betrag */}
         <div className="mt-4 flex items-center gap-2">
           <label className="text-xs text-ink-muted shrink-0">Gesamtrabatt</label>
-          <Input
-            type="number"
-            min={0}
-            max={100}
-            step={0.1}
-            value={values.rabattGesamt}
-            onChange={e => onChange({ rabattGesamt: parseFloat(e.target.value) || 0 })}
-            className="h-7 w-20 text-sm text-right"
-          />
-          <span className="text-xs text-ink-muted">%</span>
+          {rabattTyp === 'prozent' ? (
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step={0.1}
+              value={values.rabattGesamt}
+              onChange={e => onChange({ rabattGesamt: parseFloat(e.target.value) || 0 })}
+              className="h-7 w-24 text-sm text-right"
+            />
+          ) : (
+            <Input
+              type="number"
+              min={0}
+              step={0.01}
+              value={values.rabattGesamtBetrag}
+              onChange={e => onChange({ rabattGesamtBetrag: parseFloat(e.target.value) || 0 })}
+              className="h-7 w-24 text-sm text-right"
+            />
+          )}
+          <div className="inline-flex rounded-card-sm border border-border overflow-hidden">
+            {(['prozent', 'betrag'] as const).map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => wechselRabattTyp(t)}
+                className={
+                  'h-7 w-9 text-xs font-medium transition-colors ' +
+                  (rabattTyp === t ? 'bg-accent-500 text-white' : 'bg-white text-ink-muted hover:bg-bg-muted')
+                }
+              >
+                {t === 'prozent' ? '%' : '€'}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mt-5 border-t border-border pt-4">
-          <DokumentSummen summen={summen} rabattGesamt={values.rabattGesamt} />
+          <DokumentSummen summen={summen} />
         </div>
       </SectionCard>
 

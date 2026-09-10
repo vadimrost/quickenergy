@@ -99,6 +99,7 @@ export function useConvertAngebotToAb() {
           kopftext: angebot.kopftext,
           fusstext: angebot.fusstext,
           rabatt_gesamt_prozent: angebot.rabatt_gesamt_prozent,
+          rabatt_gesamt_betrag: angebot.rabatt_gesamt_betrag ?? 0,
           summe_netto_20: angebot.summe_netto_20,
           summe_netto_10: angebot.summe_netto_10,
           summe_netto_0: angebot.summe_netto_0,

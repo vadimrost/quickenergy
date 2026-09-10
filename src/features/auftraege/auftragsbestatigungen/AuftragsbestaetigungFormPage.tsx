@@ -65,6 +65,7 @@ export function AuftragsbestaetigungFormPage() {
     fusstext: DEFAULT_FUSS,
     positionen: [emptyPosition(0)],
     rabattGesamt: 0,
+    rabattGesamtBetrag: 0,
   })
   const [lieferdatum, setLieferdatum] = useState('')
   const [zahlungsziel, setZahlungsziel] = useState('14')
@@ -79,6 +80,7 @@ export function AuftragsbestaetigungFormPage() {
         fusstext: existing.fusstext ?? DEFAULT_FUSS,
         positionen: existing.positionen?.length ? existing.positionen : [emptyPosition(0)],
         rabattGesamt: existing.rabatt_gesamt_prozent,
+        rabattGesamtBetrag: existing.rabatt_gesamt_betrag ?? 0,
       })
       setLieferdatum(existing.lieferdatum ?? '')
       setZahlungsziel(String(existing.zahlungsziel_tage))
@@ -89,7 +91,7 @@ export function AuftragsbestaetigungFormPage() {
     if (!values.kunde) { toast.error('Bitte einen Kunden auswählen'); return }
     if (!lieferdatum) { toast.error('Lieferdatum / Leistungsdatum ist erforderlich (§11 UStG)'); return }
 
-    const summen = berechneSummen(values.positionen, values.rabattGesamt)
+    const summen = berechneSummen(values.positionen, values.rabattGesamt, values.rabattGesamtBetrag)
 
     upsert({
       ab: {
@@ -102,6 +104,7 @@ export function AuftragsbestaetigungFormPage() {
         kopftext: values.kopftext,
         fusstext: values.fusstext,
         rabatt_gesamt_prozent: values.rabattGesamt,
+        rabatt_gesamt_betrag: values.rabattGesamtBetrag,
         summe_netto_20: summen.netto_20,
         summe_netto_10: summen.netto_10,
         summe_netto_0: summen.netto_0,
@@ -146,6 +149,7 @@ export function AuftragsbestaetigungFormPage() {
           betreff: existing.betreff,
           positionen: existing.positionen,
           rabattGesamt: existing.rabatt_gesamt_prozent,
+          rabattGesamtBetrag: existing.rabatt_gesamt_betrag ?? 0,
         },
       },
     })

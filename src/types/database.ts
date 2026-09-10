@@ -236,6 +236,7 @@ export interface DokumentVorlage {
   kopftext: string | null
   fusstext: string | null
   rabatt_gesamt_prozent: number
+  rabatt_gesamt_betrag: number
   positionen: Omit<DokumentPosition, 'id' | 'created_at' | 'dokument_id' | 'dokument_typ'>[]
   created_at: string
 }
@@ -254,6 +255,7 @@ export interface Angebot {
   kopftext: string | null
   fusstext: string | null
   rabatt_gesamt_prozent: number
+  rabatt_gesamt_betrag: number
   summe_netto_20: number
   summe_netto_10: number
   summe_netto_0: number
@@ -281,6 +283,7 @@ export interface Auftragsbestaetigung {
   kopftext: string | null
   fusstext: string | null
   rabatt_gesamt_prozent: number
+  rabatt_gesamt_betrag: number
   summe_netto_20: number
   summe_netto_10: number
   summe_netto_0: number
@@ -345,6 +348,7 @@ export interface Ausgangsrechnung {
   kopftext: string | null
   fusstext: string | null
   rabatt_gesamt_prozent: number
+  rabatt_gesamt_betrag: number
   summe_netto_20: number
   summe_netto_10: number
   summe_netto_0: number

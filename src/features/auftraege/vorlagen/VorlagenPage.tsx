@@ -25,6 +25,7 @@ export function VorlagenPage() {
           kopftext: v.kopftext ?? '',
           fusstext: v.fusstext ?? '',
           rabattGesamt: v.rabatt_gesamt_prozent ?? 0,
+          rabattGesamtBetrag: v.rabatt_gesamt_betrag ?? 0,
           positionen: (v.positionen ?? []).map((p, i) => ({ ...p, reihenfolge: i })),
         },
       },
@@ -60,7 +61,7 @@ export function VorlagenPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {vorlagen.map(v => {
-            const summen = berechneSummen(v.positionen ?? [], v.rabatt_gesamt_prozent ?? 0)
+            const summen = berechneSummen(v.positionen ?? [], v.rabatt_gesamt_prozent ?? 0, v.rabatt_gesamt_betrag ?? 0)
             const anzahl = v.positionen?.length ?? 0
             return (
               <div

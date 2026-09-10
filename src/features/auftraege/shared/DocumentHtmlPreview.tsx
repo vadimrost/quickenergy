@@ -1,4 +1,5 @@
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, Lieferschein, DokumentPosition, Kunde, FirmaStammdaten } from '@/types/database'
+import { rabattAnzeige } from './positionenUtils'
 
 type TtMark = { type: 'bold' | 'italic' | 'underline' }
 type TtNode = { type: string; text?: string; marks?: TtMark[]; content?: TtNode[] }
@@ -167,6 +168,10 @@ export function DocumentHtmlPreview(input: DocInput) {
   const positionen = (doc.positionen ?? []) as DokumentPosition[]
   const extra = getExtraInfo(input)
   const kunde = doc.kunde
+  const a = doc as Angebot
+  const rabattZeile = input.typ === 'lieferschein'
+    ? null
+    : rabattAnzeige(a.summe_netto_20 + a.summe_netto_10 + a.summe_netto_0, a.rabatt_gesamt_prozent, a.rabatt_gesamt_betrag ?? 0)
 
   return (
     <div style={{
@@ -288,12 +293,11 @@ export function DocumentHtmlPreview(input: DocInput) {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
         <div style={{ width: 210 }}>
           <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
+          {rabattZeile && <SumRow label="Zwischensumme netto" value={fmt(rabattZeile.nettoVorRabatt)} />}
+          {rabattZeile && <SumRow label={rabattZeile.label} value={`– ${fmt(rabattZeile.betrag)}`} />}
           {(doc as Angebot).summe_netto_20 > 0 && <SumRow label="Netto (20% USt)" value={fmt((doc as Angebot).summe_netto_20)} />}
           {(doc as Angebot).summe_netto_10 > 0 && <SumRow label="Netto (10% USt)" value={fmt((doc as Angebot).summe_netto_10)} />}
           {(doc as Angebot).summe_netto_0 > 0 && <SumRow label="Netto (0% USt)" value={fmt((doc as Angebot).summe_netto_0)} />}
-          {(doc as Angebot).rabatt_gesamt_prozent > 0 && (
-            <SumRow label={`Gesamtrabatt (${(doc as Angebot).rabatt_gesamt_prozent}%)`} value={`– ${fmt(((doc as Angebot).summe_netto_20 + (doc as Angebot).summe_netto_10 + (doc as Angebot).summe_netto_0) * (doc as Angebot).rabatt_gesamt_prozent / 100)}`} />
-          )}
           <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
           {(doc as Angebot).ust_20 > 0 && <SumRow label="zzgl. USt 20%" value={fmt((doc as Angebot).ust_20)} />}
           {(doc as Angebot).ust_10 > 0 && <SumRow label="zzgl. USt 10%" value={fmt((doc as Angebot).ust_10)} />}

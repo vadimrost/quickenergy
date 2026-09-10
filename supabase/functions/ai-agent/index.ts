@@ -1137,6 +1137,7 @@ async function executeTool(name: string, input: any, supabase: any): Promise<any
       summe_netto_0: angebot.summe_netto_0, ust_20: angebot.ust_20,
       ust_10: angebot.ust_10, summe_brutto: angebot.summe_brutto,
       rabatt_gesamt_prozent: angebot.rabatt_gesamt_prozent ?? 0,
+      rabatt_gesamt_betrag: angebot.rabatt_gesamt_betrag ?? 0,
     }).select('id, rechnungsnummer').single()
     if (rErr) return { error: rErr.message }
     if (angebot.positionen?.length > 0) {

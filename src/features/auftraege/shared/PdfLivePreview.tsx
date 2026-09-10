@@ -13,7 +13,7 @@ export type PdfLivePreviewProps =
   | { typ: 'rechnung'; values: DokumentFormValues; rechnungTyp: AusgangsrechnungTyp; leistungsdatum: string; leistungVon: string; leistungBis: string; zahlungsziel: string; teilProzent: string; existingNr?: string; rechnungsuebersicht?: RechnungsuebersichtZeile[] | null; bereitsBerechnet?: number | null; restbetrag?: number | null }
 
 function buildAngebotDoc(p: Extract<PdfLivePreviewProps, { typ: 'angebot' }>): Angebot {
-  const s = berechneSummen(p.values.positionen, p.values.rabattGesamt)
+  const s = berechneSummen(p.values.positionen, p.values.rabattGesamt, p.values.rabattGesamtBetrag)
   return {
     id: 'preview', angebotsnummer: p.existingNr ?? 'AN-XXXX', status: 'entwurf',
     kunde_id: p.values.kunde?.id ?? null, betreff: p.values.betreff || null,
@@ -21,6 +21,7 @@ function buildAngebotDoc(p: Extract<PdfLivePreviewProps, { typ: 'angebot' }>): A
     referenz_bestellnr: p.referenz || null,
     kopftext: p.values.kopftext, fusstext: p.values.fusstext,
     rabatt_gesamt_prozent: p.values.rabattGesamt,
+    rabatt_gesamt_betrag: p.values.rabattGesamtBetrag,
     summe_netto_20: s.netto_20, summe_netto_10: s.netto_10, summe_netto_0: s.netto_0,
     ust_20: s.ust_20, ust_10: s.ust_10, summe_brutto: s.brutto,
     auftragsbestaetigung_id: null, created_at: '',
@@ -32,7 +33,7 @@ function buildAngebotDoc(p: Extract<PdfLivePreviewProps, { typ: 'angebot' }>): A
 }
 
 function buildAbDoc(p: Extract<PdfLivePreviewProps, { typ: 'auftragsbestaetigung' }>): Auftragsbestaetigung {
-  const s = berechneSummen(p.values.positionen, p.values.rabattGesamt)
+  const s = berechneSummen(p.values.positionen, p.values.rabattGesamt, p.values.rabattGesamtBetrag)
   return {
     id: 'preview', ab_nummer: p.existingNr ?? 'AB-XXXX', status: 'entwurf',
     kunde_id: p.values.kunde?.id ?? null, angebot_id: null,
@@ -40,6 +41,7 @@ function buildAbDoc(p: Extract<PdfLivePreviewProps, { typ: 'auftragsbestaetigung
     lieferdatum: p.lieferdatum || null, zahlungsziel_tage: parseInt(p.zahlungsziel) || 14,
     kopftext: p.values.kopftext, fusstext: p.values.fusstext,
     rabatt_gesamt_prozent: p.values.rabattGesamt,
+    rabatt_gesamt_betrag: p.values.rabattGesamtBetrag,
     summe_netto_20: s.netto_20, summe_netto_10: s.netto_10, summe_netto_0: s.netto_0,
     ust_20: s.ust_20, ust_10: s.ust_10, summe_brutto: s.brutto,
     created_at: '', kunde: p.values.kunde ?? null,
@@ -50,7 +52,7 @@ function buildAbDoc(p: Extract<PdfLivePreviewProps, { typ: 'auftragsbestaetigung
 }
 
 function buildRechnungDoc(p: Extract<PdfLivePreviewProps, { typ: 'rechnung' }>): Ausgangsrechnung {
-  const s = berechneSummen(p.values.positionen, p.values.rabattGesamt)
+  const s = berechneSummen(p.values.positionen, p.values.rabattGesamt, p.values.rabattGesamtBetrag)
   const zahlungsTage = parseInt(p.zahlungsziel) || 14
   const faellig = new Date(p.values.datum)
   faellig.setDate(faellig.getDate() + zahlungsTage)
@@ -65,6 +67,7 @@ function buildRechnungDoc(p: Extract<PdfLivePreviewProps, { typ: 'rechnung' }>):
     teilrechnungs_prozent: p.teilProzent ? parseFloat(p.teilProzent) : null,
     kopftext: p.values.kopftext, fusstext: p.values.fusstext,
     rabatt_gesamt_prozent: p.values.rabattGesamt,
+    rabatt_gesamt_betrag: p.values.rabattGesamtBetrag,
     summe_netto_20: s.netto_20, summe_netto_10: s.netto_10, summe_netto_0: s.netto_0,
     ust_20: s.ust_20, ust_10: s.ust_10, summe_brutto: s.brutto,
     angebot_id: null, auftragswert_netto: null,

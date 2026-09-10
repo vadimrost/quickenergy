@@ -1,18 +1,25 @@
 import { formatEuro } from '@/lib/utils'
-import type { Summen } from './positionenUtils'
+import { rabattLabel, type Summen } from './positionenUtils'
 
 interface Props {
   summen: Summen
-  rabattGesamt?: number
 }
 
-export function DokumentSummen({ summen, rabattGesamt = 0 }: Props) {
-  const hasRabatt = rabattGesamt > 0
+export function DokumentSummen({ summen }: Props) {
+  const hasRabatt = summen.rabatt_betrag > 0.005
   const has10 = summen.netto_10 > 0
   const has0 = summen.netto_0 > 0
 
   return (
     <div className="ml-auto w-72 space-y-1.5">
+      {/* Bei Rabatt zuerst die Zwischensumme, damit die Rechnung nachvollziehbar aufgeht */}
+      {hasRabatt && (
+        <>
+          <Row label="Zwischensumme netto" value={formatEuro(summen.netto_vor_rabatt)} />
+          <Row label={rabattLabel(summen.rabatt_prozent)} value={`- ${formatEuro(summen.rabatt_betrag)}`} muted />
+          <div className="border-t border-border pt-1.5 mt-1.5" />
+        </>
+      )}
       {summen.netto_20 > 0 && (
         <Row label="Netto (20% USt)" value={formatEuro(summen.netto_20)} />
       )}
@@ -21,9 +28,6 @@ export function DokumentSummen({ summen, rabattGesamt = 0 }: Props) {
       )}
       {has0 && (
         <Row label="Netto (0% USt)" value={formatEuro(summen.netto_0)} />
-      )}
-      {hasRabatt && (
-        <Row label={`Gesamtrabatt (${rabattGesamt}%)`} value={`- ${formatEuro(summen.netto_gesamt * rabattGesamt / 100 / (1 - rabattGesamt / 100))}`} muted />
       )}
       <div className="border-t border-border pt-1.5 mt-1.5" />
       {summen.ust_20 > 0 && (

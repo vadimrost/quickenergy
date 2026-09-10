@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from '@react-pdf/renderer'
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, Lieferschein, FirmaStammdaten } from '@/types/database'
+import { rabattAnzeige } from './positionenUtils'
 
 // ─── Rich-text → react-pdf ────────────────────────────────────────────────────
 // Parses TipTap JSON (or falls back to plain text).
@@ -334,20 +335,23 @@ function PositionenOhnePreise({ positionen }: { positionen: DokumentPosition[] }
 }
 
 function Summen({
-  netto20, netto10, netto0, ust20, ust10, brutto, rabatt,
+  netto20, netto10, netto0, ust20, ust10, brutto, rabatt, rabattBetrag,
 }: {
   netto20: number; netto10: number; netto0: number
-  ust20: number; ust10: number; brutto: number; rabatt: number
+  ust20: number; ust10: number; brutto: number; rabatt: number; rabattBetrag: number
 }) {
   const nettoGesamt = netto20 + netto10 + netto0
+  // Bei Rabatt zuerst die Zwischensumme, damit der Abzug fuer den Kunden aufgeht
+  const r = rabattAnzeige(nettoGesamt, rabatt, rabattBetrag)
   return (
     <View style={s.totalsContainer}>
       <View style={s.totalsBox}>
         <View style={s.totalsHrLight} />
+        {r && <TotalsRow label="Zwischensumme netto" value={fmt(r.nettoVorRabatt)} />}
+        {r && <TotalsRow label={r.label} value={`– ${fmt(r.betrag)}`} />}
         {netto20 > 0 && <TotalsRow label="Gesamtbetrag netto (20% USt)" value={fmt(netto20)} />}
         {netto10 > 0 && <TotalsRow label="Gesamtbetrag netto (10% USt)" value={fmt(netto10)} />}
         {netto0 > 0 && <TotalsRow label="Gesamtbetrag netto (0% USt)" value={fmt(netto0)} />}
-        {rabatt > 0 && <TotalsRow label={`Gesamtrabatt (${rabatt}%)`} value={`– ${fmt(nettoGesamt * rabatt / 100 / (1 - rabatt / 100))}`} />}
         <View style={s.totalsHrLight} />
         {ust20 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 20%" value={fmt(ust20)} />}
         {ust10 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 10%" value={fmt(ust10)} />}
@@ -576,6 +580,7 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
             ust10={(doc as Angebot).ust_10}
             brutto={(doc as Angebot).summe_brutto}
             rabatt={(doc as Angebot).rabatt_gesamt_prozent}
+            rabattBetrag={(doc as Angebot).rabatt_gesamt_betrag ?? 0}
           />
         )}
 

@@ -61,6 +61,7 @@ type StornoZu = {
   kunde?: Kunde | null
   positionen?: PositionDraft[]
   rabattGesamt?: number
+  rabattGesamtBetrag?: number
 }
 
 type LocationState = {
@@ -73,6 +74,7 @@ type LocationState = {
     betreff?: string | null
     positionen?: PositionDraft[]
     rabattGesamt?: number
+    rabattGesamtBetrag?: number
   }
   storno_zu?: StornoZu
 } | null
@@ -111,6 +113,7 @@ export function AusgangsrechnungFormPage() {
       : prefill?.positionen?.length ? prefill.positionen
       : [emptyPosition(0)]),
     rabattGesamt: fromStorno?.rabattGesamt ?? prefill?.rabattGesamt ?? 0,
+    rabattGesamtBetrag: fromStorno?.rabattGesamtBetrag ?? prefill?.rabattGesamtBetrag ?? 0,
   })
   const [auftragswert, setAuftragswert] = useState(
     fromState?.auftragswert_netto != null ? String(fromState.auftragswert_netto) : ''
@@ -139,6 +142,7 @@ export function AusgangsrechnungFormPage() {
         fusstext: existing.fusstext ?? DEFAULT_FUSS,
         positionen: existing.positionen?.length ? existing.positionen : [emptyPosition(0)],
         rabattGesamt: existing.rabatt_gesamt_prozent,
+        rabattGesamtBetrag: existing.rabatt_gesamt_betrag ?? 0,
       })
       setTyp(existing.typ)
       setLeistungsdatum(existing.leistungsdatum ?? '')
@@ -159,7 +163,7 @@ export function AusgangsrechnungFormPage() {
       return
     }
 
-    const summen = berechneSummen(values.positionen, values.rabattGesamt)
+    const summen = berechneSummen(values.positionen, values.rabattGesamt, values.rabattGesamtBetrag)
     const zahlungsTage = parseInt(zahlungsziel) || 14
     const faellig = new Date(values.datum)
     faellig.setDate(faellig.getDate() + zahlungsTage)
@@ -203,6 +207,7 @@ export function AusgangsrechnungFormPage() {
         kopftext: values.kopftext,
         fusstext: values.fusstext,
         rabatt_gesamt_prozent: values.rabattGesamt,
+        rabatt_gesamt_betrag: values.rabattGesamtBetrag,
         summe_netto_20: summen.netto_20,
         summe_netto_10: summen.netto_10,
         summe_netto_0: summen.netto_0,
@@ -266,6 +271,7 @@ export function AusgangsrechnungFormPage() {
           kunde: existing.kunde,
           positionen: existing.positionen,
           rabattGesamt: existing.rabatt_gesamt_prozent,
+          rabattGesamtBetrag: existing.rabatt_gesamt_betrag ?? 0,
         },
       },
     })
@@ -279,7 +285,7 @@ export function AusgangsrechnungFormPage() {
     existing.status !== 'storniert' &&
     existing.typ !== 'stornorechnung'
 
-  const summenNow = berechneSummen(values.positionen, values.rabattGesamt)
+  const summenNow = berechneSummen(values.positionen, values.rabattGesamt, values.rabattGesamtBetrag)
   const storedBrutto = existing?.summe_brutto ?? 0
   const calcBrutto = summenNow.brutto
   const hasMismatch = isEdit && storedBrutto > 0 && !(existing?.positionen?.length) && Math.abs(storedBrutto - calcBrutto) > 0.01

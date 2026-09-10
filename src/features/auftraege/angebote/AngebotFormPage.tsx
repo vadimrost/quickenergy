@@ -57,7 +57,7 @@ export function AngebotFormPage() {
   const leadKunde: Kunde | undefined = (location.state as any)?.kunde
   // Set when navigating from the Vorlagen overview page
   const vorlage = (location.state as any)?.vorlage as {
-    betreff: string; kopftext: string; fusstext: string; rabattGesamt: number
+    betreff: string; kopftext: string; fusstext: string; rabattGesamt: number; rabattGesamtBetrag?: number
     positionen: DokumentFormValues['positionen']
   } | undefined
 
@@ -76,6 +76,7 @@ export function AngebotFormPage() {
     fusstext: vorlage?.fusstext || DEFAULT_FUSS,
     positionen: vorlage?.positionen?.length ? vorlage.positionen : [emptyPosition(0)],
     rabattGesamt: vorlage?.rabattGesamt ?? 0,
+    rabattGesamtBetrag: vorlage?.rabattGesamtBetrag ?? 0,
   })
 
   const [gueltigBis, setGueltigBis] = useState('')
@@ -136,6 +137,7 @@ export function AngebotFormPage() {
         fusstext: existing.fusstext ?? DEFAULT_FUSS,
         positionen: existing.positionen?.length ? existing.positionen : [emptyPosition(0)],
         rabattGesamt: existing.rabatt_gesamt_prozent,
+        rabattGesamtBetrag: existing.rabatt_gesamt_betrag ?? 0,
       })
       setGueltigBis(existing.gueltig_bis ?? '')
       setReferenz(existing.referenz_bestellnr ?? '')
@@ -146,7 +148,7 @@ export function AngebotFormPage() {
     if (!values.kunde) { toast.error('Bitte einen Kunden auswählen'); return }
     if (values.positionen.length === 0) { toast.error('Mindestens eine Position erforderlich'); return }
 
-    const summen = berechneSummen(values.positionen, values.rabattGesamt)
+    const summen = berechneSummen(values.positionen, values.rabattGesamt, values.rabattGesamtBetrag)
 
     upsert({
       angebot: {
@@ -159,6 +161,7 @@ export function AngebotFormPage() {
         kopftext: values.kopftext,
         fusstext: values.fusstext,
         rabatt_gesamt_prozent: values.rabattGesamt,
+        rabatt_gesamt_betrag: values.rabattGesamtBetrag,
         summe_netto_20: summen.netto_20,
         summe_netto_10: summen.netto_10,
         summe_netto_0: summen.netto_0,
@@ -247,6 +250,7 @@ export function AngebotFormPage() {
             ek_netto: null,
           }],
           rabattGesamt: 0,
+          rabattGesamtBetrag: 0,
         },
       },
     })
@@ -264,6 +268,7 @@ export function AngebotFormPage() {
           betreff: existing.betreff,
           positionen: existing.positionen,
           rabattGesamt: existing.rabatt_gesamt_prozent,
+          rabattGesamtBetrag: existing.rabatt_gesamt_betrag ?? 0,
         },
       },
     })
@@ -301,6 +306,7 @@ export function AngebotFormPage() {
                 kopftext: values.kopftext,
                 fusstext: values.fusstext,
                 rabattGesamt: values.rabattGesamt,
+                rabattGesamtBetrag: values.rabattGesamtBetrag,
                 positionen: values.positionen,
               }}
               hasContent={values.positionen.some(p => p.bezeichnung.trim() || p.einzelpreis_netto > 0)}

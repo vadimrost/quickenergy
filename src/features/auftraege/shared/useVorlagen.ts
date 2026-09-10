@@ -30,6 +30,7 @@ export function useCreateVorlage() {
       kopftext: string | null
       fusstext: string | null
       rabatt_gesamt_prozent: number
+      rabatt_gesamt_betrag: number
       positionen: PositionDraft[]
     }) => {
       const { data, error } = await supabase

@@ -17,6 +17,7 @@ export interface VorlagenPayload {
   kopftext: string
   fusstext: string
   rabattGesamt: number
+  rabattGesamtBetrag: number
   positionen: PositionDraft[]
 }
 
@@ -43,6 +44,7 @@ export function VorlagenControls({ typ = 'angebot', current, onLoad, hasContent 
       kopftext: v.kopftext ?? '',
       fusstext: v.fusstext ?? '',
       rabattGesamt: v.rabatt_gesamt_prozent ?? 0,
+      rabattGesamtBetrag: v.rabatt_gesamt_betrag ?? 0,
       positionen: (v.positionen ?? []).map((p, i) => ({ ...p, reihenfolge: i })),
     })
     toast.success(`Vorlage „${v.name}" geladen`)
@@ -57,6 +59,7 @@ export function VorlagenControls({ typ = 'angebot', current, onLoad, hasContent 
       kopftext: current.kopftext || null,
       fusstext: current.fusstext || null,
       rabatt_gesamt_prozent: current.rabattGesamt,
+      rabatt_gesamt_betrag: current.rabattGesamtBetrag,
       positionen: current.positionen,
     }, {
       onSuccess: () => { toast.success('Als Vorlage gespeichert'); setSaveOpen(false); setName('') },
