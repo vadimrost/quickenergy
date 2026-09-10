@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { kontoauszugOcr } from '@/lib/kontoauszug-ocr'
+import { kontoauszugOcr, kontoauszugDifferenz } from '@/lib/kontoauszug-ocr'
 import { matchTransaktion, AUTO_MATCH_THRESHOLD } from '@/lib/kontoauszug-matching'
 import { fileToBase64 } from '@/lib/gemini-ocr'
 import type { Kontoauszug, BankTransaktion, Rechnung, LohnDienstnehmer } from '@/types/database'
@@ -234,8 +234,34 @@ export function useUploadKontoauszug() {
         ocr.konto_iban,
       )
 
+      // Kontrolle gegen die Summen im Auszugskopf — deckt fehlende Buchungen und
+      // falsche Vorzeichen sofort beim Import auf statt erst beim Steuerberater.
+      const betraege = ocr.transaktionen.map(t => t.betrag)
+      const warnungen: string[] = []
+      const diff = kontoauszugDifferenz(ocr.alter_kontostand, ocr.neuer_kontostand, betraege)
+      if (diff !== null) {
+        warnungen.push(`Kontrollsumme weicht um ${diff.toFixed(2)} EUR ab — es fehlt eine Buchung oder ein Vorzeichen ist falsch.`)
+      }
+      if (ocr.summe_gutschriften != null) {
+        const gut = betraege.filter(b => b > 0).reduce((a, b) => a + b, 0)
+        if (Math.abs(gut - ocr.summe_gutschriften) >= 0.01) {
+          warnungen.push(`Gutschriften: ${gut.toFixed(2)} statt ${ocr.summe_gutschriften.toFixed(2)} EUR.`)
+        }
+      }
+      if (ocr.summe_belastungen != null) {
+        const bel = -betraege.filter(b => b < 0).reduce((a, b) => a + b, 0)
+        if (Math.abs(bel - ocr.summe_belastungen) >= 0.01) {
+          warnungen.push(`Belastungen: ${bel.toFixed(2)} statt ${ocr.summe_belastungen.toFixed(2)} EUR.`)
+        }
+      }
+
       onStep('done')
-      return { konto, autoMatched, total: insertedTx?.length ?? 0 }
+      return {
+        konto,
+        autoMatched,
+        total: insertedTx?.length ?? 0,
+        warnung: warnungen.length > 0 ? warnungen.join(' ') : null,
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['kontoauszuege'] })

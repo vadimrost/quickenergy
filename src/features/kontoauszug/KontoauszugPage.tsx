@@ -7,6 +7,7 @@ import { SectionCard } from '@/components/shared/SectionCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { formatEuro, formatDate, cn } from '@/lib/utils'
+import { kontoauszugDifferenz } from '@/lib/kontoauszug-ocr'
 import { matchTransaktion } from '@/lib/kontoauszug-matching'
 import { useRechnungen } from '@/features/inbox/useRechnungen'
 import {
@@ -351,7 +352,7 @@ function KontoauszugImportModal({ open, uploadStep, fileName, result, error, onF
   open: boolean
   uploadStep: UploadStep | null
   fileName: string
-  result?: { total: number; autoMatched: number }
+  result?: { total: number; autoMatched: number; warnung?: string | null }
   error?: string
   onFileSelect: (file: File) => void
   onClose: () => void
@@ -478,6 +479,9 @@ function KontoauszugImportModal({ open, uploadStep, fileName, result, error, onF
                 <CheckCircle2 size={22} className="mx-auto text-green-500 mb-2" />
                 <p className="text-sm font-semibold text-green-700">{result.total} Transaktionen importiert</p>
                 <p className="text-xs text-green-600 mt-0.5">{result.autoMatched} automatisch zugewiesen</p>
+                {result.warnung && (
+                  <p className="text-xs text-status-warning mt-1.5 font-medium">{result.warnung}</p>
+                )}
               </div>
             )}
 
@@ -534,6 +538,9 @@ function KontoauszugCard({
   const incoming = txAll.filter(t => t.betrag >= 0)
 
   const delta = (konto.neuer_kontostand ?? 0) - (konto.alter_kontostand ?? 0)
+  // Kontrolle: alter Kontostand + alle Buchungen muss den neuen Kontostand ergeben.
+  // Weicht es ab, fehlt eine Buchung oder ein Vorzeichen wurde falsch gelesen.
+  const kontrollDiff = kontoauszugDifferenz(konto.alter_kontostand, konto.neuer_kontostand, txAll.map(t => t.betrag))
 
   async function handleAssign(type: 'rechnung' | 'lohn', targetId: string) {
     if (!assignTx) return
@@ -650,6 +657,29 @@ function KontoauszugCard({
               </>
             )}
           </div>
+
+          {(kontrollDiff !== null || !konto.von_datum || !konto.bis_datum) && (
+            <div className="flex items-start gap-2 mb-5 p-3 rounded-xl bg-status-warning/10 border border-status-warning/30 text-sm">
+              <AlertCircle size={15} className="text-status-warning shrink-0 mt-0.5" />
+              <div className="text-ink">
+                {kontrollDiff !== null && (
+                  <p>
+                    <span className="font-medium">Kontrollsumme stimmt nicht.</span>{' '}
+                    Alter Kontostand + alle Buchungen ergeben{' '}
+                    <span className="tabular-nums">{formatEuro((konto.alter_kontostand ?? 0) + txAll.reduce((a, t) => a + t.betrag, 0))}</span>{' '}
+                    statt <span className="tabular-nums">{fmtKontostand(konto.neuer_kontostand)}</span> —
+                    Differenz <span className="tabular-nums font-medium">{formatEuro(kontrollDiff)}</span>.
+                    Es fehlt eine Buchung oder ein Vorzeichen ist falsch. Auszug am besten löschen und neu einlesen.
+                  </p>
+                )}
+                {(!konto.von_datum || !konto.bis_datum) && (
+                  <p className={kontrollDiff !== null ? 'mt-1' : undefined}>
+                    Der Auszugszeitraum wurde nicht erkannt — die Lückenprüfung zwischen den Monaten greift für diesen Auszug nicht.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="flex items-center gap-1 mb-4 border-b border-border">
@@ -827,7 +857,7 @@ export function KontoauszugPage() {
   const [importOpen, setImportOpen] = useState(false)
   const [uploadStep, setUploadStep] = useState<UploadStep | null>(null)
   const [uploadFileName, setUploadFileName] = useState('')
-  const [uploadResult, setUploadResult] = useState<{ total: number; autoMatched: number } | undefined>()
+  const [uploadResult, setUploadResult] = useState<{ total: number; autoMatched: number; warnung?: string | null } | undefined>()
   const [uploadError, setUploadError] = useState<string | undefined>()
 
   const { data: kontoauszuege = [], isLoading } = useKontoauszuege()
@@ -859,8 +889,8 @@ export function KontoauszugPage() {
     setUploadStep('uploading')
     try {
       const result = await uploadMutation.mutateAsync({ file, onStep: setUploadStep })
-      const { autoMatched, total } = result as any
-      setUploadResult({ total, autoMatched })
+      const { autoMatched, total, warnung } = result as any
+      setUploadResult({ total, autoMatched, warnung })
     } catch (err) {
       setUploadStep('error')
       setUploadError(err instanceof Error ? err.message : 'Unbekannter Fehler')
