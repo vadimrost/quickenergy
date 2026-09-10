@@ -865,7 +865,9 @@ export function KontoauszugPage() {
   const { data: offeneLohn = [] } = useOffeneLohnDienstnehmer()
   const uploadMutation = useUploadKontoauszug()
 
-  const offeneRechnungen = rechnungen.filter(r => r.status !== 'bezahlt')
+  // Auch selbst auf bezahlt gesetzte Rechnungen bleiben zuweisbar, solange
+  // noch keine Bankzeile dahinter haengt.
+  const abgleichbareRechnungen = rechnungen.filter(r => !r.bank_transaktion_id)
 
   const totalTx = kontoauszuege.flatMap(k => k.bank_transaktionen ?? [])
   const totalOutgoing = totalTx.filter(t => t.betrag < 0)
@@ -989,7 +991,7 @@ export function KontoauszugPage() {
             <KontoauszugCard
               key={konto.id}
               konto={konto}
-              rechnungen={offeneRechnungen}
+              rechnungen={abgleichbareRechnungen}
               lohnDienstnehmer={offeneLohn}
             />
           ))}

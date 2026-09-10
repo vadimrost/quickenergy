@@ -14,24 +14,30 @@ export async function runAutoMatch(
   const openTx = transactions.filter(t => t.betrag < 0 && t.status !== 'zugewiesen')
   if (openTx.length === 0) return 0
 
+  // Abgleichbar ist alles, was noch an KEINER Bankzeile haengt — auch bereits
+   // als bezahlt markierte Rechnungen. "Bezahlt" ist eine Buchhaltungsangabe,
+   // der Bankabgleich ist der Nachweis dazu; das eine darf das andere nicht sperren.
   const [{ data: rechnungen }, { data: lohnDienstnehmer }] = await Promise.all([
-    supabase.from('rechnungen').select('*, lieferant:lieferanten(*)').neq('status', 'bezahlt'),
+    supabase.from('rechnungen').select('*, lieferant:lieferanten(*)').is('bank_transaktion_id', null),
     supabase.from('lohn_dienstnehmer').select('*').is('bank_transaktion_id', null),
   ])
 
   let matched = 0
   const usedLohnIds = new Set<string>()
+  // Innerhalb eines Durchlaufs darf dieselbe Rechnung nicht zweimal getroffen werden
+  const usedRechnungIds = new Set<string>()
 
   for (const tx of openTx) {
     const candidates = matchTransaktion(
       tx,
-      (rechnungen ?? []) as Rechnung[],
+      ((rechnungen ?? []) as Rechnung[]).filter(r => !usedRechnungIds.has(r.id)),
       ((lohnDienstnehmer ?? []) as LohnDienstnehmer[]).filter(l => !usedLohnIds.has(l.id)),
     )
     const best = candidates[0]
     if (!best || best.score < AUTO_MATCH_THRESHOLD) continue
 
     if (best.type === 'rechnung') {
+      usedRechnungIds.add(best.id)
       await supabase.from('rechnungen').update({
         status: 'bezahlt',
         bank_transaktion_id: tx.id,
@@ -331,11 +337,18 @@ export function useRejectMatch() {
   return useMutation({
     mutationFn: async (tx: BankTransaktion) => {
       if (tx.rechnung_id) {
+        // "bezahlt" nur zuruecknehmen, wenn es aus dem Bankabgleich kam
+        // (dann steht bezahlt_konto). Hat der Nutzer die Rechnung selbst auf
+        // bezahlt gesetzt, bleibt sie bezahlt — nur die Verknuepfung geht weg.
+        const { data: r } = await supabase
+          .from('rechnungen')
+          .select('bezahlt_konto')
+          .eq('id', tx.rechnung_id)
+          .maybeSingle()
+        const ausBankabgleich = !!r?.bezahlt_konto
         await supabase.from('rechnungen').update({
-          status: 'gebucht',
           bank_transaktion_id: null,
-          bezahlt_am: null,
-          bezahlt_konto: null,
+          ...(ausBankabgleich ? { status: 'gebucht', bezahlt_am: null, bezahlt_konto: null } : {}),
         }).eq('id', tx.rechnung_id)
       }
       if (tx.lohn_id) {

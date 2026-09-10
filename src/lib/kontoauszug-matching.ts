@@ -146,7 +146,10 @@ export function matchTransaktion(
   const candidates: MatchCandidate[] = []
 
   for (const r of rechnungen) {
-    if (r.status === 'bezahlt') continue
+    // Bereits einer Bankzeile zugeordnet → nicht mehr abgleichbar. Ein blosses
+    // "bezahlt" schliesst dagegen nicht aus: der Nutzer setzt Rechnungen oft
+    // selbst auf bezahlt, der Bankbeleg dazu fehlt dann trotzdem noch.
+    if (r.bank_transaktion_id) continue
 
     const aScore = amountScore(abs, r)
     if (aScore === 0) continue
