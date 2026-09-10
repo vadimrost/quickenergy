@@ -7,7 +7,24 @@ export interface MatchCandidate {
   label: string
   betrag: number
   datum: string | null
+  /**
+   * true = das Zahlungsdatum passt plausibel zur Rechnung. Nur solche Treffer
+   * werden automatisch zugewiesen; der Rest erscheint nur als Vorschlag.
+   */
+  datumPlausibel: boolean
 }
+
+/**
+ * Eine Zahlung darf hoechstens so viele Tage VOR dem Rechnungsdatum liegen, um
+ * ueberhaupt als Kandidat zu gelten (Vorauskasse kommt vor). Alles darueber ist
+ * bei wiederkehrenden Belegen mit identischem Betrag (A1, Versicherungen)
+ * verlaesslich die Zahlung des Vormonats und wird gar nicht vorgeschlagen.
+ *
+ * Automatisch zugewiesen wird davon nur, was `datumPlausibel` erfuellt
+ * (dateScore > 0, also ab 5 Tage vor Rechnungsdatum) — eine Vorauszahlung
+ * dazwischen bleibt ein Vorschlag zum Bestaetigen.
+ */
+const MAX_TAGE_VOR_RECHNUNG = 30
 
 // Normalisiert Firmennamen für Vergleich:
 // - Umlaute → ASCII (ä→ae etc.)
@@ -129,9 +146,9 @@ function refScore(tx: BankTransaktion, rechnungsnr: string | null | undefined): 
 
   for (const src of sources) {
     if (src.includes(rn)) return 0.40  // exaktes Match → sehr starkes Signal
-    // Teilmatch: mind. 6 Zeichen am Ende der Rechnungsnr.
+    // Teilmatch: mind. 6 Zeichen am Ende der Rechnungsnr. Kuerzere Treffer
+    // (z.B. nur 4 Ziffern) sind in Buchungstexten reiner Zufall und zaehlen nicht.
     if (rn.length >= 6 && src.includes(rn.slice(-6))) return 0.22
-    if (rn.length >= 4 && src.includes(rn.slice(-4))) return 0.10
   }
   return 0
 }
@@ -151,6 +168,12 @@ export function matchTransaktion(
     // selbst auf bezahlt, der Bankbeleg dazu fehlt dann trotzdem noch.
     if (r.bank_transaktion_id) continue
 
+    // Zahlung kann nicht (deutlich) vor der Rechnung liegen
+    if (r.rechnungsdatum) {
+      const tage = (new Date(tx.datum).getTime() - new Date(r.rechnungsdatum).getTime()) / 86400000
+      if (tage < -MAX_TAGE_VOR_RECHNUNG) continue
+    }
+
     const aScore = amountScore(abs, r)
     if (aScore === 0) continue
 
@@ -168,6 +191,7 @@ export function matchTransaktion(
         label: name || r.rechnungsnr,
         betrag: brutto(r),
         datum: r.rechnungsdatum,
+        datumPlausibel: dScore > 0,
       })
     }
   }
@@ -190,7 +214,9 @@ export function matchTransaktion(
 
     const score = Math.min(1, aScore + nScore + lohnBonus)
     if (score >= 0.40) {
-      candidates.push({ type: 'lohn', id: l.id, score, label: l.name, betrag: l.betrag, datum: null })
+      // Am Dienstnehmer haengt kein Datum (nur an der Abrechnung) — hier gibt es
+      // nichts zu pruefen, der Name-Anteil traegt die Zuordnung.
+      candidates.push({ type: 'lohn', id: l.id, score, label: l.name, betrag: l.betrag, datum: null, datumPlausibel: true })
     }
   }
 

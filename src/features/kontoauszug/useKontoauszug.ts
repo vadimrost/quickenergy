@@ -35,6 +35,10 @@ export async function runAutoMatch(
     )
     const best = candidates[0]
     if (!best || best.score < AUTO_MATCH_THRESHOLD) continue
+    // Betrag + Lieferantenname allein reichen nicht: bei wiederkehrenden Belegen
+    // mit gleichem Betrag landet sonst die Zahlung des falschen Monats auf der
+    // Rechnung. Ohne passendes Datum bleibt der Treffer ein Vorschlag.
+    if (!best.datumPlausibel) continue
 
     if (best.type === 'rechnung') {
       usedRechnungIds.add(best.id)

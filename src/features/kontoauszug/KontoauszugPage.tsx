@@ -231,6 +231,12 @@ function AssignDialog({
                           )}>
                             {c.type === 'rechnung' ? 'Rechnung' : 'Lohn'}
                           </span>
+                          {/* Kein passendes Datum → wurde bewusst nicht automatisch zugewiesen */}
+                          {!c.datumPlausibel && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-status-warning/15 text-status-warning">
+                              Datum passt nicht
+                            </span>
+                          )}
                         </div>
                       </div>
                       <ScoreBar score={c.score} />
