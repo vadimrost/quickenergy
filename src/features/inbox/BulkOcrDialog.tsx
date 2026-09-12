@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { CheckCircle, XCircle, Loader2, KeyRound, Sparkles, SkipForward } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Sparkles, SkipForward } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
@@ -37,7 +37,6 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
   rechnungen: Rechnung[]
   onRefresh: () => void
 }) {
-  const [apiKey, setApiKey] = useState(import.meta.env.VITE_OPENROUTER_API_KEY ?? '')
   const [limit, setLimit] = useState<number>(5)
   const [forceAll, setForceAll] = useState(false)
   const { data: kategorien = [] } = useKategorien()
@@ -55,7 +54,6 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
   }, [])
 
   const handleStart = async () => {
-    if (!apiKey.trim()) return
     setRunning(true)
     setDone(false)
 
@@ -72,7 +70,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
 
       try {
         const base64 = await pdfUrlToBase64(r.pdf_url!)
-        const ocr = await geminiOcr(base64, apiKey.trim(), kategorien)
+        const ocr = await geminiOcr(base64, kategorien)
 
         const updates: Partial<Rechnung> = {}
         const updated: string[] = []
@@ -238,24 +236,8 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
         </DialogHeader>
 
         <div className="space-y-4 pt-1">
-          {/* API Key */}
           {!running && !done && (
             <>
-              <div>
-                <label className="label-caps block mb-1.5">OpenRouter API Key</label>
-                <div className="relative">
-                  <KeyRound size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-subtle" />
-                  <input
-                    type="password"
-                    value={apiKey}
-                    onChange={e => setApiKey(e.target.value)}
-                    placeholder="AIza…"
-                    className="w-full pl-9 pr-4 h-9 text-sm border border-border rounded-card-sm bg-bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-accent-400 font-mono"
-                  />
-                </div>
-                <p className="text-xs text-ink-muted mt-1.5">Wird nur für diese Sitzung verwendet, nicht gespeichert.</p>
-              </div>
-
               <div>
                 <label className="label-caps block mb-1.5">Anzahl Rechnungen</label>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -367,7 +349,7 @@ export function BulkOcrDialog({ open, onClose, rechnungen, onRefresh }: {
             {!done && (
               <button
                 onClick={handleStart}
-                disabled={running || !apiKey.trim() || toProcess.length === 0}
+                disabled={running || toProcess.length === 0}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-card-sm bg-ink hover:bg-ink/80 disabled:opacity-40 text-white text-sm font-medium transition-colors"
               >
                 {running

@@ -216,10 +216,8 @@ export function LohnPage() {
   const reOcrMutation = useReOcrLohnabrechnung()
 
   const handleReOcr = (abr: Lohnabrechnung) => {
-    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
-    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert'); return }
     toast.info('Journal wird neu eingelesen…')
-    reOcrMutation.mutate({ abrechnung: abr, apiKey }, {
+    reOcrMutation.mutate({ abrechnung: abr }, {
       onSuccess: (n) => toast.success(n > 0 ? `${n} Dienstnehmer nachgetragen` : 'Keine Dienstnehmer im PDF erkannt'),
       onError: e => toast.error(e instanceof Error ? e.message : 'Fehler beim Einlesen'),
     })
@@ -243,9 +241,6 @@ export function LohnPage() {
     if (!file) return
     e.target.value = ''
 
-    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
-    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert'); return }
-
     setProcessing(true)
     try {
       toast.info('PDF wird hochgeladen…')
@@ -258,7 +253,7 @@ export function LohnPage() {
 
       toast.info('KI analysiert das Dokument…')
       const base64 = await fileToBase64(file)
-      const ocr = await lohnOcr(base64, apiKey)
+      const ocr = await lohnOcr(base64)
 
       if (!ocr.monat || !ocr.jahr) throw new Error('Monat/Jahr konnte nicht erkannt werden')
 

@@ -178,9 +178,6 @@ export function useUploadKontoauszug() {
       file: File
       onStep: (step: UploadStep) => void
     }) => {
-      const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
-      if (!apiKey) throw new Error('Kein OpenRouter API Key konfiguriert')
-
       // Step 1: Upload to storage
       onStep('uploading')
       const storagePath = `kontoauszug_${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
@@ -193,7 +190,7 @@ export function useUploadKontoauszug() {
       // Step 2: OpenRouter OCR
       onStep('ocr')
       const base64 = await fileToBase64(file)
-      const ocr = await kontoauszugOcr(base64, apiKey)
+      const ocr = await kontoauszugOcr(base64)
 
       if (ocr.transaktionen.length === 0) {
         throw new Error('Keine Transaktionen erkannt. Bitte prüfe ob das PDF ein lesbarer Kontoauszug ist und versuche es erneut.')

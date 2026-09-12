@@ -107,10 +107,8 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
   }, [])
 
   const processFiles = useCallback(async (files: File[]) => {
-    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
     const valid = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'))
     if (!valid.length) { toast.error('Nur PDF-Dateien werden unterstützt.'); return }
-    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert.'); return }
 
     const newEntries: FileEntry[] = valid.map(f => ({ id: crypto.randomUUID(), name: f.name, status: 'pending' as FileStatus }))
     setEntries(prev => [...prev, ...newEntries])
@@ -135,7 +133,7 @@ function PdfUploadDialog({ open, onClose, onCreated }: {
       let ocr: Awaited<ReturnType<typeof geminiOcrAusgangsrechnung>> | null = null
       try {
         const base64 = await fileToBase64(file)
-        ocr = await geminiOcrAusgangsrechnung(base64, apiKey)
+        ocr = await geminiOcrAusgangsrechnung(base64)
       } catch (err) {
         updateEntry(id, { status: 'error', error: err instanceof Error ? err.message : 'OCR fehlgeschlagen' })
         continue

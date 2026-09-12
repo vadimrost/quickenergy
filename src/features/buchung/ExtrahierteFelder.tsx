@@ -43,12 +43,10 @@ export function ExtrahierteFelder({ rechnung }: ExtrahierteFelder_Props) {
 
   const handleOcr = async () => {
     if (!rechnung.pdf_url || rechnung.pdf_url === 'demo') return
-    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY
-    if (!apiKey) { toast.error('VITE_OPENROUTER_API_KEY nicht gesetzt'); return }
     setOcrLoading(true)
     try {
       const base64 = await pdfUrlToBase64(rechnung.pdf_url)
-      const ocr = await geminiOcr(base64, apiKey, kategorien)
+      const ocr = await geminiOcr(base64, kategorien)
       const updated: string[] = []
       const validTypes = kategorien.map(k => k.wert)
       setForm(f => {

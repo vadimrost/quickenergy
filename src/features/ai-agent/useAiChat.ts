@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
 
 export interface ChartData {
   type: 'bar' | 'horizontal-bar'
@@ -79,10 +80,16 @@ export function useAiChat() {
     try {
       // Use fetch() directly instead of supabase.functions.invoke() to avoid
       // HTTP/2 framing errors that occur with the SDK wrapper in some browsers
+      // Mit dem Session-Token des Nutzers, nicht mit dem anon-Key: die Function
+      // laesst nur eingeloggte Nutzer durch, sonst koennte jeder mit dem
+      // oeffentlichen anon-Key OpenRouter-Guthaben verbrauchen.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session) throw new Error('Nicht eingeloggt — bitte neu anmelden')
       const res = await fetch(FUNCTION_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${ANON_KEY}`,
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': ANON_KEY,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

@@ -24,10 +24,10 @@ export function useLohnabrechnungen() {
 export function useReOcrLohnabrechnung() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ abrechnung, apiKey }: { abrechnung: Lohnabrechnung; apiKey: string }) => {
+    mutationFn: async ({ abrechnung }: { abrechnung: Lohnabrechnung }) => {
       if (!abrechnung.pdf_url) throw new Error('Keine PDF hinterlegt')
       const base64 = await pdfUrlToBase64(abrechnung.pdf_url)
-      const ocr = await lohnOcr(base64, apiKey)
+      const ocr = await lohnOcr(base64)
 
       const hasDn  = (abrechnung.lohn_dienstnehmer ?? []).length > 0
       const hasKoe = (abrechnung.lohn_koerperschaften ?? []).length > 0

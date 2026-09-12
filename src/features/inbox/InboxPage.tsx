@@ -306,12 +306,10 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
   }, [])
 
   const processFiles = useCallback(async (files: File[]) => {
-    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
     const valid = files.filter(f =>
       f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || isImageFile(f)
     )
     if (!valid.length) { toast.error('Keine gültigen Dateien (PDF, HEIC, JPG, PNG, WEBP).'); return }
-    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert. Upload abgebrochen.'); return }
 
     const newEntries: FileEntry[] = valid.map(f => ({
       id: crypto.randomUUID(), name: f.name, status: 'pending',
@@ -350,10 +348,10 @@ function PdfUploadDialog({ open, onClose, onRefresh }: {
       // 3. OpenRouter OCR
       updateEntry(id, { status: 'ocr' })
       let ocr: Awaited<ReturnType<typeof geminiOcr>> | null = null
-      if (apiKey) {
+      {
         try {
           const base64 = await fileToBase64(pdfFile)
-          ocr = await geminiOcr(base64, apiKey, kategorien)
+          ocr = await geminiOcr(base64, kategorien)
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'OCR fehlgeschlagen'
           updateEntry(id, { status: 'error', error: `OCR: ${msg}` })
@@ -611,9 +609,8 @@ export function InboxPage() {
   // verschieben — z.B. wenn der Herr seine eigene Rechnung als ER hochlädt/mailt.
   const movingRef = useRef<Set<string>>(new Set())
   useEffect(() => {
-    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
     const firmaName = firma?.name
-    if (!apiKey || !firmaName) return
+    if (!firmaName) return
     const eigene = allRechnungen.filter(r =>
       !movingRef.current.has(r.id) &&
       r.pdf_url &&
@@ -628,7 +625,7 @@ export function InboxPage() {
       const fehler: string[] = []
       for (const r of eigene) {
         try {
-          const res = await moveRechnungToAusgangsrechnung(r, apiKey)
+          const res = await moveRechnungToAusgangsrechnung(r)
           if (res.bereitsVorhanden) bereits++
           else neu++
         } catch (err) {

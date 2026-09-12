@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireUser, AuthError } from '../_shared/auth.ts'
 
 const OPENROUTER_API_KEY = Deno.env.get('OPENROUTER_API_KEY')!
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
@@ -1490,6 +1491,9 @@ Deno.serve(async (req) => {
   try {
     if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY nicht gesetzt')
 
+    // Nur eingeloggte Nutzer — der anon-Key allein reicht nicht (siehe _shared/auth.ts)
+    await requireUser(req)
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
@@ -1665,7 +1669,7 @@ Heute: ${new Date().toLocaleDateString('de-AT')}`,
   } catch (err) {
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
-      { status: 500, headers: { ...CORS, 'Content-Type': 'application/json' } }
+      { status: err instanceof AuthError ? 401 : 500, headers: { ...CORS, 'Content-Type': 'application/json' } }
     )
   }
 })

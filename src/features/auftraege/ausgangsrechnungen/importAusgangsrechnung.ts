@@ -231,7 +231,7 @@ async function deleteEingangsrechnung(id: string): Promise<void> {
 // Verschiebt eine (fälschlich als Eingangsrechnung erfasste) eigene Rechnung zu den
 // Ausgangsrechnungen: PDF erneut mit dem AR-OCR lesen, Ausgangsrechnung anlegen,
 // die Eingangsrechnung löschen.
-export async function moveRechnungToAusgangsrechnung(rechnung: Rechnung, apiKey: string): Promise<MoveErgebnis> {
+export async function moveRechnungToAusgangsrechnung(rechnung: Rechnung): Promise<MoveErgebnis> {
   if (!rechnung.pdf_url) throw new Error('Keine PDF zur Rechnung vorhanden')
 
   // Der Normalfall: die Rechnung wurde in der App erstellt und kommt nur per Mail
@@ -245,7 +245,7 @@ export async function moveRechnungToAusgangsrechnung(rechnung: Rechnung, apiKey:
   }
 
   const base64 = await pdfUrlToBase64(rechnung.pdf_url)
-  const ocr = await geminiOcrAusgangsrechnung(base64, apiKey)
+  const ocr = await geminiOcrAusgangsrechnung(base64)
 
   // Die Nummer aus dem PDF kann von der im Beleg erfassten abweichen — noch einmal prüfen.
   const vorhandenNachOcr = await findAusgangsrechnungByNummer(ocr.invoice_number)

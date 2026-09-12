@@ -1,3 +1,5 @@
+import { supabase } from './supabase'
+
 export const CARD_MAP: Record<string, string> = {
   '1380': 'spesen_philipp_1380',
   '0744': 'spesen_philipp_0744',
@@ -55,8 +57,10 @@ export async function pdfUrlToBase64(url: string): Promise<string> {
   })
 }
 
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const OPENROUTER_OCR_MODEL = 'google/gemini-3.5-flash'
+// OCR laeuft ueber die Edge Function `openrouter-proxy` — der OpenRouter-Key liegt
+// nur dort (Supabase Secret) und nie im Browser-Bundle. Nur eingeloggte Nutzer
+// duerfen sie aufrufen; Modell und Plugins sind serverseitig fest.
+const OCR_PROXY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/openrouter-proxy`
 const OCR_TIMEOUT_MS = 120_000
 
 function parseJsonContent<T>(content: unknown): T {
@@ -72,65 +76,37 @@ function parseJsonContent<T>(content: unknown): T {
   return JSON.parse(cleaned) as T
 }
 
-export async function callOpenRouterPdfJson<T>(base64: string, apiKey: string, prompt: string): Promise<T> {
+export async function callOpenRouterPdfJson<T>(base64: string, prompt: string): Promise<T> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) throw new Error('Nicht eingeloggt — bitte neu anmelden')
+
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), OCR_TIMEOUT_MS)
 
   let res: Response
   try {
-    res = await fetch(OPENROUTER_URL, {
+    res = await fetch(OCR_PROXY_URL, {
       method: 'POST',
       signal: controller.signal,
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${session.access_token}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
         'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.origin,
-        'X-Title': 'QuickEnergy OCR',
       },
-      body: JSON.stringify({
-        model: OPENROUTER_OCR_MODEL,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: `${prompt}\n\nAntworte ausschließlich mit einem validen JSON-Objekt. Keine Markdown-Codeblöcke, keine Erklärungen.`,
-              },
-              {
-                type: 'file',
-                file: {
-                  filename: 'document.pdf',
-                  file_data: `data:application/pdf;base64,${base64}`,
-                },
-              },
-            ],
-          },
-        ],
-        plugins: [
-          {
-            id: 'file-parser',
-            pdf: {
-              engine: 'native',
-            },
-          },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0,
-      }),
+      body: JSON.stringify({ prompt, pdfBase64: base64 }),
     })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
       throw new Error(`OCR-Zeitüberschreitung nach ${OCR_TIMEOUT_MS / 1000}s — bitte erneut versuchen`)
     }
-    throw new Error('OCR-Anfrage fehlgeschlagen (Netzwerk/OpenRouter nicht erreichbar)')
+    throw new Error('OCR-Anfrage fehlgeschlagen (Netzwerk/Server nicht erreichbar)')
   } finally {
     clearTimeout(timeout)
   }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    throw new Error(err?.error?.message ?? `OpenRouter Fehler ${res.status}`)
+    throw new Error(err?.error?.message ?? err?.error ?? `OCR-Fehler ${res.status}`)
   }
 
   const data = await res.json()
@@ -335,9 +311,9 @@ function hasInvoiceOcrData(result: GeminiOcrResult): boolean {
   )
 }
 
-export async function geminiOcr(base64: string, apiKey: string, kategorien?: KategoriePrompt[]): Promise<GeminiOcrResult> {
+export async function geminiOcr(base64: string, kategorien?: KategoriePrompt[]): Promise<GeminiOcrResult> {
   const prompt = kategorien?.length ? buildOcrPrompt(kategorien) + OCR_PROMPT.slice(OCR_PROMPT.indexOf('\n\nNETTOBETRAG')) : OCR_PROMPT
-  const raw = await callOpenRouterPdfJson<GeminiOcrResult>(base64, apiKey, prompt)
+  const raw = await callOpenRouterPdfJson<GeminiOcrResult>(base64, prompt)
   const result = sanitizeOcr(raw)
   if (!hasInvoiceOcrData(result)) {
     throw new Error('OCR hat keine Rechnungsdaten erkannt. Bitte PDF prüfen oder OpenRouter-Antwort im Network-Tab ansehen.')
@@ -458,8 +434,8 @@ invoice_number: formale Rechnungsnummer.`
 // Zusammenfassungszeilen, die das Modell manchmal fälschlich als Position liefert
 const SUMMEN_ZEILEN = /^(gesamtbetrag|zzgl\.?\s*umsatzsteuer|summe\s|verbleibende\s+restforderung|verrechnung\s+der|zwischensumme|nettobetrag\s*$)/i
 
-export async function geminiOcrAusgangsrechnung(base64: string, apiKey: string): Promise<AusgangsrechnungOcrResult> {
-  const result = await callOpenRouterPdfJson<AusgangsrechnungOcrResult>(base64, apiKey, AUSGANGSRECHNUNG_PROMPT)
+export async function geminiOcrAusgangsrechnung(base64: string): Promise<AusgangsrechnungOcrResult> {
+  const result = await callOpenRouterPdfJson<AusgangsrechnungOcrResult>(base64, AUSGANGSRECHNUNG_PROMPT)
   const positionen = (result.positionen ?? [])
     .filter(p => p && typeof p.bezeichnung === 'string' && p.bezeichnung.trim())
     .filter(p => !SUMMEN_ZEILEN.test(p.bezeichnung.trim()))

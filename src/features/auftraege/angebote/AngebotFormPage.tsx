@@ -94,13 +94,11 @@ export function AngebotFormPage() {
   }
 
   const handleLieferantImport = async (file: File) => {
-    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined
-    if (!apiKey) { toast.error('Kein OpenRouter API Key konfiguriert'); return }
     setImporting(true)
     try {
       toast.info('Lieferanten-Angebot wird analysiert…')
       const base64 = await fileToBase64(file)
-      const ocr = await lieferantAngebotOcr(base64, apiKey)
+      const ocr = await lieferantAngebotOcr(base64)
       if (ocr.positionen.length === 0) { toast.error('Keine Positionen erkannt'); return }
       const imported: PositionDraft[] = ocr.positionen.map((p, i) => {
         const pos: PositionDraft = {

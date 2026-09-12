@@ -50,8 +50,8 @@ export function mapLieferantEinheit(e: string | null): string {
   return 'Stk'
 }
 
-export async function lieferantAngebotOcr(base64: string, apiKey: string): Promise<LieferantAngebotOcrResult> {
-  const raw = await callOpenRouterPdfJson<LieferantAngebotOcrResult>(base64, apiKey, PROMPT)
+export async function lieferantAngebotOcr(base64: string): Promise<LieferantAngebotOcrResult> {
+  const raw = await callOpenRouterPdfJson<LieferantAngebotOcrResult>(base64, PROMPT)
   return {
     lieferant:           raw.lieferant ?? null,
     angebotsnummer:      raw.angebotsnummer ?? null,

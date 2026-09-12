@@ -51,8 +51,8 @@ KÖRPERSCHAFTEN-TABELLE (Behörden & Abgaben):
 SUMMEN: "Summe Dienstnehmer" → gesamt_dienstnehmer, "Summe Körperschaften" → gesamt_koerperschaften, "Gesamt-Summe" → gesamt_total.
 Alle Beträge als Dezimalzahlen (Punkt als Dezimaltrenner).`
 
-export async function lohnOcr(base64: string, apiKey: string): Promise<LohnOcrResult> {
-  const raw = await callOpenRouterPdfJson<LohnOcrResult>(base64, apiKey, LOHN_PROMPT)
+export async function lohnOcr(base64: string): Promise<LohnOcrResult> {
+  const raw = await callOpenRouterPdfJson<LohnOcrResult>(base64, LOHN_PROMPT)
   return {
     ...raw,
     dienstnehmer:    raw.dienstnehmer    ?? [],

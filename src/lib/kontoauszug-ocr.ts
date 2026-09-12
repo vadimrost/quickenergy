@@ -72,8 +72,8 @@ WICHTIG:
   neuer_kontostand ergeben. Stimmt es nicht, fehlt eine Buchung oder ein
   Vorzeichen ist falsch — dann die Buchungstabelle noch einmal durchgehen.`
 
-export async function kontoauszugOcr(base64: string, apiKey: string): Promise<KontoauszugOcrResult> {
-  const raw = await callOpenRouterPdfJson<KontoauszugOcrResult>(base64, apiKey, PROMPT)
+export async function kontoauszugOcr(base64: string): Promise<KontoauszugOcrResult> {
+  const raw = await callOpenRouterPdfJson<KontoauszugOcrResult>(base64, PROMPT)
   const transaktionen = raw.transaktionen ?? []
 
   // Zeitraum notfalls aus den Buchungen ableiten — sonst steht im Auszug "? – ?"
