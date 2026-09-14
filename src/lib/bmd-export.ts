@@ -51,15 +51,18 @@ interface BmdRow {
 
 // ─── Ausgangsrechnungen → AR rows ─────────────────────────────────────────────
 
-export function buildArRows(rechnungen: Ausgangsrechnung[]): BmdRow[] {
+export function buildArRows(
+  rechnungen: Ausgangsrechnung[],
+  opts: { mitEntwuerfen?: boolean } = {},
+): BmdRow[] {
   const today = toYYYYMMDD(new Date().toISOString().split('T')[0])
   const rows: BmdRow[] = []
 
-  // Entwürfe nie exportieren.
+  // Entwürfe standardmäßig nicht exportieren (auf Wunsch einschließen).
   // Stornierte normale Rechnungen ausschließen (wurden durch Stornorechnung ersetzt).
   // Stornorechnungen (typ='stornorechnung') immer einschließen — negative Gegenbuchung.
   const exportierbar = rechnungen.filter(r =>
-    r.status !== 'entwurf' &&
+    (opts.mitEntwuerfen || r.status !== 'entwurf') &&
     !(r.status === 'storniert' && r.typ !== 'stornorechnung')
   )
 

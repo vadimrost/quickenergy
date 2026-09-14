@@ -363,6 +363,8 @@ export interface Ausgangsrechnung {
   gemahnt_am_2: string | null
   gemahnt_am_3: string | null
   mahngebuehr: number
+  /** Ansprechpartner auf dem Dokument; leer = Geschaeftsfuehrer aus den Stammdaten */
+  ansprechpartner: string | null
   created_at: string
   kunde?: Kunde | null
   positionen?: DokumentPosition[]

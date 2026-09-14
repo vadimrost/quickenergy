@@ -220,7 +220,7 @@ export function DocumentHtmlPreview(input: DocInput) {
           {[
             [getNummerLabel(input.typ), getNummer(input)],
             ['Datum', fmtDate(getDatum(input))],
-            ...(kunde ? [['Ihr Ansprechpartner', F.gf]] : []),
+            ...(kunde ? [['Ihr Ansprechpartner', (input.typ === 'rechnung' ? input.doc.ansprechpartner?.trim() : null) || F.gf]] : []),
             ...extra,
           ].map(([label, value], i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 2 }}>

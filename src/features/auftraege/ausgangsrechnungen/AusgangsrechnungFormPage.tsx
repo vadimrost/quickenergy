@@ -24,6 +24,8 @@ import type { AusgangsrechnungTyp, AusgangsrechnungStatus, Kunde, Ausgangsrechnu
 import type { PositionDraft } from '@/features/auftraege/shared/positionenUtils'
 
 import { DEFAULT_KOPF, DEFAULT_FUSS } from '@/features/auftraege/shared/dokumentDefaults'
+import { useMitarbeiterAll } from '@/features/mitarbeiter/useMitarbeiterCrud'
+import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
 
 const TYP_OPTIONS: { value: AusgangsrechnungTyp; label: string }[] = [
   { value: 'rechnung',        label: 'Rechnung'        },
@@ -126,6 +128,10 @@ export function AusgangsrechnungFormPage() {
   const [zahlungsziel, setZahlungsziel] = useState('14')
   const [teilProzent, setTeilProzent] = useState('')
   const [rechnungsnummer, setRechnungsnummer] = useState('')
+  // Leer = Geschaeftsfuehrer aus den Stammdaten (Standard)
+  const [ansprechpartner, setAnsprechpartner] = useState('')
+  const { data: mitarbeiter = [] } = useMitarbeiterAll()
+  const { data: firma } = useFirmaStammdaten()
 
   // Bezahlt dialog
   const [bezahltOpen, setBezahltOpen] = useState(false)
@@ -152,6 +158,7 @@ export function AusgangsrechnungFormPage() {
       setTeilProzent(existing.teilrechnungs_prozent ? String(existing.teilrechnungs_prozent) : '')
       setBezahltBetrag(String(existing.summe_brutto ?? ''))
       setRechnungsnummer(existing.rechnungsnummer ?? '')
+      setAnsprechpartner(existing.ansprechpartner ?? '')
       if (existing.auftragswert_netto != null) setAuftragswert(String(existing.auftragswert_netto))
     }
   }, [existing])
@@ -206,6 +213,7 @@ export function AusgangsrechnungFormPage() {
         teilrechnungs_prozent: teilProzent ? parseFloat(teilProzent) : null,
         kopftext: values.kopftext,
         fusstext: values.fusstext,
+        ansprechpartner: ansprechpartner.trim() || null,
         rabatt_gesamt_prozent: values.rabattGesamt,
         rabatt_gesamt_betrag: values.rabattGesamtBetrag,
         summe_netto_20: summen.netto_20,
@@ -482,6 +490,20 @@ export function AusgangsrechnungFormPage() {
                   <Input type="date" value={leistungBis} onChange={e => setLeistungBis(e.target.value)} className="h-8 text-sm" />
                 </div>
               </div>
+              <div>
+                <label className="text-xs font-medium text-ink-muted mb-1 block">Ansprechpartner</label>
+                <Input
+                  list="ansprechpartner-vorschlaege"
+                  value={ansprechpartner}
+                  onChange={e => setAnsprechpartner(e.target.value)}
+                  placeholder={`Standard: ${firma?.gf ?? 'Geschäftsführer'}`}
+                  className="h-8 text-sm"
+                />
+                {/* Mitarbeiter als Vorschlaege, freier Text bleibt moeglich */}
+                <datalist id="ansprechpartner-vorschlaege">
+                  {mitarbeiter.map(m => <option key={m.id} value={m.name} />)}
+                </datalist>
+              </div>
               {typ === 'teilrechnung' && (
                 <div>
                   <label className="text-xs font-medium text-ink-muted mb-1 block">Teilrechnung Prozentsatz (%)</label>
@@ -509,6 +531,7 @@ export function AusgangsrechnungFormPage() {
             : null}
           bereitsBerechnet={typ === 'schlussrechnung' && angebotId ? bereitsBerechnet : null}
           restbetrag={typ === 'schlussrechnung' && angebotId ? dieseNetto - bereitsBerechnet : null}
+          ansprechpartner={ansprechpartner || null}
           className="border-l border-border rounded-none shadow-none flex-1"
         />
       </div>

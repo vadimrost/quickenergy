@@ -290,17 +290,21 @@ function BmdExportDialog({ open, onClose, rechnungen }: {
     if (month !== 'alle' && availableMonths.length > 0 && !availableMonths.includes(month)) setMonth(availableMonths[0])
   }, [availableMonths])
 
-  const monthData = rechnungen.filter(r =>
+  // Entwuerfe sind standardmaessig draussen — wer aber nie auf "Offen" umstellt,
+  // sieht sonst "keine Rechnungen". Deshalb: Anzahl zeigen und optional mitnehmen.
+  const [mitEntwuerfen, setMitEntwuerfen] = useState(false)
+  const imMonat = rechnungen.filter(r =>
     (month === 'alle' || r.rechnungsdatum?.startsWith(month)) &&
-    r.status !== 'entwurf' &&
     !(r.status === 'storniert' && r.typ !== 'stornorechnung')
   )
+  const entwuerfe = imMonat.filter(r => r.status === 'entwurf')
+  const monthData = mitEntwuerfen ? imMonat : imMonat.filter(r => r.status !== 'entwurf')
   const monthLabel = month === 'alle'
     ? 'Alle Monate'
     : month ? format(parseISO(`${month}-01`), 'MMMM yyyy', { locale: de }) : ''
 
   const handleExport = () => {
-    const rows = buildArRows(monthData)
+    const rows = buildArRows(monthData, { mitEntwuerfen })
     writeBmdExcel(rows, `BMD_AR_${month === 'alle' ? 'alle' : month}.xlsx`)
     onClose()
   }
@@ -343,6 +347,22 @@ function BmdExportDialog({ open, onClose, rechnungen }: {
               <span className="text-xs text-ink-muted">Zeitraum</span>
               <span className="text-xs font-medium text-ink">{monthLabel}</span>
             </div>
+            {entwuerfe.length > 0 && (
+              <label className="flex items-start gap-2 pt-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={mitEntwuerfen}
+                  onChange={e => setMitEntwuerfen(e.target.checked)}
+                  className="mt-0.5 accent-accent-500"
+                />
+                <span className="text-xs text-ink">
+                  {entwuerfe.length} Entwurf{entwuerfe.length === 1 ? '' : 'e'} einschließen
+                  <span className="block text-ink-muted">
+                    Entwürfe sind noch nicht festgeschrieben. Nur mitnehmen, wenn die Rechnungen tatsächlich so an den Kunden gegangen sind.
+                  </span>
+                </span>
+              </label>
+            )}
             <div className="flex items-center justify-between">
               <span className="text-xs text-ink-muted">Rechnungen (ohne Entwürfe/Storno)</span>
               <span className="text-xs font-medium text-ink">{monthData.length}</span>

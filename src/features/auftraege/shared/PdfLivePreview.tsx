@@ -10,7 +10,7 @@ import type { DokumentFormValues } from './DokumentForm'
 export type PdfLivePreviewProps =
   | { typ: 'angebot'; values: DokumentFormValues; gueltigBis: string; referenz: string; existingNr?: string }
   | { typ: 'auftragsbestaetigung'; values: DokumentFormValues; lieferdatum: string; zahlungsziel: string; existingNr?: string }
-  | { typ: 'rechnung'; values: DokumentFormValues; rechnungTyp: AusgangsrechnungTyp; leistungsdatum: string; leistungVon: string; leistungBis: string; zahlungsziel: string; teilProzent: string; existingNr?: string; rechnungsuebersicht?: RechnungsuebersichtZeile[] | null; bereitsBerechnet?: number | null; restbetrag?: number | null }
+  | { typ: 'rechnung'; values: DokumentFormValues; rechnungTyp: AusgangsrechnungTyp; leistungsdatum: string; leistungVon: string; leistungBis: string; zahlungsziel: string; teilProzent: string; existingNr?: string; rechnungsuebersicht?: RechnungsuebersichtZeile[] | null; bereitsBerechnet?: number | null; restbetrag?: number | null; ansprechpartner?: string | null }
 
 function buildAngebotDoc(p: Extract<PdfLivePreviewProps, { typ: 'angebot' }>): Angebot {
   const s = berechneSummen(p.values.positionen, p.values.rabattGesamt, p.values.rabattGesamtBetrag)
@@ -81,6 +81,7 @@ function buildRechnungDoc(p: Extract<PdfLivePreviewProps, { typ: 'rechnung' }>):
       ...pos, id: `pre-${i}`, dokument_id: 'preview', dokument_typ: 'rechnung' as const, created_at: '',
     })),
     storno_zu_rechnung: null,
+    ansprechpartner: p.ansprechpartner ?? null,
   }
 }
 

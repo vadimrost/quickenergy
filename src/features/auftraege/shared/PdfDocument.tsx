@@ -227,6 +227,7 @@ function EmpfaengerDocInfo({
   datumLabel,
   extra,
   firma,
+  ansprechpartner,
 }: {
   kunde: Angebot['kunde']
   nummer: string
@@ -235,6 +236,8 @@ function EmpfaengerDocInfo({
   datumLabel: string
   extra?: Array<[string, string]>
   firma: FirmaConfig
+  /** Nur Ausgangsrechnung; leer = Geschaeftsfuehrer */
+  ansprechpartner?: string | null
 }) {
   const name = kundenName(kunde)
   const anschrift = kundenAnschrift(kunde)
@@ -250,7 +253,7 @@ function EmpfaengerDocInfo({
       <View style={s.docInfoBox}>
         <DocInfoRow label={nummerLabel} value={nummer} />
         <DocInfoRow label={datumLabel} value={fmtDate(datum)} />
-        {kunde && <DocInfoRow label="Ihr Ansprechpartner" value={firma.gf} />}
+        {kunde && <DocInfoRow label="Ihr Ansprechpartner" value={ansprechpartner?.trim() || firma.gf} />}
         {extra?.map(([l, v]) => <DocInfoRow key={l} label={l} value={v} />)}
       </View>
     </View>
@@ -551,6 +554,7 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
           datumLabel="Datum"
           extra={extra}
           firma={F}
+          ansprechpartner={_ar?.ansprechpartner ?? null}
         />
 
         {/* Dokumenttitel */}
