@@ -18,6 +18,7 @@ import { useLohnabrechnungen } from '@/features/lohn/useLohn'
 import { useKontoauszuege } from '@/features/kontoauszug/useKontoauszug'
 import { exportMonatsbericht, exportMonatsberichtBmd } from '@/lib/monatsbericht-export'
 import { downloadBelegeZip } from '@/lib/belege-zip'
+import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
 
 function KpiCard({
   label, value, sub, trend, accent, warn, onClick, icon,
@@ -77,6 +78,7 @@ export function HomePage() {
   const navigate = useNavigate()
   const { data: ausgangsrechnungen = [] } = useAusgangsrechnungen()
   const { data: rechnungen = [] } = useRechnungen()
+  const { data: firma } = useFirmaStammdaten()
   const { data: angebote = [] } = useAngebote()
   const { data: auftragsbestatigungen = [] } = useAuftragsbestatigungen()
   const { data: lohnabrechnungen = [] } = useLohnabrechnungen()
@@ -228,7 +230,7 @@ export function HomePage() {
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={() => downloadBelegeZip(selectedMonth, rechnungen, ausgangsrechnungen)}
+              onClick={() => downloadBelegeZip(selectedMonth, rechnungen, ausgangsrechnungen, firma ?? null)}
               className="h-9 px-3 flex items-center gap-1.5 text-sm border border-border rounded-card-sm bg-bg-surface text-ink hover:bg-bg-muted transition-colors"
               title="Belege als ZIP herunterladen"
             >
