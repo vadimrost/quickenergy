@@ -159,6 +159,15 @@ export function PositionenEditor({ positionen, onChange }: Props) {
             />
           </div>
 
+          {/* Beschreibung — erscheint im Dokument in kleiner Schrift unter der Bezeichnung */}
+          <textarea
+            value={p.beschreibung ?? ''}
+            onChange={e => update(i, { beschreibung: e.target.value || null })}
+            placeholder="Beschreibung (optional) — z.B. Leistungsumfang, Details, Hinweise"
+            rows={p.beschreibung ? Math.min(6, Math.max(2, p.beschreibung.split('\n').length)) : 1}
+            className="mt-1 w-full resize-y rounded-card-sm border border-border/60 bg-bg-surface px-3 py-1.5 text-xs text-ink placeholder:text-ink-subtle focus:outline-none focus:ring-1 focus:ring-accent-400"
+          />
+
           {/* Bild-Zeile */}
           <div className="flex items-center gap-2 pl-1 mt-1">
             {p.bild_url ? (
