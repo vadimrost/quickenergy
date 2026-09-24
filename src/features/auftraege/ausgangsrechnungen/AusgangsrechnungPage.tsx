@@ -399,7 +399,9 @@ export function AusgangsrechnungPage() {
   const { data: rechnungen = [], isLoading, isError, refetch } = useAusgangsrechnungen()
   const [tab, setTab] = useState<Tab>('alle')
   const [search, setSearch] = useState('')
-  const [sortFeld, setSortFeld] = useState<'nummer' | 'datum'>('nummer')
+  // Standard: neueste zuerst. Nach Nummer wuerden die alten 8-stelligen
+  // Importbelege (RE-10025xxx) ueber den aktuellen 7-stelligen liegen.
+  const [sortFeld, setSortFeld] = useState<'nummer' | 'datum'>('datum')
   const [sortRichtung, setSortRichtung] = useState<'asc' | 'desc'>('desc')
 
   // Klick auf eine Spalte: gleiche Spalte -> Richtung umkehren, sonst neue Spalte absteigend
@@ -452,7 +454,8 @@ export function AusgangsrechnungPage() {
     if (!aD && !bD) return 0
     if (!aD) return 1
     if (!bD) return -1
-    return aD.localeCompare(bD) * vz
+    // Gleiches Datum: hoehere Nummer zuerst (bei desc)
+    return (aD.localeCompare(bD) || (nummerVal(a) - nummerVal(b))) * vz
   })
 
   const ueberfaellig = rechnungen.filter(r =>

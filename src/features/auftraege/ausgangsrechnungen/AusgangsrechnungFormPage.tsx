@@ -315,7 +315,12 @@ export function AusgangsrechnungFormPage() {
   const andereRechnungen = geschwister.filter(r => r.id !== id && r.status !== 'storniert')
   const bereitsBerechnet = andereRechnungen.reduce((sum, r) => sum + r.netto, 0)
   const auftragswertNum = parseFloat(auftragswert) || 0
-  const dieseNetto = summenNow.netto_gesamt
+  const istSchluss = typ === 'schlussrechnung'
+  // Schlussrechnung: die Positionen sind der Gesamtauftrag, diese Rechnung ist nur der Rest
+  const gesamtNetto = summenNow.netto_gesamt
+  const dieseNetto = istSchluss ? gesamtNetto - bereitsBerechnet : gesamtNetto
+  // Bei Schlussrechnung ist nach ihr per Definition nichts mehr offen —
+  // eine Abweichung ist dann eine Differenz zwischen Positionen und Auftragswert.
   const verbleibend = auftragswertNum - bereitsBerechnet - dieseNetto
 
   return (
@@ -424,21 +429,43 @@ export function AusgangsrechnungFormPage() {
                 <span className="font-medium">– {fmtEur(bereitsBerechnet)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-ink-muted">Diese Rechnung</span>
+                <span className="text-ink-muted">{istSchluss ? 'Diese Schlussrechnung (Restbetrag)' : 'Diese Rechnung'}</span>
                 <span className="font-medium">– {fmtEur(dieseNetto)}</span>
               </div>
               <div className="border-t border-accent-200 my-1.5" />
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-ink">Verbleibend</span>
-                <span className={cn('font-bold', verbleibend < -0.01 ? 'text-red-600' : 'text-ink')}>
-                  {fmtEur(verbleibend)}
-                </span>
-              </div>
+              {istSchluss ? (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-ink">Verbleibend nach Schlussrechnung</span>
+                    <span className="font-bold text-ink">{fmtEur(0)}</span>
+                  </div>
+                  {Math.abs(verbleibend) > 0.01 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-ink-muted">Positionen gesamt vs. Auftragswert</span>
+                      <span className={cn('font-medium', verbleibend < 0 ? 'text-amber-600' : 'text-ink-muted')}>
+                        {verbleibend < 0 ? '+' : '–'} {fmtEur(Math.abs(verbleibend))}
+                      </span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-ink">Verbleibend</span>
+                  <span className={cn('font-bold', verbleibend < -0.01 ? 'text-red-600' : 'text-ink')}>
+                    {fmtEur(verbleibend)}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {verbleibend < -0.01 && (
+            {!istSchluss && verbleibend < -0.01 && (
               <p className="text-[11px] text-red-600 mt-2">
                 Achtung: Die Summe der Rechnungen übersteigt den Auftragswert.
+              </p>
+            )}
+            {istSchluss && Math.abs(verbleibend) > 0.01 && (
+              <p className="text-[11px] text-amber-600 mt-2">
+                Die Positionen ergeben {fmtEur(gesamtNetto)} netto, der Auftragswert ist mit {fmtEur(auftragswertNum)} hinterlegt. Ist das beabsichtigt (Mehr-/Minderleistung), kannst du den Auftragswert oben anpassen.
               </p>
             )}
 
@@ -543,7 +570,7 @@ export function AusgangsrechnungFormPage() {
             ? andereRechnungen.map(r => ({ rechnungsnummer: r.rechnungsnummer, datum: r.rechnungsdatum, label: TYP_LABEL[r.typ], netto: r.netto, netto_20: r.netto_20, netto_10: r.netto_10, netto_0: r.netto_0 }))
             : null}
           bereitsBerechnet={typ === 'schlussrechnung' && angebotId ? bereitsBerechnet : null}
-          restbetrag={typ === 'schlussrechnung' && angebotId ? dieseNetto - bereitsBerechnet : null}
+          restbetrag={typ === 'schlussrechnung' && angebotId ? dieseNetto : null}
           ansprechpartner={ansprechpartner || null}
           className="border-l border-border rounded-none shadow-none flex-1"
         />
