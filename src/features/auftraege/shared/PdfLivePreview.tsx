@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DocumentHtmlPreview } from './DocumentHtmlPreview'
-import { berechneSummen } from './positionenUtils'
+import { berechneSummen, berechneSchlussrechnung } from './positionenUtils'
 import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, AusgangsrechnungTyp, RechnungsuebersichtZeile } from '@/types/database'
 import type { DokumentFormValues } from './DokumentForm'
@@ -52,7 +52,11 @@ function buildAbDoc(p: Extract<PdfLivePreviewProps, { typ: 'auftragsbestaetigung
 }
 
 function buildRechnungDoc(p: Extract<PdfLivePreviewProps, { typ: 'rechnung' }>): Ausgangsrechnung {
-  const s = berechneSummen(p.values.positionen, p.values.rabattGesamt, p.values.rabattGesamtBetrag)
+  const voll = berechneSummen(p.values.positionen, p.values.rabattGesamt, p.values.rabattGesamtBetrag)
+  // Schlussrechnung mit Teilrechnungen: Vorschau zeigt denselben Rest wie das gespeicherte Dokument
+  const s = p.rechnungTyp === 'schlussrechnung' && p.rechnungsuebersicht?.length
+    ? berechneSchlussrechnung(voll, p.rechnungsuebersicht).rest
+    : voll
   const zahlungsTage = parseInt(p.zahlungsziel) || 14
   const faellig = new Date(p.values.datum)
   faellig.setDate(faellig.getDate() + zahlungsTage)

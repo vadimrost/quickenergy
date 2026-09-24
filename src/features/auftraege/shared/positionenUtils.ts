@@ -1,4 +1,4 @@
-import type { DokumentPosition } from '@/types/database'
+import type { DokumentPosition, RechnungsuebersichtZeile } from '@/types/database'
 
 export type PositionDraft = Omit<DokumentPosition, 'id' | 'created_at' | 'dokument_id' | 'dokument_typ'>
 
@@ -114,5 +114,66 @@ export function emptyPosition(reihenfolge = 0): PositionDraft {
     zeilenbetrag_netto: 0,
     bild_url: null,
     ek_netto: null,
+  }
+}
+
+
+// ─── Schlussrechnung ─────────────────────────────────────────────────────────
+
+export interface UebersichtSummen {
+  netto_20: number
+  netto_10: number
+  netto_0: number
+  netto: number
+  ust_20: number
+  ust_10: number
+  ust: number
+  brutto: number
+}
+
+/** Summiert die bereits gestellten Teilrechnungen je USt-Satz (inkl. deren USt). */
+export function summiereUebersicht(zeilen: RechnungsuebersichtZeile[]): UebersichtSummen {
+  let netto_20 = 0, netto_10 = 0, netto_0 = 0
+  for (const z of zeilen) {
+    if (z.netto_20 != null || z.netto_10 != null || z.netto_0 != null) {
+      netto_20 += z.netto_20 ?? 0
+      netto_10 += z.netto_10 ?? 0
+      netto_0  += z.netto_0 ?? 0
+    } else {
+      // Alt-Eintrag ohne Aufteilung: Betrieb rechnet praktisch nur mit 20 %
+      netto_20 += z.netto
+    }
+  }
+  const ust_20 = netto_20 * 0.2
+  const ust_10 = netto_10 * 0.1
+  const netto = netto_20 + netto_10 + netto_0
+  return { netto_20, netto_10, netto_0, netto, ust_20, ust_10, ust: ust_20 + ust_10, brutto: netto + ust_20 + ust_10 }
+}
+
+/**
+ * Schlussrechnung: Gesamtauftrag minus bereits gestellte Teilrechnungen.
+ * `rest` ist das, was diese Rechnung tatsaechlich wert ist — und wird als
+ * summe_netto_x, ust_x und summe_brutto gespeichert, damit Liste, Mahnwesen, Export und
+ * Bankabgleich mit dem echten Zahlbetrag arbeiten. Der Gesamtauftrag laesst
+ * sich im Dokument jederzeit als rest + bereits zurueckrechnen.
+ */
+export function berechneSchlussrechnung(voll: Summen, zeilen: RechnungsuebersichtZeile[]): { bereits: UebersichtSummen; rest: Summen } {
+  const bereits = summiereUebersicht(zeilen)
+  const r2 = (n: number) => Math.round(n * 100) / 100
+  const netto_20 = r2(voll.netto_20 - bereits.netto_20)
+  const netto_10 = r2(voll.netto_10 - bereits.netto_10)
+  const netto_0  = r2(voll.netto_0  - bereits.netto_0)
+  const ust_20 = r2(netto_20 * 0.2)
+  const ust_10 = r2(netto_10 * 0.1)
+  const netto_gesamt = r2(netto_20 + netto_10 + netto_0)
+  return {
+    bereits,
+    rest: {
+      netto_20, netto_10, netto_0, ust_20, ust_10, netto_gesamt,
+      brutto: r2(netto_gesamt + ust_20 + ust_10),
+      netto_vor_rabatt: voll.netto_vor_rabatt,
+      rabatt_betrag: voll.rabatt_betrag,
+      rabatt_prozent: voll.rabatt_prozent,
+    },
   }
 }

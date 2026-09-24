@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { DokumentForm, type DokumentFormValues } from '@/features/auftraege/shared/DokumentForm'
 import { PdfButton } from '@/features/auftraege/shared/PdfButton'
 import { PdfLivePreview } from '@/features/auftraege/shared/PdfLivePreview'
-import { berechneSummen, emptyPosition } from '@/features/auftraege/shared/positionenUtils'
+import { berechneSummen, berechneSchlussrechnung, emptyPosition } from '@/features/auftraege/shared/positionenUtils'
 import {
   useAusgangsrechnung,
   useUpsertAusgangsrechnung,
@@ -175,20 +175,33 @@ export function AusgangsrechnungFormPage() {
     const faellig = new Date(values.datum)
     faellig.setDate(faellig.getDate() + zahlungsTage)
 
-    // Schlussrechnung: Übersicht aller bisherigen Teilrechnungen einfrieren
+    // Schlussrechnung: Übersicht aller bisherigen Teilrechnungen einfrieren.
+    // Gespeichert wird der RESTBETRAG je USt-Satz — das ist der echte Wert dieser
+    // Rechnung (Liste, Mahnwesen, Export, Bankabgleich). Der Gesamtauftrag wird im
+    // Dokument aus Rest + Übersicht zurückgerechnet.
     let uebersichtFields: Partial<Ausgangsrechnung> = {}
+    let gespeichert = summen
     if (typ === 'schlussrechnung' && angebotId) {
       const prior = geschwister.filter(r => r.id !== id && r.status !== 'storniert')
-      const bereits = prior.reduce((sum, r) => sum + r.netto, 0)
-      uebersichtFields = {
-        rechnungsuebersicht: prior.map(r => ({
-          rechnungsnummer: r.rechnungsnummer,
-          datum: r.rechnungsdatum,
-          label: TYP_LABEL[r.typ] ?? 'Rechnung',
-          netto: r.netto,
-        })),
-        bereits_berechnet_netto: bereits,
-        restbetrag_netto: summen.netto_gesamt - bereits,
+      const uebersicht = prior.map(r => ({
+        rechnungsnummer: r.rechnungsnummer,
+        datum: r.rechnungsdatum,
+        label: TYP_LABEL[r.typ] ?? 'Rechnung',
+        netto: r.netto,
+        netto_20: r.netto_20,
+        netto_10: r.netto_10,
+        netto_0: r.netto_0,
+      }))
+      if (uebersicht.length > 0) {
+        const { bereits, rest } = berechneSchlussrechnung(summen, uebersicht)
+        gespeichert = rest
+        uebersichtFields = {
+          rechnungsuebersicht: uebersicht,
+          bereits_berechnet_netto: bereits.netto,
+          restbetrag_netto: rest.netto_gesamt,
+        }
+      } else {
+        uebersichtFields = { rechnungsuebersicht: [], bereits_berechnet_netto: 0, restbetrag_netto: summen.netto_gesamt }
       }
     }
 
@@ -216,12 +229,12 @@ export function AusgangsrechnungFormPage() {
         ansprechpartner: ansprechpartner.trim() || null,
         rabatt_gesamt_prozent: values.rabattGesamt,
         rabatt_gesamt_betrag: values.rabattGesamtBetrag,
-        summe_netto_20: summen.netto_20,
-        summe_netto_10: summen.netto_10,
-        summe_netto_0: summen.netto_0,
-        ust_20: summen.ust_20,
-        ust_10: summen.ust_10,
-        summe_brutto: summen.brutto,
+        summe_netto_20: gespeichert.netto_20,
+        summe_netto_10: gespeichert.netto_10,
+        summe_netto_0: gespeichert.netto_0,
+        ust_20: gespeichert.ust_20,
+        ust_10: gespeichert.ust_10,
+        summe_brutto: gespeichert.brutto,
         status: existing?.status ?? 'entwurf',
       },
       positionen: values.positionen,
@@ -527,7 +540,7 @@ export function AusgangsrechnungFormPage() {
           teilProzent={teilProzent}
           existingNr={existing?.rechnungsnummer}
           rechnungsuebersicht={typ === 'schlussrechnung' && angebotId
-            ? andereRechnungen.map(r => ({ rechnungsnummer: r.rechnungsnummer, datum: r.rechnungsdatum, label: TYP_LABEL[r.typ], netto: r.netto }))
+            ? andereRechnungen.map(r => ({ rechnungsnummer: r.rechnungsnummer, datum: r.rechnungsdatum, label: TYP_LABEL[r.typ], netto: r.netto, netto_20: r.netto_20, netto_10: r.netto_10, netto_0: r.netto_0 }))
             : null}
           bereitsBerechnet={typ === 'schlussrechnung' && angebotId ? bereitsBerechnet : null}
           restbetrag={typ === 'schlussrechnung' && angebotId ? dieseNetto - bereitsBerechnet : null}

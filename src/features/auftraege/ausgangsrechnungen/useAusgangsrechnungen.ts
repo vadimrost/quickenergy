@@ -43,6 +43,9 @@ export interface TeilrechnungInfo {
   rechnungsdatum: string
   betreff: string | null
   netto: number
+  netto_20: number
+  netto_10: number
+  netto_0: number
 }
 
 // Alle Rechnungen zu einem Angebot (für Teilrechnungs-Tracking & Schlussrechnungs-Übersicht)
@@ -65,6 +68,9 @@ export function useRechnungenForAngebot(angebotId: string | undefined) {
         rechnungsdatum: r.rechnungsdatum,
         betreff: r.betreff,
         netto: (r.summe_netto_20 ?? 0) + (r.summe_netto_10 ?? 0) + (r.summe_netto_0 ?? 0),
+        netto_20: r.summe_netto_20 ?? 0,
+        netto_10: r.summe_netto_10 ?? 0,
+        netto_0: r.summe_netto_0 ?? 0,
       })) as TeilrechnungInfo[]
     },
   })

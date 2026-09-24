@@ -322,6 +322,10 @@ export interface RechnungsuebersichtZeile {
   datum: string | null
   label: string
   netto: number
+  /** Netto je USt-Satz — noetig, um die bereits verrechnete USt korrekt abzuziehen */
+  netto_20?: number
+  netto_10?: number
+  netto_0?: number
 }
 
 export interface Ausgangsrechnung {

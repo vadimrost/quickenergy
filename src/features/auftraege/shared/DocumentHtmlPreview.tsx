@@ -1,5 +1,5 @@
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, Lieferschein, DokumentPosition, Kunde, FirmaStammdaten } from '@/types/database'
-import { rabattAnzeige } from './positionenUtils'
+import { rabattAnzeige, summiereUebersicht } from './positionenUtils'
 
 type TtMark = { type: 'bold' | 'italic' | 'underline' }
 type TtNode = { type: string; text?: string; marks?: TtMark[]; content?: TtNode[] }
@@ -169,9 +169,22 @@ export function DocumentHtmlPreview(input: DocInput) {
   const extra = getExtraInfo(input)
   const kunde = doc.kunde
   const a = doc as Angebot
+  // Schlussrechnung: gespeichert ist der Rest, Gesamtauftrag = Rest + Teilrechnungen
+  const schluss = input.typ === 'rechnung' && input.doc.typ === 'schlussrechnung' && (input.doc.rechnungsuebersicht?.length ?? 0) > 0
+    ? input.doc.rechnungsuebersicht!
+    : null
+  const bereits = schluss ? summiereUebersicht(schluss) : null
+  const voll = {
+    n20: a.summe_netto_20 + (bereits?.netto_20 ?? 0),
+    n10: a.summe_netto_10 + (bereits?.netto_10 ?? 0),
+    n0:  a.summe_netto_0  + (bereits?.netto_0 ?? 0),
+    u20: a.ust_20 + (bereits?.ust_20 ?? 0),
+    u10: a.ust_10 + (bereits?.ust_10 ?? 0),
+    brutto: a.summe_brutto + (bereits?.brutto ?? 0),
+  }
   const rabattZeile = input.typ === 'lieferschein'
     ? null
-    : rabattAnzeige(a.summe_netto_20 + a.summe_netto_10 + a.summe_netto_0, a.rabatt_gesamt_prozent, a.rabatt_gesamt_betrag ?? 0)
+    : rabattAnzeige(voll.n20 + voll.n10 + voll.n0, a.rabatt_gesamt_prozent, a.rabatt_gesamt_betrag ?? 0)
 
   return (
     <div style={{
@@ -291,21 +304,41 @@ export function DocumentHtmlPreview(input: DocInput) {
       {/* ── Summen — beim Lieferschein bewusst keine Betraege ── */}
       {input.typ !== 'lieferschein' && (
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-        <div style={{ width: 210 }}>
+        <div style={{ width: schluss ? 300 : 210 }}>
           <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
           {rabattZeile && <SumRow label="Zwischensumme netto" value={fmt(rabattZeile.nettoVorRabatt)} />}
           {rabattZeile && <SumRow label={rabattZeile.label} value={`– ${fmt(rabattZeile.betrag)}`} />}
-          {(doc as Angebot).summe_netto_20 > 0 && <SumRow label="Netto (20% USt)" value={fmt((doc as Angebot).summe_netto_20)} />}
-          {(doc as Angebot).summe_netto_10 > 0 && <SumRow label="Netto (10% USt)" value={fmt((doc as Angebot).summe_netto_10)} />}
-          {(doc as Angebot).summe_netto_0 > 0 && <SumRow label="Netto (0% USt)" value={fmt((doc as Angebot).summe_netto_0)} />}
+          {voll.n20 > 0 && <SumRow label="Netto (20% USt)" value={fmt(voll.n20)} />}
+          {voll.n10 > 0 && <SumRow label="Netto (10% USt)" value={fmt(voll.n10)} />}
+          {voll.n0 > 0 && <SumRow label="Netto (0% USt)" value={fmt(voll.n0)} />}
           <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
-          {(doc as Angebot).ust_20 > 0 && <SumRow label="zzgl. USt 20%" value={fmt((doc as Angebot).ust_20)} />}
-          {(doc as Angebot).ust_10 > 0 && <SumRow label="zzgl. USt 10%" value={fmt((doc as Angebot).ust_10)} />}
+          {voll.u20 > 0 && <SumRow label="zzgl. USt 20%" value={fmt(voll.u20)} />}
+          {voll.u10 > 0 && <SumRow label="zzgl. USt 10%" value={fmt(voll.u10)} />}
           <div style={{ borderTop: '1px solid #1a1a1a', margin: '3px 0' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
-            <span style={{ fontWeight: 700, fontSize: 10 }}>Gesamtbetrag brutto</span>
-            <span style={{ fontWeight: 700, fontSize: 10 }}>{fmt((doc as Angebot).summe_brutto)}</span>
+            <span style={{ fontWeight: schluss ? 400 : 700, fontSize: schluss ? 8.5 : 10 }}>Gesamtbetrag brutto</span>
+            <span style={{ fontWeight: schluss ? 400 : 700, fontSize: schluss ? 8.5 : 10 }}>{fmt(voll.brutto)}</span>
           </div>
+
+          {schluss && (
+            <>
+              {/* Abzug der Teilrechnungen brutto — deren USt wurde bereits in Rechnung gestellt */}
+              <div style={{ marginTop: 6 }}>
+                {schluss.map((z, i) => (
+                  <SumRow key={i} label={`abzgl. ${z.label} Nr. ${z.rechnungsnummer} vom ${fmtDate(z.datum)} (brutto)`} value={`– ${fmt(summiereUebersicht([z]).brutto)}`} />
+                ))}
+              </div>
+              <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
+              <SumRow label="Restbetrag netto" value={fmt(a.summe_netto_20 + a.summe_netto_10 + a.summe_netto_0)} />
+              {a.ust_20 > 0 && <SumRow label="zzgl. USt 20%" value={fmt(a.ust_20)} />}
+              {a.ust_10 > 0 && <SumRow label="zzgl. USt 10%" value={fmt(a.ust_10)} />}
+              <div style={{ borderTop: '1px solid #1a1a1a', margin: '3px 0' }} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 4px', backgroundColor: '#f5f5f5' }}>
+                <span style={{ fontWeight: 700, fontSize: 11 }}>Zu zahlender Restbetrag brutto</span>
+                <span style={{ fontWeight: 700, fontSize: 11 }}>{fmt(a.summe_brutto)}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
       )}
@@ -318,11 +351,6 @@ export function DocumentHtmlPreview(input: DocInput) {
             <div key={i} style={{ fontSize: 8.5, lineHeight: 1.5 }}>{z}</div>
           ))}
         </div>
-      )}
-
-      {/* ── Rechnungsübersicht (nur Schlussrechnung) ── */}
-      {input.typ === 'rechnung' && input.doc.typ === 'schlussrechnung' && (
-        <RechnungsUebersichtHtml r={input.doc} />
       )}
 
       {/* ── Fußtext ── */}
@@ -363,39 +391,3 @@ function SumRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function RechnungsUebersichtHtml({ r }: { r: Ausgangsrechnung }) {
-  const prior = r.rechnungsuebersicht ?? []
-  // Nur bei echten Teilrechnungen — sonst las der Kunde "Restbetrag netto" als Zahlbetrag
-  const hatTeilrechnungen = prior.length > 0 || (r.bereits_berechnet_netto ?? 0) > 0
-  if (!hatTeilrechnungen) return null
-
-  const zeilen = [
-    ...prior,
-    { rechnungsnummer: r.rechnungsnummer, datum: r.rechnungsdatum, label: 'Schlussrechnung', netto: r.restbetrag_netto ?? 0 },
-  ]
-
-  return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ fontSize: 8.5, fontWeight: 700, marginBottom: 4 }}>Rechnungsübersicht:</div>
-      {zeilen.map((z, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0' }}>
-          <span style={{ fontSize: 8.5 }}>{i + 1}. {z.label} Nr. {z.rechnungsnummer} vom {fmtDate(z.datum)}</span>
-          <span style={{ fontSize: 8.5, textAlign: 'right' }}>Betrag netto {fmt(z.netto)}</span>
-        </div>
-      ))}
-      {r.bereits_berechnet_netto != null && (
-        <div style={{ marginTop: 4 }}>
-          <div style={{ borderTop: '0.5px solid #ccc', margin: '2px 0' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0' }}>
-            <span style={{ fontSize: 8.5, color: '#555' }}>Bereits berechnet (Teilrechnungen)</span>
-            <span style={{ fontSize: 8.5 }}>– {fmt(r.bereits_berechnet_netto)}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1.5px 0' }}>
-            <span style={{ fontSize: 9.5, fontWeight: 700 }}>Restbetrag netto (offen)</span>
-            <span style={{ fontSize: 9.5, fontWeight: 700 }}>{fmt(r.restbetrag_netto ?? 0)}</span>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}

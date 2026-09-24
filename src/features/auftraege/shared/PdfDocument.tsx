@@ -7,7 +7,8 @@ import {
   StyleSheet,
 } from '@react-pdf/renderer'
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, Lieferschein, FirmaStammdaten } from '@/types/database'
-import { rabattAnzeige } from './positionenUtils'
+import { rabattAnzeige, summiereUebersicht } from './positionenUtils'
+import type { RechnungsuebersichtZeile } from '@/types/database'
 
 // ─── Rich-text → react-pdf ────────────────────────────────────────────────────
 // Parses TipTap JSON (or falls back to plain text).
@@ -338,31 +339,72 @@ function PositionenOhnePreise({ positionen }: { positionen: DokumentPosition[] }
 }
 
 function Summen({
-  netto20, netto10, netto0, ust20, ust10, brutto, rabatt, rabattBetrag,
+  netto20, netto10, netto0, ust20, ust10, brutto, rabatt, rabattBetrag, schluss,
 }: {
   netto20: number; netto10: number; netto0: number
   ust20: number; ust10: number; brutto: number; rabatt: number; rabattBetrag: number
+  /** Schlussrechnung: bereits gestellte Teilrechnungen — die gespeicherten Summen sind dann der Rest */
+  schluss?: RechnungsuebersichtZeile[] | null
 }) {
-  const nettoGesamt = netto20 + netto10 + netto0
+  const istSchluss = !!schluss && schluss.length > 0
+  const bereits = istSchluss ? summiereUebersicht(schluss!) : null
+
+  // Gesamtauftrag = Rest (gespeichert) + bereits verrechnete Teilrechnungen
+  const voll20 = netto20 + (bereits?.netto_20 ?? 0)
+  const voll10 = netto10 + (bereits?.netto_10 ?? 0)
+  const voll0  = netto0  + (bereits?.netto_0 ?? 0)
+  const vollUst20 = ust20 + (bereits?.ust_20 ?? 0)
+  const vollUst10 = ust10 + (bereits?.ust_10 ?? 0)
+  const vollNetto = voll20 + voll10 + voll0
+  const vollBrutto = brutto + (bereits?.brutto ?? 0)
+
   // Bei Rabatt zuerst die Zwischensumme, damit der Abzug fuer den Kunden aufgeht
-  const r = rabattAnzeige(nettoGesamt, rabatt, rabattBetrag)
+  const r = rabattAnzeige(vollNetto, rabatt, rabattBetrag)
+
   return (
     <View style={s.totalsContainer}>
-      <View style={s.totalsBox}>
+      <View style={[s.totalsBox, istSchluss ? { width: 300 } : {}]} wrap={false}>
         <View style={s.totalsHrLight} />
         {r && <TotalsRow label="Zwischensumme netto" value={fmt(r.nettoVorRabatt)} />}
         {r && <TotalsRow label={r.label} value={`– ${fmt(r.betrag)}`} />}
-        {netto20 > 0 && <TotalsRow label="Gesamtbetrag netto (20% USt)" value={fmt(netto20)} />}
-        {netto10 > 0 && <TotalsRow label="Gesamtbetrag netto (10% USt)" value={fmt(netto10)} />}
-        {netto0 > 0 && <TotalsRow label="Gesamtbetrag netto (0% USt)" value={fmt(netto0)} />}
+        {voll20 > 0 && <TotalsRow label="Gesamtbetrag netto (20% USt)" value={fmt(voll20)} />}
+        {voll10 > 0 && <TotalsRow label="Gesamtbetrag netto (10% USt)" value={fmt(voll10)} />}
+        {voll0 > 0 && <TotalsRow label="Gesamtbetrag netto (0% USt)" value={fmt(voll0)} />}
         <View style={s.totalsHrLight} />
-        {ust20 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 20%" value={fmt(ust20)} />}
-        {ust10 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 10%" value={fmt(ust10)} />}
+        {vollUst20 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 20%" value={fmt(vollUst20)} />}
+        {vollUst10 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 10%" value={fmt(vollUst10)} />}
         <View style={s.totalsHr} />
         <View style={s.totalsRow}>
-          <Text style={[s.totalsLabel, s.totalsBold]}>Gesamtbetrag brutto</Text>
-          <Text style={[s.totalsValue, s.totalsBold]}>{fmt(brutto)}</Text>
+          <Text style={[s.totalsLabel, istSchluss ? {} : s.totalsBold]}>Gesamtbetrag brutto</Text>
+          <Text style={[s.totalsValue, istSchluss ? {} : s.totalsBold]}>{fmt(vollBrutto)}</Text>
         </View>
+
+        {istSchluss && bereits && (
+          <>
+            {/* Abzug der Teilrechnungen — brutto, weil deren USt bereits in Rechnung gestellt wurde */}
+            <View style={{ marginTop: 6 }}>
+              {schluss!.map((z, i) => {
+                const zb = summiereUebersicht([z])
+                return (
+                  <TotalsRow
+                    key={i}
+                    label={`abzgl. ${z.label} Nr. ${z.rechnungsnummer} vom ${fmtDate(z.datum)} (brutto)`}
+                    value={`– ${fmt(zb.brutto)}`}
+                  />
+                )
+              })}
+            </View>
+            <View style={s.totalsHrLight} />
+            <TotalsRow label="Restbetrag netto" value={fmt(netto20 + netto10 + netto0)} />
+            {ust20 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 20%" value={fmt(ust20)} />}
+            {ust10 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 10%" value={fmt(ust10)} />}
+            <View style={s.totalsHr} />
+            <View style={[s.totalsRow, { backgroundColor: '#f5f5f5', paddingHorizontal: 4 }]}>
+              <Text style={[s.totalsLabel, s.totalsBold, { fontSize: 11 }]}>Zu zahlender Restbetrag brutto</Text>
+              <Text style={[s.totalsValue, s.totalsBold, { fontSize: 11 }]}>{fmt(brutto)}</Text>
+            </View>
+          </>
+        )}
       </View>
     </View>
   )
@@ -373,47 +415,6 @@ function TotalsRow({ label, value }: { label: string; value: string }) {
     <View style={s.totalsRow}>
       <Text style={s.totalsLabel}>{label}</Text>
       <Text style={s.totalsValue}>{value}</Text>
-    </View>
-  )
-}
-
-// Schlussrechnung: Übersicht aller Teilrechnungen + Restbetrag (wie RE-1002641)
-function RechnungsUebersicht({ r }: { r: Ausgangsrechnung }) {
-  const prior = r.rechnungsuebersicht ?? []
-  // Nur anzeigen, wenn es tatsaechlich Teilrechnungen gibt. Sonst stand hier
-  // "Restbetrag netto (offen)" als letzte Zahl und Kunden ueberwiesen netto statt brutto.
-  const hatTeilrechnungen = prior.length > 0 || (r.bereits_berechnet_netto ?? 0) > 0
-  if (!hatTeilrechnungen) return null
-
-  const zeilen = [
-    ...prior,
-    { rechnungsnummer: r.rechnungsnummer, datum: r.rechnungsdatum, label: 'Schlussrechnung', netto: r.restbetrag_netto ?? 0 },
-  ]
-
-  return (
-    <View style={{ marginTop: 14 }} wrap={false}>
-      <Text style={[s.bodyText, { fontFamily: 'Helvetica-Bold', marginBottom: 4 }]}>Rechnungsübersicht:</Text>
-      {zeilen.map((z, i) => (
-        <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1.5 }}>
-          <Text style={{ fontSize: 8.5, flex: 1 }}>
-            {i + 1}. {z.label} Nr. {z.rechnungsnummer} vom {fmtDate(z.datum)}
-          </Text>
-          <Text style={{ fontSize: 8.5, textAlign: 'right', width: 130 }}>Betrag netto {fmt(z.netto)}</Text>
-        </View>
-      ))}
-      {r.bereits_berechnet_netto != null && (
-        <View style={{ marginTop: 4 }}>
-          <View style={s.totalsHrLight} />
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1.5 }}>
-            <Text style={{ fontSize: 8.5, color: '#555' }}>Bereits berechnet (Teilrechnungen)</Text>
-            <Text style={{ fontSize: 8.5, textAlign: 'right', width: 130 }}>– {fmt(r.bereits_berechnet_netto)}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 1.5 }}>
-            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>Restbetrag netto (offen)</Text>
-            <Text style={{ fontSize: 9.5, fontFamily: 'Helvetica-Bold', textAlign: 'right', width: 130 }}>{fmt(r.restbetrag_netto ?? 0)}</Text>
-          </View>
-        </View>
-      )}
     </View>
   )
 }
@@ -585,6 +586,7 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
             brutto={(doc as Angebot).summe_brutto}
             rabatt={(doc as Angebot).rabatt_gesamt_prozent}
             rabattBetrag={(doc as Angebot).rabatt_gesamt_betrag ?? 0}
+            schluss={_ar?.typ === 'schlussrechnung' ? _ar.rechnungsuebersicht : null}
           />
         )}
 
@@ -597,9 +599,6 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
             ))}
           </View>
         )}
-
-        {/* Rechnungsübersicht (nur Schlussrechnung) */}
-        {_ar?.typ === 'schlussrechnung' && <RechnungsUebersicht r={_ar} />}
 
         {/* Fußtext / Zahlungsinfo */}
         {doc.fusstext && (
