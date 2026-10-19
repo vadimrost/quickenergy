@@ -40,19 +40,35 @@ const AUFTRAEGE_CHILDREN = [
   { icon: UserSquare2,   path: '/kunden',              label: 'Kunden'             },
 ]
 
-// Mobile items always visible in bottom nav
-const MOBILE_MAIN = ['/', '/rechnungen', '/lohn', '/kontoauszuege']
-
-const MOBILE_MORE = [
-  { icon: Settings, path: '/einstellungen', label: 'Einstellungen' },
-  { icon: LogOut,   path: null,             label: 'Logout'        },
+// Mobile bottom nav: the four most-used pages, everything else lives under "Weitere"
+const MOBILE_ADMIN_MAIN = [
+  { icon: LayoutDashboard, path: '/',                   label: 'Übersicht',                 end: true,  badge: false },
+  { icon: ReceiptText,     path: '/rechnungen',         label: 'Eingangs\u00ADrechnungen', end: false, badge: true  },
+  { icon: Receipt,         path: '/ausgangsrechnungen', label: 'Ausgangs\u00ADrechnungen', end: false, badge: false },
+  { icon: FileText,        path: '/angebote',           label: 'Angebote',                  end: false, badge: false },
 ]
 
-const RADIAL_OFFSETS = [
-  { x: -40, y: -80 },
-  { x:  40, y: -80 },
-  { x: -78, y: -52 },
-  { x:  78, y: -52 },
+const MOBILE_ADMIN_MORE = [
+  {
+    title: 'Aufträge',
+    items: [
+      { icon: ClipboardCheck, path: '/auftraege',     label: 'Auftrags\u00ADbestätigungen' },
+      { icon: Truck,          path: '/lieferscheine', label: 'Lieferscheine' },
+      { icon: BellRing,       path: '/mahnwesen',     label: 'Mahnwesen' },
+      { icon: UserSquare2,    path: '/kunden',        label: 'Kunden' },
+      { icon: Package,        path: '/artikel',       label: 'Artikel' },
+      { icon: LayoutTemplate, path: '/vorlagen',      label: 'Vorlagen' },
+    ],
+  },
+  {
+    title: 'Allgemein',
+    items: [
+      { icon: ContactRound, path: '/crm',           label: 'CRM' },
+      { icon: Banknote,     path: '/lohn',          label: 'Lohnkosten' },
+      { icon: Landmark,     path: '/kontoauszuege', label: 'Kontoauszüge' },
+      { icon: Settings,     path: '/einstellungen', label: 'Einstellungen' },
+    ],
+  },
 ]
 
 function getInitials(email: string) {
@@ -80,11 +96,9 @@ export function Sidebar() {
     navigate('/login')
   }
 
-  const allNavItems = [
-    ...TOP_ITEMS.map(i => ({ ...i, end: i.end ?? false })),
-    ...BOTTOM_ITEMS,
-  ]
-  const mobileMainItems = allNavItems.filter(i => MOBILE_MAIN.includes(i.path))
+  const mobileMainItems = isSetter ? SETTER_TOP_ITEMS : MOBILE_ADMIN_MAIN
+  const mobileMoreGroups = isSetter ? [] : MOBILE_ADMIN_MORE
+  const isMoreActive = mobileMoreGroups.some(g => g.items.some(i => location.pathname.startsWith(i.path)))
 
   return (
     <>
@@ -222,7 +236,7 @@ export function Sidebar() {
             end={end}
             className={({ isActive }) =>
               cn(
-                'relative flex flex-col items-center gap-0.5 py-2 flex-1',
+                'relative flex flex-col items-center gap-0.5 py-2 flex-1 min-w-0',
                 isActive ? 'text-accent-600' : 'text-ink-muted'
               )
             }
@@ -235,68 +249,69 @@ export function Sidebar() {
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-medium">{label}</span>
+            <span className="text-[10px] font-medium leading-tight text-center hyphens-manual break-words w-full px-0.5">{label}</span>
           </NavLink>
         ))}
 
-        {/* Weitere radial menu */}
-        <div className="relative flex flex-col items-center flex-1">
-          {moreOpen && (
-            <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-          )}
-          {MOBILE_MORE.map((item, i) => {
-            const { x, y } = RADIAL_OFFSETS[i]
-            const Icon = item.icon
-            return (
-              <div
-                key={item.label}
-                className={cn(
-                  'absolute z-[60] transition-all duration-200',
-                  moreOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                )}
-                style={{
-                  bottom: `calc(50% + ${-y}px)`,
-                  left: `calc(50% + ${x}px)`,
-                  transform: 'translate(-50%, 50%)',
-                  transitionDelay: moreOpen ? `${i * 40}ms` : '0ms',
-                  ...(moreOpen ? {} : { transform: 'translate(-50%, 50%) scale(0.5)' }),
-                }}
-              >
-                {item.path ? (
-                  <NavLink
-                    to={item.path}
-                    onClick={() => setMoreOpen(false)}
-                    className={({ isActive }) =>
-                      cn('flex flex-col items-center gap-1', isActive ? 'text-accent-600' : 'text-ink')
-                    }
-                  >
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center shadow-md border bg-bg-surface border-border">
-                      <Icon size={18} />
-                    </div>
-                    <span className="text-[9px] font-medium text-ink-muted whitespace-nowrap">{item.label}</span>
-                  </NavLink>
-                ) : (
-                  <button onClick={() => { setMoreOpen(false); handleSignOut() }} className="flex flex-col items-center gap-1">
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center shadow-md border bg-bg-surface border-border text-ink-muted">
-                      <Icon size={18} />
-                    </div>
-                    <span className="text-[9px] font-medium text-ink-muted">{item.label}</span>
-                  </button>
-                )}
-              </div>
-            )
-          })}
+        {/* Weitere: bottom panel with all remaining pages */}
+        <div className="flex flex-col items-center flex-1 min-w-0">
           <button
             onClick={() => setMoreOpen(v => !v)}
-            className={cn('flex flex-col items-center gap-0.5 py-2 w-full transition-colors', moreOpen ? 'text-accent-600' : 'text-ink-muted')}
+            className={cn(
+              'flex flex-col items-center gap-0.5 py-2 w-full transition-colors',
+              moreOpen || isMoreActive ? 'text-accent-600' : 'text-ink-muted'
+            )}
           >
-            <div className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200', moreOpen ? 'bg-accent-100 rotate-90' : '')}>
-              {moreOpen ? <X size={20} /> : <MoreHorizontal size={20} />}
-            </div>
-            <span className="text-[10px] font-medium">Weitere</span>
+            {moreOpen ? <X size={20} /> : <MoreHorizontal size={20} />}
+            <span className="text-[10px] font-medium leading-tight">Weitere</span>
           </button>
         </div>
       </nav>
+
+      <div
+        className={cn(
+          'md:hidden fixed inset-0 bg-black/30 z-40 transition-opacity duration-200',
+          moreOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        )}
+        onClick={() => setMoreOpen(false)}
+      />
+      <div
+        className={cn(
+          'md:hidden fixed left-0 right-0 bottom-16 z-40 max-h-[70vh] overflow-y-auto rounded-t-2xl bg-bg-surface border-t border-border shadow-lg px-4 pt-4 pb-3 transition-transform duration-200',
+          moreOpen ? 'translate-y-0' : 'translate-y-[calc(100%+4rem)]'
+        )}
+      >
+        {mobileMoreGroups.map(group => (
+          <div key={group.title} className="mb-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-subtle mb-2 px-1">{group.title}</p>
+            <div className="grid grid-cols-4 gap-1">
+              {group.items.map(({ icon: Icon, path, label }) => (
+                <NavLink
+                  key={path}
+                  to={path}
+                  onClick={() => setMoreOpen(false)}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex flex-col items-center gap-1 rounded-xl py-2 px-1 transition-colors',
+                      isActive ? 'bg-accent-100 text-accent-600' : 'text-ink hover:bg-bg-muted'
+                    )
+                  }
+                >
+                  <Icon size={20} />
+                  <span className="text-[11px] font-medium text-center leading-tight hyphens-manual break-words w-full">{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        ))}
+        <button
+          onClick={() => { setMoreOpen(false); handleSignOut() }}
+          className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 bg-accent-50 text-accent-600 text-sm font-medium"
+        >
+          <LogOut size={16} />
+          Abmelden
+        </button>
+      </div>
     </>
   )
 }
