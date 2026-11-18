@@ -137,7 +137,7 @@ export function LieferscheinDetailPage() {
             <span className="label-caps">Vorschau</span>
           </div>
           <div className="bg-[#e8eaed] p-4 max-h-[80vh] overflow-y-auto">
-            <div className="mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)]" style={{ maxWidth: 700 }}>
+            <div className="mx-auto bg-white shadow-[0_1px_4px_rgba(0,0,0,0.18)] overflow-x-auto" style={{ width: 'fit-content', maxWidth: '100%' }}>
               <DocumentHtmlPreview
                 typ="lieferschein"
                 doc={{ ...ls, ...form, positionen }}

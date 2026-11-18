@@ -1,455 +1,234 @@
-import {
-  Document,
-  Page,
-  View,
-  Text,
-  Image,
-  StyleSheet,
-} from '@react-pdf/renderer'
+import { Document, Page, View, Text, Image, StyleSheet, Font } from '@react-pdf/renderer'
 import type { Angebot, Auftragsbestaetigung, Ausgangsrechnung, DokumentPosition, Lieferschein, FirmaStammdaten } from '@/types/database'
-import { rabattAnzeige, summiereUebersicht } from './positionenUtils'
-import type { RechnungsuebersichtZeile } from '@/types/database'
+import {
+  BP, BRIEFPAPIER_LOGO, assetUrl, briefModell, firmaConfig, fmtEur, fmtMenge, richAbsaetze,
+  type BriefModell, type SummenZeile,
+} from './briefpapier'
 
-// ─── Rich-text → react-pdf ────────────────────────────────────────────────────
-// Parses TipTap JSON (or falls back to plain text).
-// Supports: bold, italic, underline, paragraph line breaks.
+// ─── Schrift wie in sevDesk: Open Sans ────────────────────────────────────────
+Font.register({
+  family: 'OpenSans',
+  fonts: [
+    { src: assetUrl('/fonts/OpenSans-Regular.ttf') },
+    { src: assetUrl('/fonts/OpenSans-Bold.ttf'), fontWeight: 700 },
+    { src: assetUrl('/fonts/OpenSans-Italic.ttf'), fontStyle: 'italic' },
+    { src: assetUrl('/fonts/OpenSans-BoldItalic.ttf'), fontWeight: 700, fontStyle: 'italic' },
+  ],
+})
+// Keine Silbentrennung — sevDesk trennt auch nicht
+Font.registerHyphenationCallback(word => [word])
 
-type TipTapMark = { type: 'bold' | 'italic' | 'underline' }
-type TipTapNode = {
-  type: string
-  text?: string
-  marks?: TipTapMark[]
-  content?: TipTapNode[]
-}
+const LH = 1.36   // Zeilenhoehe einzeiliger Zellen (Open Sans)
+const LH_TEXT = 1.2
 
-function renderRichText(content: string, baseStyle: any) {
-  let nodes: TipTapNode[] = []
-  try {
-    const json = JSON.parse(content)
-    if (json?.type === 'doc' && Array.isArray(json.content)) {
-      nodes = json.content
-    }
-  } catch {}
-
-  if (nodes.length === 0) {
-    // Plain text fallback: split on newlines
-    return content.split('\n').map((line, i) =>
-      <Text key={i} style={baseStyle}>{line || ' '}</Text>
-    )
-  }
-
-  return nodes.map((para, pi) => {
-    const inlines = para.content ?? []
-    if (inlines.length === 0) {
-      return <Text key={pi} style={{ fontSize: 2, lineHeight: 1 }}>{' '}</Text>
-    }
-    return (
-      <Text key={pi} style={baseStyle}>
-        {inlines.map((node, ni) => {
-          const marks = node.marks ?? []
-          const isBold = marks.some((m: TipTapMark) => m.type === 'bold')
-          const isItalic = marks.some((m: TipTapMark) => m.type === 'italic')
-          const isUnderline = marks.some((m: TipTapMark) => m.type === 'underline')
-          const family = isBold
-            ? (isItalic ? 'Helvetica-BoldOblique' : 'Helvetica-Bold')
-            : (isItalic ? 'Helvetica-Oblique' : 'Helvetica')
-          return (
-            <Text key={ni} style={{ fontFamily: family, textDecoration: isUnderline ? 'underline' : 'none' }}>
-              {node.text ?? ''}
-            </Text>
-          )
-        })}
-      </Text>
-    )
-  })
-}
-
-// ─── Firmenkonstanten (Fallback) ──────────────────────────────────────────────
-const FIRMA_DEFAULT = {
-  name: 'Quick Energy Handels-, Klima- und Elektrotechnik GmbH',
-  strasse: 'Sieveringerstraße 56A',
-  plzOrt: '1190 Wien',
-  land: 'Österreich',
-  tel: '+43 6644 614126',
-  email: 'sales@quickenergy.at',
-  web: 'www.quickenergy.at',
-  uid: 'ATU78058389',
-  fn: '5791131',
-  steuerNr: '074161191',
-  gericht: 'HG Wien',
-  gf: 'Philipp Slupetzky',
-  bank: 'Erste Bank',
-  iban: 'AT62 2011 1290 2612 2005',
-  bic: 'GIBAATWW',
-  konto: '29026122005',
-  blz: '20111',
-  logoUrl: null as string | null,
-}
-type FirmaConfig = typeof FIRMA_DEFAULT
-
-function firmaToConfig(f: FirmaStammdaten): FirmaConfig {
-  return {
-    name: f.name, strasse: f.strasse, plzOrt: f.plz_ort, land: f.land,
-    tel: f.tel, email: f.email, web: f.web, uid: f.uid,
-    fn: f.fn_nr, steuerNr: f.steuer_nr, gericht: f.gericht, gf: f.gf,
-    bank: f.bank, iban: f.iban, bic: f.bic, konto: f.konto, blz: f.blz,
-    logoUrl: f.logo_url ?? null,
-  }
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   page: {
-    fontFamily: 'Helvetica',
+    fontFamily: 'OpenSans',
     fontSize: 9,
-    color: '#1a1a1a',
-    paddingTop: 36,
-    paddingBottom: 90,
-    paddingHorizontal: 44,
+    color: BP.text,
+    paddingTop: BP.top,
+    paddingBottom: BP.bottom,
+    paddingLeft: BP.left,
+    paddingRight: BP.right,
   },
+  logo: { width: BP.logoW, height: BP.logoH, objectFit: 'contain', alignSelf: 'flex-end', marginRight: BP.logoRightInset, marginBottom: BP.logoGap },
+  falz: { position: 'absolute', left: 0, width: BP.falzLen, borderTopWidth: 0.5, borderTopColor: '#000' },
 
-  // Header
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 },
-  firmAdresse: { fontSize: 7.5, color: '#555', lineHeight: 1.5, maxWidth: 220 },
-  logoBox: { alignItems: 'flex-end' },
-  logoText: { fontSize: 22, fontFamily: 'Helvetica-Bold', letterSpacing: -0.5 },
-  logoTagline: { fontSize: 7.5, color: '#555', letterSpacing: 0.5, marginTop: 1 },
-  hrThick: { borderBottomWidth: 1.5, borderBottomColor: '#1a1a1a', marginVertical: 6 },
-  hrThin: { borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 4 },
+  adressRow: { height: BP.adressRowH, position: 'relative' },
+  absender: { fontSize: 6, lineHeight: LH, marginLeft: -3.4, width: 235 },
+  empfaenger: { fontSize: 9, lineHeight: LH_TEXT, marginLeft: -3.4, marginTop: 22, width: 250 },
+  info: { position: 'absolute', left: BP.infoLeft - BP.left, top: 14.5, width: BP.infoW },
+  infoNummer: { flexDirection: 'row', justifyContent: 'space-between', fontSize: 11, lineHeight: LH },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-between', fontSize: 7, lineHeight: 1.5 },
 
-  // Address + Doc info row
-  adressInfoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  empfaengerBox: { maxWidth: 240 },
-  empfaengerLabel: { fontSize: 7, color: '#888', marginBottom: 4 },
-  empfaengerName: { fontFamily: 'Helvetica-Bold', fontSize: 9.5 },
-  empfaengerText: { fontSize: 9, lineHeight: 1.6 },
+  titel: { fontSize: 12, fontWeight: 700, lineHeight: LH, marginBottom: 20 },
+  text: { fontSize: 9, lineHeight: LH_TEXT, maxWidth: BP.textW },
+  absatz: { marginBottom: 0 },
 
-  docInfoBox: { alignItems: 'flex-end', minWidth: 160 },
-  docInfoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 8, marginBottom: 2, width: 200 },
-  docInfoLabel: { fontSize: 8, color: '#555' },
-  docInfoValue: { fontSize: 8, fontFamily: 'Helvetica-Bold', textAlign: 'right' },
+  band: { flexDirection: 'row', backgroundColor: BP.grau, paddingVertical: 2.3, paddingLeft: BP.cellPadX + 0.1, paddingRight: BP.cellPadX - 0.2 },
+  bandText: { fontSize: 9, fontWeight: 700, lineHeight: LH },
+  posRow: { flexDirection: 'row', paddingTop: 2.7, paddingBottom: BP.posAbstand, paddingLeft: BP.cellPadX + 0.1, paddingRight: BP.cellPadX - 0.2 },
+  cell: { fontSize: 9, lineHeight: LH },
+  beschreibung: { fontSize: 9, lineHeight: 1.6, marginTop: 1.3 },
+  colPos: { width: BP.colPos - BP.cellPadX },
+  colBez: { flex: 1, paddingRight: 6 },
+  colMenge: { width: BP.colMenge, textAlign: 'right' },
+  colEP: { width: BP.colEP, textAlign: 'right' },
+  colGP: { width: BP.colGP, textAlign: 'right' },
+  bild: { marginTop: 4, maxWidth: 170, maxHeight: 110, objectFit: 'contain' },
 
-  // Document title + body text
-  docTitle: { fontFamily: 'Helvetica-Bold', fontSize: 12, marginBottom: 8 },
-  bodyText: { fontSize: 8.5, lineHeight: 1.55, marginBottom: 6 },
-  betreffLabel: { fontFamily: 'Helvetica-Bold', fontSize: 9 },
+  sumRow: { flexDirection: 'row', paddingVertical: 2.4, paddingLeft: BP.colPos, paddingRight: BP.cellPadX - 0.2 },
+  sumLabel: { flex: 1, fontSize: 9, lineHeight: LH },
+  sumValue: { fontSize: 9, lineHeight: LH, textAlign: 'right' },
 
-  // Positions table
-  tableHeader: { flexDirection: 'row', backgroundColor: '#f5f5f5', borderTopWidth: 0.5, borderBottomWidth: 0.5, borderColor: '#ccc', paddingVertical: 4, paddingHorizontal: 3, marginTop: 10 },
-  tableHeaderText: { fontSize: 7.5, fontFamily: 'Helvetica-Bold', color: '#333' },
-  tableRow: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#e8e8e8', paddingVertical: 4, paddingHorizontal: 3 },
-  tableRowAlt: { backgroundColor: '#fafafa' },
-  tableCell: { fontSize: 8.5 },
-  tableCellMuted: { fontSize: 7.5, color: '#666', marginTop: 1 },
+  abschnitt: { fontSize: 12, fontWeight: 700, lineHeight: LH, marginTop: 26, marginBottom: 9 },
 
-  // Column widths (total ~507pt usable width)
-  colPos: { width: 22 },
-  colBez: { flex: 1 },
-  colMenge: { width: 42, textAlign: 'right' },
-  colEP: { width: 72, textAlign: 'right' },
-  colGP: { width: 72, textAlign: 'right' },
-  colRight: { width: 186 },
-  posBild: { marginTop: 4, maxWidth: 170, maxHeight: 110, objectFit: 'contain', alignSelf: 'flex-end' },
-
-  // Totals
-  totalsContainer: { marginTop: 10, alignItems: 'flex-end' },
-  totalsBox: { width: 220 },
-  totalsRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
-  totalsLabel: { fontSize: 8.5, color: '#333' },
-  totalsValue: { fontSize: 8.5, textAlign: 'right' },
-  totalsBold: { fontFamily: 'Helvetica-Bold', fontSize: 10 },
-  totalsHr: { borderBottomWidth: 1, borderBottomColor: '#1a1a1a', marginVertical: 3 },
-  totalsHrLight: { borderBottomWidth: 0.5, borderBottomColor: '#ccc', marginVertical: 2 },
-
-  // Footer
-  footerContainer: { position: 'absolute', bottom: 24, left: 44, right: 44 },
-  footerHr: { borderBottomWidth: 0.5, borderBottomColor: '#999', marginBottom: 5 },
-  footerRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  footerCol: { fontSize: 6.5, color: '#555', lineHeight: 1.5, flex: 1 },
-  footerColMid: { fontSize: 6.5, color: '#555', lineHeight: 1.5, flex: 1, paddingHorizontal: 8, borderLeftWidth: 0.3, borderRightWidth: 0.3, borderColor: '#ccc' },
-
-  // Payment
-  paymentBox: { marginTop: 12, fontSize: 8.5, lineHeight: 1.6 },
-  paymentHighlight: { fontFamily: 'Helvetica-Bold' },
+  footer: { position: 'absolute', top: BP.footerTop, left: BP.footerLeft, flexDirection: 'row' },
+  footerCol: { width: BP.footerColW, fontSize: 7, lineHeight: 1.64 },
+  seite: { position: 'absolute', top: BP.pageNoTop, right: BP.pageNoRight, fontSize: 7 },
 })
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function fmt(n: number): string {
-  return new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' EUR'
-}
+// ─── Bausteine ────────────────────────────────────────────────────────────────
 
-function fmtDate(d: string | null | undefined): string {
-  if (!d) return '—'
-  const [y, m, day] = d.split('-')
-  return `${day}.${m}.${y}`
-}
-
-function kundenName(k: Angebot['kunde'] | null | undefined): string {
-  if (!k) return ''
-  if (k.firmenname) return k.firmenname
-  return `${k.vorname ?? ''} ${k.nachname ?? ''}`.trim()
-}
-
-function kundenAnschrift(k: Angebot['kunde'] | null | undefined): string[] {
-  if (!k) return []
-  const lines: string[] = []
-  if (k.adresse) lines.push(k.adresse)
-  if (k.plz || k.ort) lines.push(`${k.plz ?? ''} ${k.ort ?? ''}`.trim())
-  if (k.land && k.land !== 'Österreich') lines.push(k.land)
-  return lines
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function Kopfzeile({ firma }: { firma: FirmaConfig }) {
-  return (
-    <>
-      <View style={[s.headerRow, { justifyContent: 'flex-end' }]}>
-        <View style={s.logoBox}>
-          {firma.logoUrl ? (
-            <Image src={firma.logoUrl} style={{ maxHeight: 44, maxWidth: 140, objectFit: 'contain' }} />
-          ) : (
-            <>
-              <Text style={s.logoText}>QuickEnergy</Text>
-              <Text style={s.logoTagline}>Elektrotechnik · Smart Home · Photovoltaik</Text>
-            </>
-          )}
-        </View>
-      </View>
-    </>
-  )
-}
-
-function EmpfaengerDocInfo({
-  kunde,
-  nummer,
-  nummerLabel,
-  datum,
-  datumLabel,
-  extra,
-  firma,
-  ansprechpartner,
-}: {
-  kunde: Angebot['kunde']
-  nummer: string
-  nummerLabel: string
-  datum: string
-  datumLabel: string
-  extra?: Array<[string, string]>
-  firma: FirmaConfig
-  /** Nur Ausgangsrechnung; leer = Geschaeftsfuehrer */
-  ansprechpartner?: string | null
-}) {
-  const name = kundenName(kunde)
-  const anschrift = kundenAnschrift(kunde)
-
-  return (
-    <View style={s.adressInfoRow}>
-      <View style={s.empfaengerBox}>
-        <Text style={s.empfaengerName}>{name}</Text>
-        {anschrift.map((l, i) => <Text key={i} style={s.empfaengerText}>{l}</Text>)}
-        {kunde?.uid_nr && <Text style={[s.empfaengerText, { color: '#666', marginTop: 3 }]}>UID: {kunde.uid_nr}</Text>}
-      </View>
-
-      <View style={s.docInfoBox}>
-        <DocInfoRow label={nummerLabel} value={nummer} />
-        <DocInfoRow label={datumLabel} value={fmtDate(datum)} />
-        {kunde && <DocInfoRow label="Ihr Ansprechpartner" value={ansprechpartner?.trim() || firma.gf} />}
-        {extra?.map(([l, v]) => <DocInfoRow key={l} label={l} value={v} />)}
-      </View>
-    </View>
-  )
-}
-
-function DocInfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={s.docInfoRow}>
-      <Text style={s.docInfoLabel}>{label}</Text>
-      <Text style={s.docInfoValue}>{value}</Text>
-    </View>
-  )
-}
-
-function Positionen({ positionen }: { positionen: DokumentPosition[] }) {
+function RichText({ content }: { content: string }) {
   return (
     <View>
-      {/* Table header */}
-      <View style={s.tableHeader}>
-        <Text style={[s.tableHeaderText, s.colPos]}>Pos.</Text>
-        <Text style={[s.tableHeaderText, s.colBez]}>Beschreibung</Text>
-        <Text style={[s.tableHeaderText, s.colMenge]}>Menge</Text>
-        <Text style={[s.tableHeaderText, s.colEP]}>Einzelpreis</Text>
-        <Text style={[s.tableHeaderText, s.colGP]}>Gesamtpreis</Text>
-      </View>
+      {richAbsaetze(content).map((spans, i) =>
+        spans.length === 0
+          ? <Text key={i} style={s.text}>{' '}</Text>
+          : (
+            <Text key={i} style={s.text}>
+              {spans.map((sp, j) => (
+                <Text key={j} style={{
+                  fontWeight: sp.bold ? 700 : 400,
+                  fontStyle: sp.italic ? 'italic' : 'normal',
+                  textDecoration: sp.underline ? 'underline' : 'none',
+                }}>{sp.text}</Text>
+              ))}
+            </Text>
+          ))}
+    </View>
+  )
+}
 
-      {positionen.map((p, i) => (
-        <View key={p.id ?? i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]} wrap={false}>
-          <Text style={[s.tableCell, s.colPos]}>{i + 1}.</Text>
-          <View style={s.colBez}>
-            <Text style={s.tableCell}>{p.bezeichnung}</Text>
-            {p.beschreibung ? <Text style={s.tableCellMuted}>{p.beschreibung}</Text> : null}
+function Adressblock({ m }: { m: BriefModell }) {
+  return (
+    <View style={s.adressRow}>
+      <Text style={s.absender}>{m.absenderzeile}</Text>
+      <View style={s.empfaenger}>
+        {m.empfaenger.map((z, i) => <Text key={i}>{z}</Text>)}
+      </View>
+      <View style={s.info}>
+        <View style={s.infoNummer}>
+          <Text>{m.nummerLabel}</Text>
+          <Text>{m.nummer}</Text>
+        </View>
+        {m.info.map((gruppe, gi) => (
+          <View key={gi} style={{ marginTop: gi === 0 ? 0.5 : 9 }}>
+            {gruppe.map(([l, v]) => (
+              <View key={l} style={s.infoRow}>
+                <Text>{l}</Text>
+                <Text>{v}</Text>
+              </View>
+            ))}
           </View>
-          <View style={s.colRight}>
-            <View style={{ flexDirection: 'row' }}>
-              <Text style={[s.tableCell, s.colMenge]}>
-                {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2 }).format(p.menge)} {p.einheit}
-              </Text>
-              <Text style={[s.tableCell, s.colEP]}>
-                {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.einzelpreis_netto)} EUR
-              </Text>
-              <Text style={[s.tableCell, s.colGP]}>
-                {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(p.zeilenbetrag_netto)} EUR
-              </Text>
+        ))}
+      </View>
+    </View>
+  )
+}
+
+function Positionen({ m }: { m: BriefModell }) {
+  return (
+    <View style={{ marginTop: 10 }}>
+      {/* fixed: Tabellenkopf wiederholt sich auf jeder Seite, über die die Tabelle läuft */}
+      <View style={s.band} fixed>
+        <Text style={[s.bandText, s.colPos]}>Pos.</Text>
+        <Text style={[s.bandText, s.colBez]}>Beschreibung</Text>
+        <Text style={[s.bandText, s.colMenge]}>Menge</Text>
+        {m.mitPreisen && <Text style={[s.bandText, s.colEP]}>Einzelpreis</Text>}
+        {m.mitPreisen && <Text style={[s.bandText, s.colGP]}>Gesamtpreis</Text>}
+      </View>
+      {m.positionen.map((p, i) => <PositionZeile key={p.id ?? i} p={p} nr={i + 1} mitPreisen={m.mitPreisen} />)}
+      {m.summen && (
+        <View style={{ borderTopWidth: 0.5, borderTopColor: '#d4d4d4' }}>
+          <Summenblock zeilen={m.summen} />
+        </View>
+      )}
+    </View>
+  )
+}
+
+function PositionZeile({ p, nr, mitPreisen }: { p: DokumentPosition; nr: number; mitPreisen: boolean }) {
+  return (
+    <View style={s.posRow} wrap={false}>
+      <Text style={[s.cell, s.colPos]}>{nr}.</Text>
+      <View style={s.colBez}>
+        <Text style={[s.cell, { fontWeight: 700 }]}>{p.bezeichnung}</Text>
+        {p.beschreibung ? <Text style={s.beschreibung}>{p.beschreibung}</Text> : null}
+        {p.bild_url ? <Image src={p.bild_url} style={s.bild} /> : null}
+      </View>
+      <Text style={[s.cell, s.colMenge]}>{fmtMenge(p)}</Text>
+      {mitPreisen && <Text style={[s.cell, s.colEP]}>{fmtEur(p.einzelpreis_netto)}</Text>}
+      {mitPreisen && <Text style={[s.cell, s.colGP]}>{fmtEur(p.zeilenbetrag_netto)}</Text>}
+    </View>
+  )
+}
+
+function Summenblock({ zeilen, labelEinzug = true }: { zeilen: SummenZeile[]; labelEinzug?: boolean }) {
+  return (
+    <View wrap={false}>
+      {zeilen.map((z, i) => {
+        const doppelt = z.bold && !z.grau
+        return (
+          <View key={i}>
+            <View style={[s.sumRow, z.grau ? { backgroundColor: BP.grau } : {}, labelEinzug ? {} : { paddingLeft: BP.cellPadX + 0.1 }]}>
+              <Text style={[s.sumLabel, z.bold ? { fontWeight: 700 } : {}]}>{z.label || ' '}</Text>
+              <Text style={[s.sumValue, z.bold ? { fontWeight: 700 } : {}]}>{z.value}</Text>
             </View>
-            {p.bild_url ? <Image src={p.bild_url} style={s.posBild} /> : null}
+            {/* Restforderung: doppelt unterstrichen wie in sevDesk */}
+            {doppelt && (
+              <View style={{ alignSelf: 'flex-end', width: 70, marginRight: BP.cellPadX - 0.2 }}>
+                <View style={{ borderTopWidth: 0.6, borderTopColor: '#000' }} />
+                <View style={{ borderTopWidth: 0.6, borderTopColor: '#000', marginTop: 1.4 }} />
+              </View>
+            )}
           </View>
+        )
+      })}
+    </View>
+  )
+}
+
+function Verrechnung({ v }: { v: NonNullable<BriefModell['verrechnung']> }) {
+  const cols = [
+    { w: 60, align: 'left' as const },
+    { w: 85, align: 'left' as const },
+    { w: 50, align: 'right' as const },
+    { w: 95, align: 'right' as const },
+    { w: 90, align: 'right' as const },
+    { flex: 1, align: 'right' as const },
+  ]
+  const cell = (i: number, text: string, bold = false) => (
+    <Text key={i} style={[s.cell, { textAlign: cols[i].align, fontWeight: bold ? 700 : 400 }, cols[i].w ? { width: cols[i].w } : { flex: 1 }]}>{text}</Text>
+  )
+  return (
+    <View wrap={false}>
+      <Text style={s.abschnitt}>Verrechnung der Teilrechnungen</Text>
+      <View style={s.band}>
+        {['Datum', 'Rechnungs-Nr.', 'Steuersatz', 'Netto', 'USt.', 'Brutto'].map((h, i) => (
+          <Text key={h} style={[s.bandText, { textAlign: cols[i].align }, cols[i].w ? { width: cols[i].w } : { flex: 1 }]}>{h}</Text>
+        ))}
+      </View>
+      {v.zeilen.map((z, i) => (
+        <View key={i} style={[s.sumRow, { paddingLeft: BP.cellPadX + 0.1 }]}>
+          {[z.datum, z.nummer, z.satz, z.netto, z.ust, z.brutto].map((t, ci) => cell(ci, t))}
+        </View>
+      ))}
+      <View style={[s.sumRow, { paddingLeft: BP.cellPadX + 0.1, borderTopWidth: 0.5, borderTopColor: '#000' }]}>
+        <Text style={[s.cell, { width: 195, fontWeight: 700 }]}>Summe Teilrechnungen</Text>
+        {cell(3, v.summe.netto, true)}
+        {cell(4, v.summe.ust, true)}
+        {cell(5, v.summe.brutto, true)}
+      </View>
+    </View>
+  )
+}
+
+function Unterschriften() {
+  return (
+    <View style={{ marginTop: 40, flexDirection: 'row', justifyContent: 'space-between' }} wrap={false}>
+      {['Datum, Unterschrift Übergeber', 'Datum, Unterschrift Empfänger'].map(t => (
+        <View key={t} style={{ width: 200 }}>
+          <View style={{ borderTopWidth: 0.5, borderTopColor: '#000', marginBottom: 3 }} />
+          <Text style={{ fontSize: 7 }}>{t}</Text>
         </View>
       ))}
     </View>
   )
 }
 
-// Lieferschein: nur Mengen, keine Preise
-function PositionenOhnePreise({ positionen }: { positionen: DokumentPosition[] }) {
-  return (
-    <View>
-      <View style={s.tableHeader}>
-        <Text style={[s.tableHeaderText, s.colPos]}>Pos.</Text>
-        <Text style={[s.tableHeaderText, s.colBez]}>Beschreibung</Text>
-        <Text style={[s.tableHeaderText, s.colMenge]}>Menge</Text>
-        <Text style={[s.tableHeaderText, { width: 60, textAlign: 'right' }]}>Einheit</Text>
-      </View>
-
-      {positionen.map((p, i) => (
-        <View key={p.id ?? i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]} wrap={false}>
-          <Text style={[s.tableCell, s.colPos]}>{i + 1}.</Text>
-          <View style={s.colBez}>
-            <Text style={s.tableCell}>{p.bezeichnung}</Text>
-            {p.beschreibung ? <Text style={s.tableCellMuted}>{p.beschreibung}</Text> : null}
-            {p.bild_url ? <Image src={p.bild_url} style={{ marginTop: 4, maxWidth: 120, maxHeight: 80, objectFit: 'contain' }} /> : null}
-          </View>
-          <Text style={[s.tableCell, s.colMenge]}>
-            {new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2 }).format(p.menge)}
-          </Text>
-          <Text style={[s.tableCell, { width: 60, textAlign: 'right' }]}>{p.einheit}</Text>
-        </View>
-      ))}
-    </View>
-  )
-}
-
-function Summen({
-  netto20, netto10, netto0, ust20, ust10, brutto, rabatt, rabattBetrag, schluss,
-}: {
-  netto20: number; netto10: number; netto0: number
-  ust20: number; ust10: number; brutto: number; rabatt: number; rabattBetrag: number
-  /** Schlussrechnung: bereits gestellte Teilrechnungen — die gespeicherten Summen sind dann der Rest */
-  schluss?: RechnungsuebersichtZeile[] | null
-}) {
-  const istSchluss = !!schluss && schluss.length > 0
-  const bereits = istSchluss ? summiereUebersicht(schluss!) : null
-
-  // Gesamtauftrag = Rest (gespeichert) + bereits verrechnete Teilrechnungen
-  const voll20 = netto20 + (bereits?.netto_20 ?? 0)
-  const voll10 = netto10 + (bereits?.netto_10 ?? 0)
-  const voll0  = netto0  + (bereits?.netto_0 ?? 0)
-  const vollUst20 = ust20 + (bereits?.ust_20 ?? 0)
-  const vollUst10 = ust10 + (bereits?.ust_10 ?? 0)
-  const vollNetto = voll20 + voll10 + voll0
-  const vollBrutto = brutto + (bereits?.brutto ?? 0)
-
-  // Bei Rabatt zuerst die Zwischensumme, damit der Abzug fuer den Kunden aufgeht
-  const r = rabattAnzeige(vollNetto, rabatt, rabattBetrag)
-
-  return (
-    <View style={s.totalsContainer}>
-      <View style={[s.totalsBox, istSchluss ? { width: 300 } : {}]} wrap={false}>
-        <View style={s.totalsHrLight} />
-        {r && <TotalsRow label="Zwischensumme netto" value={fmt(r.nettoVorRabatt)} />}
-        {r && <TotalsRow label={r.label} value={`– ${fmt(r.betrag)}`} />}
-        {voll20 > 0 && <TotalsRow label="Gesamtbetrag netto (20% USt)" value={fmt(voll20)} />}
-        {voll10 > 0 && <TotalsRow label="Gesamtbetrag netto (10% USt)" value={fmt(voll10)} />}
-        {voll0 > 0 && <TotalsRow label="Gesamtbetrag netto (0% USt)" value={fmt(voll0)} />}
-        <View style={s.totalsHrLight} />
-        {vollUst20 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 20%" value={fmt(vollUst20)} />}
-        {vollUst10 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 10%" value={fmt(vollUst10)} />}
-        <View style={s.totalsHr} />
-        <View style={s.totalsRow}>
-          <Text style={[s.totalsLabel, istSchluss ? {} : s.totalsBold]}>Gesamtbetrag brutto</Text>
-          <Text style={[s.totalsValue, istSchluss ? {} : s.totalsBold]}>{fmt(vollBrutto)}</Text>
-        </View>
-
-        {istSchluss && bereits && (
-          <>
-            {/* Abzug der Teilrechnungen — brutto, weil deren USt bereits in Rechnung gestellt wurde */}
-            <View style={{ marginTop: 6 }}>
-              {schluss!.map((z, i) => {
-                const zb = summiereUebersicht([z])
-                return (
-                  <TotalsRow
-                    key={i}
-                    label={`abzgl. ${z.label} Nr. ${z.rechnungsnummer} vom ${fmtDate(z.datum)} (brutto)`}
-                    value={`– ${fmt(zb.brutto)}`}
-                  />
-                )
-              })}
-            </View>
-            <View style={s.totalsHrLight} />
-            <TotalsRow label="Restbetrag netto" value={fmt(netto20 + netto10 + netto0)} />
-            {ust20 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 20%" value={fmt(ust20)} />}
-            {ust10 > 0 && <TotalsRow label="zzgl. Umsatzsteuer 10%" value={fmt(ust10)} />}
-            <View style={s.totalsHr} />
-            <View style={[s.totalsRow, { backgroundColor: '#f5f5f5', paddingHorizontal: 4 }]}>
-              <Text style={[s.totalsLabel, s.totalsBold, { fontSize: 11 }]}>Zu zahlender Restbetrag brutto</Text>
-              <Text style={[s.totalsValue, s.totalsBold, { fontSize: 11 }]}>{fmt(brutto)}</Text>
-            </View>
-          </>
-        )}
-      </View>
-    </View>
-  )
-}
-
-function TotalsRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={s.totalsRow}>
-      <Text style={s.totalsLabel}>{label}</Text>
-      <Text style={s.totalsValue}>{value}</Text>
-    </View>
-  )
-}
-
-function Fusszeile({ firma }: { firma: FirmaConfig }) {
-  return (
-    <View style={s.footerContainer} fixed>
-      <View style={s.footerHr} />
-      <View style={s.footerRow}>
-        <Text style={s.footerCol}>
-          {firma.name}{'\n'}
-          {firma.strasse}, {firma.plzOrt}{'\n'}
-          E-Mail {firma.email}{'\n'}
-          Web {firma.web}
-        </Text>
-        <Text style={s.footerColMid}>
-          {firma.gericht}{'\n'}
-          FN-Nr.: {firma.fn}{'\n'}
-          USt-ID {firma.uid}{'\n'}
-          Steuer-Nr.: {firma.steuerNr}{'\n'}
-          Geschäftsführung {firma.gf}
-        </Text>
-        <Text style={[s.footerCol, { textAlign: 'right' }]}>
-          Bank {firma.bank}{'\n'}
-          Konto {firma.konto}{'\n'}
-          BLZ {firma.blz}{'\n'}
-          IBAN {firma.iban}{'\n'}
-          BIC {firma.bic}
-        </Text>
-      </View>
-    </View>
-  )
-}
-
-// ─── Dokument-Typ-Definitionen ────────────────────────────────────────────────
+// ─── Haupt-Export ─────────────────────────────────────────────────────────────
 
 type DokumentInput =
   | { typ: 'angebot'; doc: Angebot }
@@ -457,177 +236,69 @@ type DokumentInput =
   | { typ: 'rechnung'; doc: Ausgangsrechnung }
   | { typ: 'lieferschein'; doc: Lieferschein }
 
-function getTitel(input: DokumentInput): string {
-  if (input.typ === 'lieferschein') return 'Lieferschein'
-  if (input.typ === 'angebot') return 'Angebot'
-  if (input.typ === 'auftragsbestaetigung') return 'Auftragsbestätigung'
-  const r = input.doc as Ausgangsrechnung
-  if (r.typ === 'teilrechnung') return `${r.teilrechnungs_prozent ?? ''}% Teilrechnung`
-  if (r.typ === 'schlussrechnung') {
-    const hatTeil = (r.rechnungsuebersicht ?? []).length > 0 || (r.bereits_berechnet_netto ?? 0) > 0
-    return hatTeil ? 'Schlussrechnung' : 'Rechnung'
-  }
-  if (r.typ === 'stornorechnung') return `Stornorechnung`
-  if (r.typ === 'gutschrift') return `Gutschrift-Nr. ${r.rechnungsnummer}`
-  return 'Rechnung'
-}
-
-function getNummer(input: DokumentInput): string {
-  if (input.typ === 'lieferschein') return (input.doc as Lieferschein).lieferschein_nr
-  if (input.typ === 'angebot') return (input.doc as Angebot).angebotsnummer
-  if (input.typ === 'auftragsbestaetigung') return (input.doc as Auftragsbestaetigung).ab_nummer
-  return (input.doc as Ausgangsrechnung).rechnungsnummer
-}
-
-function getNummerLabel(input: DokumentInput): string {
-  if (input.typ === 'lieferschein') return 'Lieferschein-Nr.'
-  if (input.typ === 'angebot') return 'Angebots-Nr.'
-  if (input.typ === 'auftragsbestaetigung') return 'Auftrags-Nr.'
-  if ((input.doc as Ausgangsrechnung).typ === 'gutschrift') return 'Gutschrift-Nr.'
-  return 'Rechnungs-Nr.'
-}
-
-function getDatum(input: DokumentInput): string {
-  if (input.typ === 'lieferschein') return (input.doc as Lieferschein).lieferdatum
-  if (input.typ === 'angebot') return (input.doc as Angebot).angebotsdatum
-  if (input.typ === 'auftragsbestaetigung') return (input.doc as Auftragsbestaetigung).ab_datum
-  return (input.doc as Ausgangsrechnung).rechnungsdatum
-}
-
-function getExtraInfo(input: DokumentInput): Array<[string, string]> {
-  const extra: Array<[string, string]> = []
-  if (input.typ === 'lieferschein') {
-    const ls = input.doc as Lieferschein
-    if (ls.angebot_id) extra.push(['Bezug', 'Angebot'])
-    return extra
-  }
-  if (input.typ === 'angebot') {
-    const a = input.doc as Angebot
-    if (a.gueltig_bis) extra.push(['Gültig bis', fmtDate(a.gueltig_bis)])
-    if (a.referenz_bestellnr) extra.push(['Referenz', a.referenz_bestellnr])
-  }
-  if (input.typ === 'auftragsbestaetigung') {
-    const ab = input.doc as Auftragsbestaetigung
-    if (ab.lieferdatum) extra.push(['Lieferdatum', fmtDate(ab.lieferdatum)])
-    if (ab.zahlungsziel_tage) extra.push(['Zahlungsziel', `${ab.zahlungsziel_tage} Tage`])
-  }
-  if (input.typ === 'rechnung') {
-    const r = input.doc as Ausgangsrechnung
-    if (r.leistungsdatum) extra.push(['Leistungsdatum', fmtDate(r.leistungsdatum)])
-    else if (r.leistungszeitraum_von) extra.push(['Leistungszeitraum', `${fmtDate(r.leistungszeitraum_von)} – ${fmtDate(r.leistungszeitraum_bis)}`])
-    // Gutschrift: keine Zahlungsfrist für den Kunden
-    if (r.typ === 'gutschrift') return extra
-    if (r.faelligkeitsdatum) extra.push(['Fälligkeit', fmtDate(r.faelligkeitsdatum)])
-    if (r.zahlungsziel_tage) extra.push(['Zahlungsziel', `${r.zahlungsziel_tage} Tage`])
-  }
-  return extra
-}
-
-// ─── Haupt-Export ─────────────────────────────────────────────────────────────
-
 export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten | null }) {
-  const { doc } = input
-  const F: FirmaConfig = input.firma ? firmaToConfig(input.firma) : FIRMA_DEFAULT
-  const positionen = (doc.positionen ?? []) as DokumentPosition[]
-  const titel = getTitel(input)
-  const nummer = getNummer(input)
-  const nummerLabel = getNummerLabel(input)
-  const datum = getDatum(input)
-  const extra = getExtraInfo(input)
-  const istLieferschein = input.typ === 'lieferschein'
-  const _ar = input.typ === 'rechnung' ? (input.doc as Ausgangsrechnung) : null
-  const _stornoRef = _ar?.storno_zu_rechnung
-  const _stornoNr = Array.isArray(_stornoRef) ? _stornoRef[0]?.rechnungsnummer : _stornoRef?.rechnungsnummer
-  const stornoHinweis = _ar?.typ === 'stornorechnung' && _stornoNr
-    ? `Stornorechnung zur Rechnung Nr. ${_stornoNr}`
-    : null
-  // Gutschrift ist negativ gespeichert (Umsatzminderung), auf dem Beleg aber positiv
-  const vz = _ar?.typ === 'gutschrift' ? -1 : 1
+  const F = firmaConfig(input.firma)
+  const m = briefModell(input, F)
+  const logo = F.logoUrl || assetUrl(BRIEFPAPIER_LOGO)
 
   return (
-    <Document
-      title={`${titel} ${nummer}`}
-      author={F.name}
-      creator="QuickEnergy Dashboard"
-    >
+    <Document title={m.titel} author={F.name} creator="QuickEnergy Dashboard">
       <Page size="A4" style={s.page}>
-        <Kopfzeile firma={F} />
+        {BP.falzmarken.map(y => <View key={y} style={[s.falz, { top: y }]} fixed />)}
+        <Image src={logo} style={s.logo} fixed />
 
-        <EmpfaengerDocInfo
-          kunde={doc.kunde ?? null}
-          nummer={nummer}
-          nummerLabel={nummerLabel}
-          datum={datum}
-          datumLabel="Datum"
-          extra={extra}
-          firma={F}
-          ansprechpartner={_ar?.ansprechpartner ?? null}
-        />
+        <Adressblock m={m} />
 
-        {/* Dokumenttitel */}
-        <Text style={s.docTitle}>{titel}</Text>
+        <Text style={s.titel}>{m.titel}</Text>
+        {m.betreff && <Text style={[s.text, { fontWeight: 700, marginBottom: 10.8 }]}>Betreff: {m.betreff}</Text>}
+        {m.hinweis && <Text style={[s.text, { fontWeight: 700, marginBottom: 10.8 }]}>{m.hinweis}</Text>}
+        {m.kopftext && <RichText content={m.kopftext} />}
 
-        {/* Kopftext + Betreff */}
-        {doc.kopftext && renderRichText(doc.kopftext, s.bodyText)}
-        {stornoHinweis && (
-          <Text style={[s.bodyText, { fontFamily: 'Helvetica-Bold' }]}>{stornoHinweis}</Text>
-        )}
-        {doc.betreff && (
-          <Text style={[s.bodyText, s.betreffLabel]}>Betreff: {doc.betreff}</Text>
-        )}
+        <Positionen m={m} />
 
-        {/* Positionen — Lieferschein ohne Preise */}
-        {istLieferschein
-          ? <PositionenOhnePreise positionen={positionen} />
-          : <Positionen positionen={positionen} />}
-
-        {/* Summen — auf dem Lieferschein bewusst keine Betraege */}
-        {!istLieferschein && (
-          <Summen
-            netto20={vz * (doc as Angebot).summe_netto_20}
-            netto10={vz * (doc as Angebot).summe_netto_10}
-            netto0={vz * (doc as Angebot).summe_netto_0}
-            ust20={vz * (doc as Angebot).ust_20}
-            ust10={vz * (doc as Angebot).ust_10}
-            brutto={vz * (doc as Angebot).summe_brutto}
-            rabatt={(doc as Angebot).rabatt_gesamt_prozent}
-            rabattBetrag={(doc as Angebot).rabatt_gesamt_betrag ?? 0}
-            schluss={_ar?.typ === 'schlussrechnung' ? _ar.rechnungsuebersicht : null}
-          />
+        {m.verrechnung && <Verrechnung v={m.verrechnung} />}
+        {m.schlussrechnung && (
+          <View wrap={false}>
+            <Text style={s.abschnitt}>Schlussrechnung</Text>
+            <View style={s.band}>
+              <Text style={[s.bandText, { flex: 1 }]}>Beschreibung</Text>
+              <Text style={s.bandText}>Betrag</Text>
+            </View>
+            <Summenblock zeilen={m.schlussrechnung} labelEinzug={false} />
+          </View>
         )}
 
-        {/* Lieferadresse */}
-        {istLieferschein && (input.doc as Lieferschein).lieferadresse && (
-          <View style={{ marginTop: 14 }} wrap={false}>
-            <Text style={[s.bodyText, { fontFamily: 'Helvetica-Bold', marginBottom: 2 }]}>Lieferadresse</Text>
-            {(input.doc as Lieferschein).lieferadresse!.split('\n').map((z, i) => (
-              <Text key={i} style={[s.bodyText, { marginBottom: 0 }]}>{z}</Text>
+        {m.lieferadresse && (
+          <View style={{ marginTop: 20 }} wrap={false}>
+            <Text style={[s.text, { fontWeight: 700 }]}>Lieferadresse</Text>
+            {m.lieferadresse.map((z, i) => <Text key={i} style={s.text}>{z}</Text>)}
+          </View>
+        )}
+
+        {(m.zahlungsbedingungen || m.fusstext) && (
+          <View style={{ marginTop: 26 }}>
+            {m.zahlungsbedingungen?.map((z, i) => (
+              <Text key={i} style={[s.text, { marginBottom: i === m.zahlungsbedingungen!.length - 1 ? 10.8 : 0 }]}>{z}</Text>
             ))}
+            {m.fusstext && <RichText content={m.fusstext} />}
+          </View>
+        )}
+        {m.gruss && (
+          <View style={{ marginTop: 10.8 }} wrap={false}>
+            {m.gruss.map((z, i) => <Text key={i} style={s.text}>{z}</Text>)}
           </View>
         )}
 
-        {/* Fußtext / Zahlungsinfo */}
-        {doc.fusstext && (
-          <View style={{ marginTop: 16 }} wrap={false}>
-            {renderRichText(doc.fusstext, s.bodyText)}
-          </View>
-        )}
+        {m.unterschriften && <Unterschriften />}
 
-        {/* Unterschriften — nur Lieferschein, am Ende des Inhalts */}
-        {istLieferschein && (
-          <View style={{ marginTop: 30, flexDirection: 'row', justifyContent: 'space-between' }} wrap={false}>
-            <View style={{ width: 200 }}>
-              <View style={{ borderTopWidth: 0.5, borderTopColor: '#888', marginBottom: 3 }} />
-              <Text style={{ fontSize: 7.5, color: '#555' }}>Datum, Unterschrift Übergeber</Text>
+        <Text style={s.seite} fixed render={({ pageNumber, totalPages }) => `${pageNumber}/${totalPages}`} />
+        <View style={s.footer} fixed>
+          {m.footer.map((spalte, i) => (
+            <View key={i} style={[s.footerCol, i === 0 ? { lineHeight: 1.43, paddingRight: 8 } : {}]}>
+              {spalte.map((z, j) => <Text key={j}>{z}</Text>)}
             </View>
-            <View style={{ width: 200 }}>
-              <View style={{ borderTopWidth: 0.5, borderTopColor: '#888', marginBottom: 3 }} />
-              <Text style={{ fontSize: 7.5, color: '#555' }}>Datum, Unterschrift Empfänger</Text>
-            </View>
-          </View>
-        )}
-
-        <Fusszeile firma={F} />
+          ))}
+        </View>
       </Page>
     </Document>
   )
