@@ -589,11 +589,27 @@ function FaelligkeitCell({ date }: { date: string | null }) {
 }
 
 
+type DatumSort = 'asc' | 'desc' | null
+
+// Filter/Sortierung überleben das Öffnen eines Belegs (Seite wird beim Zurückkehren neu gemountet)
+function useStoredState<T>(key: string, initial: T, storage: 'local' | 'session') {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const raw = (storage === 'local' ? localStorage : sessionStorage).getItem(key)
+      return raw != null ? JSON.parse(raw) as T : initial
+    } catch { return initial }
+  })
+  useEffect(() => {
+    try { (storage === 'local' ? localStorage : sessionStorage).setItem(key, JSON.stringify(value)) } catch { /* ignore */ }
+  }, [key, value, storage])
+  return [value, setValue] as const
+}
+
 export function InboxPage() {
-  const [activeTab, setActiveTab] = useState<FilterTab>('alle')
+  const [storedTab, setActiveTab] = useStoredState<FilterTab>('inbox.tab', 'alle', 'session')
   const [kpiFilter, setKpiFilter] = useState<'heute_faellig' | 'skonto_alarm' | null>(null)
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(null)
-  const [datumSort, setDatumSort] = useState<'asc' | 'desc' | null>(null)
+  const [storedMonth, setSelectedMonth] = useStoredState<string | null>('inbox.month', null, 'session')
+  const [datumSort, setDatumSort] = useStoredState<DatumSort>('inbox.datumSort', null, 'local')
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -700,6 +716,10 @@ export function InboxPage() {
     }
     return ids
   }, [allRechnungen, dismissedKeys])
+
+  // Gespeicherter Monat/Tab kann inzwischen leer sein → dann auf "alle" zurückfallen
+  const selectedMonth = storedMonth && availableMonths.includes(storedMonth) ? storedMonth : null
+  const activeTab: FilterTab = storedTab === 'duplikate' && duplikateIds.size === 0 ? 'alle' : storedTab
 
   const baseFiltered = allRechnungen.filter(r => {
     if (kpiFilter === 'heute_faellig') {
@@ -892,6 +912,24 @@ export function InboxPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <div className="relative">
+              <select
+                value={datumSort ?? ''}
+                onChange={e => setDatumSort((e.target.value || null) as DatumSort)}
+                title="Sortierung"
+                className={cn(
+                  'h-7 pl-2.5 pr-7 text-xs rounded-pill border appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-accent-400',
+                  datumSort
+                    ? 'border-accent-400 bg-accent-50 text-accent-600 font-medium'
+                    : 'border-border/60 bg-bg-surface text-ink-muted hover:bg-bg-muted'
+                )}
+              >
+                <option value="">Zuletzt hochgeladen</option>
+                <option value="desc">Datum: neueste zuerst</option>
+                <option value="asc">Datum: älteste zuerst</option>
+              </select>
+              <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-ink" />
+            </div>
             {kpiFilter && (
               <button
                 onClick={() => setKpiFilter(null)}
@@ -1251,7 +1289,7 @@ function RechnungenTable({ rows, onRowClick, selectedIds, onToggle, onToggleAll,
   selectedIds: Set<string>
   onToggle: (id: string) => void
   onToggleAll: (ids: string[]) => void
-  datumSort: 'asc' | 'desc' | null
+  datumSort: DatumSort
   onDatumSort: () => void
 }) {
   const { mutate: updateRechnung } = useUpdateRechnung()
