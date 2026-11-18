@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { LoginPage } from '@/pages/LoginPage'
+import { PasswortNeuPage } from '@/pages/PasswortNeuPage'
 import { HomePage } from '@/features/home/HomePage'
 import { InboxPage } from '@/features/inbox/InboxPage'
 import { BuchungPage } from '@/features/buchung/BuchungPage'
@@ -91,6 +92,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/passwort-neu" element={<PasswortNeuPage />} />
 
       {/* Admin-only routes */}
       <Route path="/"                    element={<AdminRoute><HomePage /></AdminRoute>} />
