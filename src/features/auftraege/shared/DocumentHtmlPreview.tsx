@@ -88,10 +88,11 @@ type DocInput =
   | { typ: 'rechnung'; doc: Ausgangsrechnung; firma?: FirmaStammdaten | null }
   | { typ: 'lieferschein'; doc: Lieferschein; firma?: FirmaStammdaten | null }
 
-function getNummerLabel(typ: DocInput['typ']) {
-  if (typ === 'lieferschein') return 'Lieferschein-Nr.'
-  if (typ === 'angebot') return 'Angebots-Nr.'
-  if (typ === 'auftragsbestaetigung') return 'Auftrags-Nr.'
+function getNummerLabel(input: DocInput) {
+  if (input.typ === 'lieferschein') return 'Lieferschein-Nr.'
+  if (input.typ === 'angebot') return 'Angebots-Nr.'
+  if (input.typ === 'auftragsbestaetigung') return 'Auftrags-Nr.'
+  if (input.doc.typ === 'gutschrift') return 'Gutschrift-Nr.'
   return 'Rechnungs-Nr.'
 }
 function getNummer(input: DocInput) {
@@ -126,6 +127,7 @@ function getExtraInfo(input: DocInput): [string, string][] {
   const rows: [string, string][] = []
   if (r.leistungsdatum) rows.push(['Leistungsdatum', fmtDate(r.leistungsdatum)])
   else if (r.leistungszeitraum_von) rows.push(['Leistungszeitraum', `${fmtDate(r.leistungszeitraum_von)} – ${fmtDate(r.leistungszeitraum_bis)}`])
+  if (r.typ === 'gutschrift') return rows
   if (r.faelligkeitsdatum) rows.push(['Fälligkeit', fmtDate(r.faelligkeitsdatum)])
   if (r.zahlungsziel_tage) rows.push(['Zahlungsziel', `${r.zahlungsziel_tage} Tage`])
   return rows
@@ -141,6 +143,7 @@ function getTitel(input: DocInput) {
     return hatTeil ? 'Schlussrechnung' : 'Rechnung'
   }
   if (r.typ === 'stornorechnung') return 'Stornorechnung'
+  if (r.typ === 'gutschrift') return `Gutschrift-Nr. ${r.rechnungsnummer}`
   return 'Rechnung'
 }
 
@@ -231,7 +234,7 @@ export function DocumentHtmlPreview(input: DocInput) {
 
         <div style={{ minWidth: 190 }}>
           {[
-            [getNummerLabel(input.typ), getNummer(input)],
+            [getNummerLabel(input), getNummer(input)],
             ['Datum', fmtDate(getDatum(input))],
             ...(kunde ? [['Ihr Ansprechpartner', (input.typ === 'rechnung' ? input.doc.ansprechpartner?.trim() : null) || F.gf]] : []),
             ...extra,

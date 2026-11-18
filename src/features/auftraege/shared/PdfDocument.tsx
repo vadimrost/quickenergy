@@ -468,6 +468,7 @@ function getTitel(input: DokumentInput): string {
     return hatTeil ? 'Schlussrechnung' : 'Rechnung'
   }
   if (r.typ === 'stornorechnung') return `Stornorechnung`
+  if (r.typ === 'gutschrift') return `Gutschrift-Nr. ${r.rechnungsnummer}`
   return 'Rechnung'
 }
 
@@ -482,6 +483,7 @@ function getNummerLabel(input: DokumentInput): string {
   if (input.typ === 'lieferschein') return 'Lieferschein-Nr.'
   if (input.typ === 'angebot') return 'Angebots-Nr.'
   if (input.typ === 'auftragsbestaetigung') return 'Auftrags-Nr.'
+  if ((input.doc as Ausgangsrechnung).typ === 'gutschrift') return 'Gutschrift-Nr.'
   return 'Rechnungs-Nr.'
 }
 
@@ -513,6 +515,8 @@ function getExtraInfo(input: DokumentInput): Array<[string, string]> {
     const r = input.doc as Ausgangsrechnung
     if (r.leistungsdatum) extra.push(['Leistungsdatum', fmtDate(r.leistungsdatum)])
     else if (r.leistungszeitraum_von) extra.push(['Leistungszeitraum', `${fmtDate(r.leistungszeitraum_von)} – ${fmtDate(r.leistungszeitraum_bis)}`])
+    // Gutschrift: keine Zahlungsfrist für den Kunden
+    if (r.typ === 'gutschrift') return extra
     if (r.faelligkeitsdatum) extra.push(['Fälligkeit', fmtDate(r.faelligkeitsdatum)])
     if (r.zahlungsziel_tage) extra.push(['Zahlungsziel', `${r.zahlungsziel_tage} Tage`])
   }
@@ -537,6 +541,8 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
   const stornoHinweis = _ar?.typ === 'stornorechnung' && _stornoNr
     ? `Stornorechnung zur Rechnung Nr. ${_stornoNr}`
     : null
+  // Gutschrift ist negativ gespeichert (Umsatzminderung), auf dem Beleg aber positiv
+  const vz = _ar?.typ === 'gutschrift' ? -1 : 1
 
   return (
     <Document
@@ -578,12 +584,12 @@ export function QuickEnergyPdf(input: DokumentInput & { firma?: FirmaStammdaten 
         {/* Summen — auf dem Lieferschein bewusst keine Betraege */}
         {!istLieferschein && (
           <Summen
-            netto20={(doc as Angebot).summe_netto_20}
-            netto10={(doc as Angebot).summe_netto_10}
-            netto0={(doc as Angebot).summe_netto_0}
-            ust20={(doc as Angebot).ust_20}
-            ust10={(doc as Angebot).ust_10}
-            brutto={(doc as Angebot).summe_brutto}
+            netto20={vz * (doc as Angebot).summe_netto_20}
+            netto10={vz * (doc as Angebot).summe_netto_10}
+            netto0={vz * (doc as Angebot).summe_netto_0}
+            ust20={vz * (doc as Angebot).ust_20}
+            ust10={vz * (doc as Angebot).ust_10}
+            brutto={vz * (doc as Angebot).summe_brutto}
             rabatt={(doc as Angebot).rabatt_gesamt_prozent}
             rabattBetrag={(doc as Angebot).rabatt_gesamt_betrag ?? 0}
             schluss={_ar?.typ === 'schlussrechnung' ? _ar.rechnungsuebersicht : null}

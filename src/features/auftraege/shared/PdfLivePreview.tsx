@@ -61,7 +61,7 @@ function buildRechnungDoc(p: Extract<PdfLivePreviewProps, { typ: 'rechnung' }>):
   const faellig = new Date(p.values.datum)
   faellig.setDate(faellig.getDate() + zahlungsTage)
   return {
-    id: 'preview', rechnungsnummer: p.existingNr ?? 'RE-XXXX', status: 'entwurf',
+    id: 'preview', rechnungsnummer: p.existingNr ?? (p.rechnungTyp === 'gutschrift' ? 'GU-XXXX' : 'RE-XXXX'), status: 'entwurf',
     typ: p.rechnungTyp, kunde_id: p.values.kunde?.id ?? null,
     auftragsbestaetigung_id: null, storno_zu_rechnung_id: null,
     betreff: p.values.betreff || null, rechnungsdatum: p.values.datum,

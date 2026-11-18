@@ -17,7 +17,8 @@ function dateiname(input: Input): string {
   if (input.typ === 'lieferschein') return `Lieferschein_${(input.doc as Lieferschein).lieferschein_nr}.pdf`
   if (input.typ === 'angebot') return `Angebot_${(input.doc as Angebot).angebotsnummer}.pdf`
   if (input.typ === 'auftragsbestaetigung') return `AB_${(input.doc as Auftragsbestaetigung).ab_nummer}.pdf`
-  return `Rechnung_${(input.doc as Ausgangsrechnung).rechnungsnummer}.pdf`
+  const r = input.doc as Ausgangsrechnung
+  return `${r.typ === 'gutschrift' ? 'Gutschrift' : 'Rechnung'}_${r.rechnungsnummer}.pdf`
 }
 
 export function PdfButton(input: Input) {

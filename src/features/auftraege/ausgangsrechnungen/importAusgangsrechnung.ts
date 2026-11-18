@@ -5,7 +5,7 @@ import {
   geminiOcrAusgangsrechnung,
   type AusgangsrechnungOcrResult,
 } from '@/lib/gemini-ocr'
-import { DEFAULT_KOPF, DEFAULT_FUSS } from '@/features/auftraege/shared/dokumentDefaults'
+import { DEFAULT_KOPF, DEFAULT_FUSS, GUTSCHRIFT_FUSS, gutschriftKopf } from '@/features/auftraege/shared/dokumentDefaults'
 import type { Rechnung } from '@/types/database'
 
 interface KundeDaten {
@@ -78,12 +78,17 @@ export async function createAusgangsrechnungFromOcrDetailed(ocr: Ausgangsrechnun
     uid_nr:  ocr.customer_uid,
   })
 
-  const netto20 = ocr.net_amount_20 ?? 0
-  const netto10 = ocr.net_amount_10 ?? 0
-  const netto0  = ocr.net_amount_0  ?? 0
-  const ust20   = ocr.tax_amount_20 ?? Math.round(netto20 * 0.20 * 100) / 100
-  const ust10   = ocr.tax_amount_10 ?? Math.round(netto10 * 0.10 * 100) / 100
-  const brutto  = ocr.total_brutto  ?? Math.round((netto20 + netto10 + netto0 + ust20 + ust10) * 100) / 100
+  // Gutschrift an einen Kunden (eigener Nummernkreis GU-…): Summen negativ,
+  // Positionen positiv — egal mit welchem Vorzeichen die OCR sie liefert
+  const istGutschrift = /^GU-/i.test(ocr.invoice_number?.trim() ?? '') || /gutschrift/i.test(ocr.subject ?? '')
+  const vz = (n: number) => istGutschrift ? -Math.abs(n) : n
+
+  const netto20 = vz(ocr.net_amount_20 ?? 0)
+  const netto10 = vz(ocr.net_amount_10 ?? 0)
+  const netto0  = vz(ocr.net_amount_0  ?? 0)
+  const ust20   = ocr.tax_amount_20 != null ? vz(ocr.tax_amount_20) : Math.round(netto20 * 0.20 * 100) / 100
+  const ust10   = ocr.tax_amount_10 != null ? vz(ocr.tax_amount_10) : Math.round(netto10 * 0.10 * 100) / 100
+  const brutto  = ocr.total_brutto != null ? vz(ocr.total_brutto) : Math.round((netto20 + netto10 + netto0 + ust20 + ust10) * 100) / 100
 
   const rechnungsdatum = normalizeDate(ocr.invoice_date) ?? new Date().toISOString().split('T')[0]
   const zahlungsTage   = ocr.zahlungsziel_tage || 14
@@ -92,12 +97,14 @@ export async function createAusgangsrechnungFromOcrDetailed(ocr: Ausgangsrechnun
   }
   const faellig = ocr.due_date ? (normalizeDate(ocr.due_date) ?? addTage()) : addTage()
 
-  const rechnungsTyp = ocr.is_stornorechnung
+  const rechnungsTyp = istGutschrift
+    ? 'gutschrift'
+    : ocr.is_stornorechnung
     ? 'stornorechnung'
     : ocr.is_schlussrechnung
       ? 'schlussrechnung'
       : 'rechnung'
-  const rechnungsStatus = ocr.is_stornorechnung ? 'storniert' : 'entwurf'
+  const rechnungsStatus = ocr.is_stornorechnung && !istGutschrift ? 'storniert' : 'entwurf'
 
   const { data: newRechnung, error: insertErr } = await supabase
     .from('ausgangsrechnungen')
@@ -112,8 +119,8 @@ export async function createAusgangsrechnungFromOcrDetailed(ocr: Ausgangsrechnun
       zahlungsziel_tage:  zahlungsTage,
       faelligkeitsdatum:  faellig,
       rabatt_gesamt_prozent: 0,
-      kopftext:           DEFAULT_KOPF,
-      fusstext:           DEFAULT_FUSS,
+      kopftext:           istGutschrift ? gutschriftKopf() : DEFAULT_KOPF,
+      fusstext:           istGutschrift ? GUTSCHRIFT_FUSS : DEFAULT_FUSS,
       summe_netto_20:     netto20,
       summe_netto_10:     netto10,
       summe_netto_0:      netto0,
@@ -161,7 +168,7 @@ export async function createAusgangsrechnungFromOcrDetailed(ocr: Ausgangsrechnun
     // Echte Positionen aus dem PDF übernehmen (bearbeitbar in der Maske)
     const rows = ocrPositionen.map((p, i) => {
       const menge = p.menge ?? 1
-      const ep    = p.einzelpreis ?? 0
+      const ep    = istGutschrift ? Math.abs(p.einzelpreis ?? 0) : (p.einzelpreis ?? 0)
       return {
         dokument_id:        newId,
         dokument_typ:       'rechnung' as const,
@@ -182,8 +189,9 @@ export async function createAusgangsrechnungFromOcrDetailed(ocr: Ausgangsrechnun
     // Positionssumme mit dem Gesamtbetrag des Belegs abgleichen. Weicht sie ab
     // (z.B. weil die Positionspreise brutto sind), melden statt still zu übernehmen.
     const posNetto = Math.round(rows.reduce((s, r) => s + r.zeilenbetrag_netto, 0) * 100) / 100
-    if (nettoGesamt !== 0 && Math.abs(posNetto - nettoGesamt) > 0.02) {
-      warnung = { positionenNetto: posNetto, belegNetto: nettoGesamt }
+    const belegNetto = istGutschrift ? Math.abs(nettoGesamt) : nettoGesamt
+    if (belegNetto !== 0 && Math.abs(posNetto - belegNetto) > 0.02) {
+      warnung = { positionenNetto: posNetto, belegNetto }
     }
   } else if (nettoGesamt !== 0) {
     // Fallback: keine Positionen erkannt → eine Sammelposition mit der Gesamtsumme
@@ -195,10 +203,10 @@ export async function createAusgangsrechnungFromOcrDetailed(ocr: Ausgangsrechnun
       beschreibung:      null,
       menge:             1,
       einheit:           'pausch',
-      einzelpreis_netto: nettoGesamt,
+      einzelpreis_netto: istGutschrift ? Math.abs(nettoGesamt) : nettoGesamt,
       ust_satz:          fallbackUst,
       rabatt_prozent:    0,
-      zeilenbetrag_netto: nettoGesamt,
+      zeilenbetrag_netto: istGutschrift ? Math.abs(nettoGesamt) : nettoGesamt,
     })
   }
 

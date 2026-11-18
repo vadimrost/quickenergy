@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Trash2, RotateCcw, AlertTriangle, Receipt } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Trash2, RotateCcw, AlertTriangle, Receipt, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { PageTitle } from '@/components/shared/PageTitle'
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { DokumentForm, type DokumentFormValues } from '@/features/auftraege/shared/DokumentForm'
 import { PdfButton } from '@/features/auftraege/shared/PdfButton'
 import { PdfLivePreview } from '@/features/auftraege/shared/PdfLivePreview'
-import { berechneSummen, berechneSchlussrechnung, emptyPosition } from '@/features/auftraege/shared/positionenUtils'
+import { berechneSummen, berechneSchlussrechnung, emptyPosition, type Summen } from '@/features/auftraege/shared/positionenUtils'
 import {
   useAusgangsrechnung,
   useUpsertAusgangsrechnung,
@@ -23,7 +23,7 @@ import {
 import type { AusgangsrechnungTyp, AusgangsrechnungStatus, Kunde, Ausgangsrechnung } from '@/types/database'
 import type { PositionDraft } from '@/features/auftraege/shared/positionenUtils'
 
-import { DEFAULT_KOPF, DEFAULT_FUSS } from '@/features/auftraege/shared/dokumentDefaults'
+import { DEFAULT_KOPF, DEFAULT_FUSS, GUTSCHRIFT_FUSS, gutschriftKopf } from '@/features/auftraege/shared/dokumentDefaults'
 import { useMitarbeiterAll } from '@/features/mitarbeiter/useMitarbeiterCrud'
 import { useFirmaStammdaten } from '@/features/einstellungen/useFirmaStammdaten'
 
@@ -32,6 +32,7 @@ const TYP_OPTIONS: { value: AusgangsrechnungTyp; label: string }[] = [
   { value: 'teilrechnung',    label: 'Teilrechnung'    },
   { value: 'schlussrechnung', label: 'Schlussrechnung' },
   { value: 'stornorechnung',  label: 'Stornorechnung'  },
+  { value: 'gutschrift',      label: 'Gutschrift'      },
 ]
 
 const TYP_LABEL: Record<AusgangsrechnungTyp, string> = Object.fromEntries(
@@ -66,6 +67,38 @@ type StornoZu = {
   rabattGesamtBetrag?: number
 }
 
+type GutschriftZu = {
+  rechnungsnummer: string
+  kunde?: Kunde | null
+  netto_20: number
+  netto_10: number
+  netto_0: number
+}
+
+// Gutschrift: je USt-Satz der Rechnung eine Position "Gutschrift" (Betrag anpassbar)
+function gutschriftPositionen(g: GutschriftZu): PositionDraft[] {
+  const saetze = ([[20, g.netto_20], [10, g.netto_10], [0, g.netto_0]] as const).filter(([, n]) => Math.abs(n) > 0.004)
+  if (saetze.length === 0) return [{ ...emptyPosition(0), bezeichnung: 'Gutschrift' }]
+  return saetze.map(([satz, netto], i) => ({
+    ...emptyPosition(i),
+    bezeichnung: 'Gutschrift',
+    menge: 1,
+    einheit: 'Stk',
+    einzelpreis_netto: Math.abs(netto),
+    zeilenbetrag_netto: Math.abs(netto),
+    ust_satz: satz,
+  }))
+}
+
+// Gutschrift mindert den Umsatz → negativ speichern (wie Stornorechnungen)
+function negiert(s: Summen): Summen {
+  return {
+    ...s,
+    netto_20: -s.netto_20, netto_10: -s.netto_10, netto_0: -s.netto_0,
+    ust_20: -s.ust_20, ust_10: -s.ust_10, brutto: -s.brutto, netto_gesamt: -s.netto_gesamt,
+  }
+}
+
 type LocationState = {
   ab_id?: string
   angebot_id?: string
@@ -79,15 +112,24 @@ type LocationState = {
     rabattGesamtBetrag?: number
   }
   storno_zu?: StornoZu
+  gutschrift_zu?: GutschriftZu
 } | null
 
+// Storno/Gutschrift aus einer offenen Rechnung bleibt auf derselben Route — ohne key
+// würde React den Formular-State der alten Rechnung für den neuen Beleg weiterverwenden
 export function AusgangsrechnungFormPage() {
+  const { id } = useParams<{ id: string }>()
+  return <AusgangsrechnungForm key={id ?? 'neu'} />
+}
+
+function AusgangsrechnungForm() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
   const fromState = (location.state as LocationState)
   const fromAb = fromState?.ab_id ? fromState : null
   const fromStorno = fromState?.storno_zu ?? null
+  const fromGutschrift = fromState?.gutschrift_zu ?? null
   const prefill = fromState?.prefill ?? null
   const fromAngebotId = fromState?.angebot_id ?? null
   const stateDocTyp = fromState?.doc_typ
@@ -103,16 +145,21 @@ export function AusgangsrechnungFormPage() {
   const { data: geschwister = [] } = useRechnungenForAngebot(angebotId ?? undefined)
 
   // Determine initial typ from navigation source
-  const initialTyp: AusgangsrechnungTyp = fromStorno ? 'stornorechnung' : (stateDocTyp ?? 'rechnung')
+  const initialTyp: AusgangsrechnungTyp = fromStorno ? 'stornorechnung'
+    : fromGutschrift ? 'gutschrift'
+    : (stateDocTyp ?? 'rechnung')
+  const neueGutschrift = initialTyp === 'gutschrift'
 
   const [values, setValues] = useState<DokumentFormValues>({
-    kunde: fromStorno?.kunde ?? prefill?.kunde ?? null,
+    kunde: fromStorno?.kunde ?? fromGutschrift?.kunde ?? prefill?.kunde ?? null,
     betreff: fromStorno ? `Storno zu ${fromStorno.rechnungsnummer}` : (prefill?.betreff ?? ''),
     datum: new Date().toISOString().split('T')[0],
-    kopftext: DEFAULT_KOPF,
-    fusstext: DEFAULT_FUSS,
+    kopftext: neueGutschrift ? gutschriftKopf(fromGutschrift?.rechnungsnummer) : DEFAULT_KOPF,
+    fusstext: neueGutschrift ? GUTSCHRIFT_FUSS : DEFAULT_FUSS,
     positionen: (fromStorno?.positionen?.length ? fromStorno.positionen
+      : fromGutschrift ? gutschriftPositionen(fromGutschrift)
       : prefill?.positionen?.length ? prefill.positionen
+      : neueGutschrift ? [{ ...emptyPosition(0), bezeichnung: 'Gutschrift' }]
       : [emptyPosition(0)]),
     rabattGesamt: fromStorno?.rabattGesamt ?? prefill?.rabattGesamt ?? 0,
     rabattGesamtBetrag: fromStorno?.rabattGesamtBetrag ?? prefill?.rabattGesamtBetrag ?? 0,
@@ -122,6 +169,8 @@ export function AusgangsrechnungFormPage() {
   )
 
   const [typ, setTyp] = useState<AusgangsrechnungTyp>(initialTyp)
+  const istGutschrift = typ === 'gutschrift'
+  const belegName = istGutschrift ? 'Gutschrift' : 'Rechnung'
   const [leistungsdatum, setLeistungsdatum] = useState(new Date().toISOString().split('T')[0])
   const [leistungVon, setLeistungVon] = useState('')
   const [leistungBis, setLeistungBis] = useState('')
@@ -156,7 +205,8 @@ export function AusgangsrechnungFormPage() {
       setLeistungBis(existing.leistungszeitraum_bis ?? '')
       setZahlungsziel(String(existing.zahlungsziel_tage))
       setTeilProzent(existing.teilrechnungs_prozent ? String(existing.teilrechnungs_prozent) : '')
-      setBezahltBetrag(String(existing.summe_brutto ?? ''))
+      // Gutschrift ist negativ gespeichert — ausbezahlt wird der positive Betrag
+      setBezahltBetrag(existing.summe_brutto != null ? String(Math.abs(existing.summe_brutto)) : '')
       setRechnungsnummer(existing.rechnungsnummer ?? '')
       setAnsprechpartner(existing.ansprechpartner ?? '')
       if (existing.auftragswert_netto != null) setAuftragswert(String(existing.auftragswert_netto))
@@ -205,6 +255,8 @@ export function AusgangsrechnungFormPage() {
       }
     }
 
+    if (typ === 'gutschrift') gespeichert = negiert(gespeichert)
+
     upsert({
       rechnung: {
         id: isEdit ? id : undefined,
@@ -244,11 +296,30 @@ export function AusgangsrechnungFormPage() {
         if (!isEdit && fromStorno?.id) {
           updateStatus({ id: fromStorno.id, status: 'storniert' })
         }
-        toast.success(isEdit ? 'Rechnung gespeichert' : 'Rechnung erstellt')
+        const art = typ === 'gutschrift' ? 'Gutschrift' : 'Rechnung'
+        toast.success(isEdit ? `${art} gespeichert` : `${art} erstellt`)
         navigate(`/ausgangsrechnungen/${newId}`)
       },
       onError: e => toast.error((e as any)?.message ?? String(e)),
     })
+  }
+
+  // Neuer Beleg: beim Wechsel Rechnung ↔ Gutschrift die Standardtexte mitwechseln,
+  // solange sie noch nicht angepasst wurden
+  function handleTypChange(neu: AusgangsrechnungTyp) {
+    if (!isEdit && (neu === 'gutschrift') !== (typ === 'gutschrift')) {
+      const zuGutschrift = neu === 'gutschrift'
+      setValues(v => ({
+        ...v,
+        kopftext: v.kopftext === (zuGutschrift ? DEFAULT_KOPF : gutschriftKopf(fromGutschrift?.rechnungsnummer))
+          ? (zuGutschrift ? gutschriftKopf(fromGutschrift?.rechnungsnummer) : DEFAULT_KOPF)
+          : v.kopftext,
+        fusstext: v.fusstext === (zuGutschrift ? DEFAULT_FUSS : GUTSCHRIFT_FUSS)
+          ? (zuGutschrift ? GUTSCHRIFT_FUSS : DEFAULT_FUSS)
+          : v.fusstext,
+      }))
+    }
+    setTyp(neu)
   }
 
   function handleStatusChange(status: AusgangsrechnungStatus) {
@@ -267,15 +338,15 @@ export function AusgangsrechnungFormPage() {
       bezahlt_am: bezahltAm,
       bezahlt_betrag: parseFloat(bezahltBetrag) || 0,
     }, {
-      onSuccess: () => { toast.success('Rechnung als bezahlt markiert'); setBezahltOpen(false) },
+      onSuccess: () => { toast.success(istGutschrift ? 'Gutschrift als ausbezahlt markiert' : 'Rechnung als bezahlt markiert'); setBezahltOpen(false) },
       onError: e => toast.error((e as any)?.message ?? String(e)),
     })
   }
 
   function handleDelete() {
-    if (!id || !window.confirm('Rechnung wirklich löschen?')) return
+    if (!id || !window.confirm(`${belegName} wirklich löschen?`)) return
     deleteRechnung(id, {
-      onSuccess: () => { toast.success('Rechnung gelöscht'); navigate('/ausgangsrechnungen') },
+      onSuccess: () => { toast.success(`${belegName} gelöscht`); navigate('/ausgangsrechnungen') },
       onError: e => toast.error((e as any)?.message ?? String(e)),
     })
   }
@@ -298,13 +369,33 @@ export function AusgangsrechnungFormPage() {
     })
   }
 
+  function handleCreateGutschrift() {
+    if (!existing) return
+    navigate('/ausgangsrechnungen/neu', {
+      state: {
+        gutschrift_zu: {
+          rechnungsnummer: existing.rechnungsnummer,
+          kunde: existing.kunde,
+          netto_20: existing.summe_netto_20,
+          netto_10: existing.summe_netto_10,
+          netto_0: existing.summe_netto_0,
+        },
+      },
+    })
+  }
+
   let titleSuffix = ''
   if (!isEdit && fromStorno) titleSuffix = ` (Storno zu ${fromStorno.rechnungsnummer})`
+  else if (!isEdit && fromGutschrift) titleSuffix = ` zu ${fromGutschrift.rechnungsnummer}`
   else if (!isEdit && fromAb) titleSuffix = ` (aus AB)`
 
   const canStorno = isEdit && existing &&
     existing.status !== 'storniert' &&
-    existing.typ !== 'stornorechnung'
+    existing.typ !== 'stornorechnung' &&
+    existing.typ !== 'gutschrift'
+  const canGutschrift = isEdit && existing &&
+    existing.typ !== 'stornorechnung' &&
+    existing.typ !== 'gutschrift'
 
   const summenNow = berechneSummen(values.positionen, values.rabattGesamt, values.rabattGesamtBetrag)
   const storedBrutto = existing?.summe_brutto ?? 0
@@ -340,7 +431,7 @@ export function AusgangsrechnungFormPage() {
               <ArrowLeft size={18} />
             </button>
             <PageTitle
-              title={isEdit ? 'Rechnung bearbeiten' : `Neue Rechnung${titleSuffix}`}
+              title={isEdit ? `${belegName} bearbeiten` : `Neue ${belegName}${titleSuffix}`}
               subtitle={existing?.rechnungsnummer}
             />
           </div>
@@ -371,7 +462,15 @@ export function AusgangsrechnungFormPage() {
             {isEdit && existing && (existing.status === 'offen' || existing.status === 'teilbezahlt') && (
               <Button variant="outline" size="sm" onClick={() => setBezahltOpen(true)}>
                 <CheckCircle size={13} className="mr-1.5 text-green-600" />
-                Bezahlt markieren
+                {istGutschrift ? 'Ausbezahlt markieren' : 'Bezahlt markieren'}
+              </Button>
+            )}
+
+            {/* Gutschrift zu dieser Rechnung */}
+            {canGutschrift && (
+              <Button variant="outline" size="sm" onClick={handleCreateGutschrift}>
+                <Undo2 size={13} className="mr-1.5" />
+                Gutschrift erstellen
               </Button>
             )}
 
@@ -488,7 +587,7 @@ export function AusgangsrechnungFormPage() {
         )}
 
         <DokumentForm
-          titel="Rechnungs"
+          titel={istGutschrift ? 'Gutschrift' : 'Rechnungs'}
           nummer={isEdit ? rechnungsnummer : undefined}
           onNummerChange={isEdit ? setRechnungsnummer : undefined}
           values={values}
@@ -501,7 +600,7 @@ export function AusgangsrechnungFormPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-medium text-ink-muted mb-1 block">Typ</label>
-                  <Select value={typ} onValueChange={v => setTyp(v as AusgangsrechnungTyp)}>
+                  <Select value={typ} onValueChange={v => handleTypChange(v as AusgangsrechnungTyp)}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {TYP_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -580,11 +679,11 @@ export function AusgangsrechnungFormPage() {
       <Dialog open={bezahltOpen} onOpenChange={setBezahltOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Rechnung als bezahlt markieren</DialogTitle>
+            <DialogTitle>{istGutschrift ? 'Gutschrift als ausbezahlt markieren' : 'Rechnung als bezahlt markieren'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <label className="text-xs font-medium text-ink-muted mb-1 block">Zahlungseingang am</label>
+              <label className="text-xs font-medium text-ink-muted mb-1 block">{istGutschrift ? 'Ausbezahlt am' : 'Zahlungseingang am'}</label>
               <Input type="date" value={bezahltAm} onChange={e => setBezahltAm(e.target.value)} />
             </div>
             <div>
@@ -593,7 +692,7 @@ export function AusgangsrechnungFormPage() {
                 type="number" step="0.01"
                 value={bezahltBetrag}
                 onChange={e => setBezahltBetrag(e.target.value)}
-                placeholder={String(existing?.summe_brutto ?? '')}
+                placeholder={existing?.summe_brutto != null ? String(Math.abs(existing.summe_brutto)) : ''}
               />
             </div>
           </div>

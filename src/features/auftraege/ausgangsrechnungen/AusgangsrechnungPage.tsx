@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Building2, User, AlertTriangle, Search, ChevronUp, ChevronDown, Upload, CheckCircle, Loader2, FileText, FileSpreadsheet, Copy } from 'lucide-react'
+import { Plus, Building2, User, AlertTriangle, Search, ChevronUp, ChevronDown, Upload, CheckCircle, Loader2, FileText, FileSpreadsheet, Copy, Undo2 } from 'lucide-react'
 import { differenceInDays, parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -17,7 +17,7 @@ import { createAusgangsrechnungFromOcrDetailed } from './importAusgangsrechnung'
 import { buildArRows, writeBmdExcel } from '@/lib/bmd-export'
 import { supabase } from '@/lib/supabase'
 import { useAusgangsrechnungen, useDuplicateAusgangsrechnung } from './useAusgangsrechnungen'
-import type { Ausgangsrechnung, AusgangsrechnungStatus } from '@/types/database'
+import type { Ausgangsrechnung, AusgangsrechnungStatus, AusgangsrechnungTyp } from '@/types/database'
 
 type Tab = 'alle' | AusgangsrechnungStatus
 
@@ -43,6 +43,7 @@ const TYP_LABEL: Record<string, string> = {
   teilrechnung: 'Teilrechnung',
   schlussrechnung: 'Schlussrechnung',
   stornorechnung: 'Storno',
+  gutschrift: 'Gutschrift',
 }
 
 function kundenName(r: Ausgangsrechnung): string {
@@ -55,16 +56,18 @@ function summeNetto(r: Ausgangsrechnung): number {
 }
 
 function ustLabel(r: Ausgangsrechnung): string {
-  const has20 = (r.ust_20 ?? 0) > 0
-  const has10 = (r.ust_10 ?? 0) > 0
+  // != 0: Storno und Gutschrift sind negativ gespeichert
+  const has20 = (r.ust_20 ?? 0) !== 0
+  const has10 = (r.ust_10 ?? 0) !== 0
   if (has20 && has10) return '10% / 20%'
   if (has20) return '20%'
   if (has10) return '10%'
   return '—'
 }
 
-function FaelligkeitCell({ date, status }: { date: string | null; status: AusgangsrechnungStatus }) {
-  if (!date || status === 'bezahlt' || status === 'storniert') return <span className="text-ink-muted">—</span>
+function FaelligkeitCell({ date, status, typ }: { date: string | null; status: AusgangsrechnungStatus; typ: AusgangsrechnungTyp }) {
+  // Gutschrift: zahlen wir aus, der Kunde ist nicht säumig
+  if (!date || status === 'bezahlt' || status === 'storniert' || typ === 'gutschrift') return <span className="text-ink-muted">—</span>
   const days = differenceInDays(parseISO(date), new Date())
   if (days < 0) return <span className="text-status-danger font-medium flex items-center gap-1">{formatDate(date)} <AlertTriangle size={10} /></span>
   if (days <= 3) return <span className="text-status-warning font-medium">{formatDate(date)}</span>
@@ -459,7 +462,7 @@ export function AusgangsrechnungPage() {
   })
 
   const ueberfaellig = rechnungen.filter(r =>
-    r.status === 'offen' && r.faelligkeitsdatum && differenceInDays(parseISO(r.faelligkeitsdatum), today) < 0
+    r.status === 'offen' && r.typ !== 'gutschrift' && r.faelligkeitsdatum && differenceInDays(parseISO(r.faelligkeitsdatum), today) < 0
   ).length
 
   function handleCreated(id: string) {
@@ -512,6 +515,9 @@ export function AusgangsrechnungPage() {
             </Button>
             <Button variant="outline" onClick={() => setUploadOpen(true)}>
               <Upload size={14} className="mr-1.5" /> PDF Import
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/ausgangsrechnungen/neu', { state: { doc_typ: 'gutschrift' } })}>
+              <Undo2 size={14} className="mr-1.5" /> Gutschrift erstellen
             </Button>
             <Button onClick={() => navigate('/ausgangsrechnungen/neu')}>
               <Plus size={14} className="mr-1.5" /> Rechnung erstellen
@@ -731,7 +737,7 @@ export function AusgangsrechnungPage() {
                         {r.rechnungsdatum ? formatDate(r.rechnungsdatum) : '—'}
                       </td>
                       <td className="text-sm">
-                        <FaelligkeitCell date={r.faelligkeitsdatum} status={r.status} />
+                        <FaelligkeitCell date={r.faelligkeitsdatum} status={r.status} typ={r.typ} />
                       </td>
                       <td className="text-right">
                         <span className="text-sm text-ink-muted">{formatEuro(summeNetto(r))}</span>

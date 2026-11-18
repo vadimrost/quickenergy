@@ -315,7 +315,7 @@ export interface Lieferschein {
 }
 
 export type AusgangsrechnungStatus = 'entwurf' | 'offen' | 'teilbezahlt' | 'bezahlt' | 'storniert'
-export type AusgangsrechnungTyp = 'rechnung' | 'teilrechnung' | 'schlussrechnung' | 'stornorechnung'
+export type AusgangsrechnungTyp = 'rechnung' | 'teilrechnung' | 'schlussrechnung' | 'stornorechnung' | 'gutschrift'
 
 export interface RechnungsuebersichtZeile {
   rechnungsnummer: string

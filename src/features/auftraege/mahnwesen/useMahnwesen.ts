@@ -10,7 +10,7 @@ export function useOffeneForderungen() {
         .from('ausgangsrechnungen')
         .select('*, kunde:kunden(*)')
         .in('status', ['offen', 'teilbezahlt'])
-        .neq('typ', 'stornorechnung')
+        .not('typ', 'in', '(stornorechnung,gutschrift)')
         .order('faelligkeitsdatum', { ascending: true, nullsFirst: false })
       if (error) throw error
       return (data ?? []) as Ausgangsrechnung[]

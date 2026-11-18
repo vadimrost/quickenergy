@@ -143,7 +143,8 @@ export function HomePage() {
 
   const gewinn = monatsumsatz - monatsaufwand
 
-  const offeneForderungen = ausgangsrechnungen.filter(r => r.status === 'offen')
+  // Gutschriften sind Verbindlichkeiten an Kunden, keine Forderungen
+  const offeneForderungen = ausgangsrechnungen.filter(r => r.status === 'offen' && r.typ !== 'gutschrift')
   const offeneForderungenTotal = offeneForderungen.reduce((s, r) => s + (r.summe_brutto ?? 0), 0)
   const ueberfaelligCount = offeneForderungen.filter(r =>
     r.faelligkeitsdatum && parseISO(r.faelligkeitsdatum) < new Date()
